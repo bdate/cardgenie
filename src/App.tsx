@@ -56,6 +56,25 @@ const styleOptions = [
   'Vintage greeting card illustration',
 ]
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const apiUrl = (path: string) => `${apiBaseUrl}${path}`
+const hostedApiMessage =
+  'This online demo needs a deployed API server before Card Genie can generate cards. Run it locally with the Express server, or connect VITE_API_BASE_URL to a hosted backend.'
+
+const getApiJson = async (response: Response, fallbackMessage: string) => {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (contentType.includes('application/json')) {
+    return response.json()
+  }
+
+  if (!response.ok) {
+    throw new Error(window.location.hostname.endsWith('github.io') && !apiBaseUrl ? hostedApiMessage : fallbackMessage)
+  }
+
+  throw new Error(fallbackMessage)
+}
+
 const splitMessageParts = (message: string, senderName: string) => {
   const senderPattern = senderName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   let cleanMessage = message
@@ -192,7 +211,7 @@ function App() {
     setStep('envelope')
 
     try {
-      const response = await fetch('/api/generate-card', {
+      const response = await fetch(apiUrl('/api/generate-card'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -200,7 +219,7 @@ function App() {
         body: JSON.stringify(details),
       })
 
-      const data = await response.json()
+      const data = await getApiJson(response, 'Unable to generate the card.')
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to generate the card.')
@@ -272,7 +291,7 @@ function App() {
     setIsRefiningImage(true)
 
     try {
-      const response = await fetch('/api/refine-image', {
+      const response = await fetch(apiUrl('/api/refine-image'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,7 +303,7 @@ function App() {
         }),
       })
 
-      const data = await response.json()
+      const data = await getApiJson(response, 'Unable to refine the cover image.')
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to refine the cover image.')
@@ -309,7 +328,7 @@ function App() {
     setIsRefiningCopy(true)
 
     try {
-      const response = await fetch('/api/refine-copy', {
+      const response = await fetch(apiUrl('/api/refine-copy'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -322,7 +341,7 @@ function App() {
         }),
       })
 
-      const data = await response.json()
+      const data = await getApiJson(response, 'Unable to refine the inside message.')
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to refine the inside message.')
