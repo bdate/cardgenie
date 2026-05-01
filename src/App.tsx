@@ -30,9 +30,9 @@ const initialDetails: CardDetails = {
   occasion: '90th Birthday',
   tone: 'Heartfelt',
   length: 'Medium, 60-80 words',
-  imageStyle: 'AI chooses the best style for this card',
+  imageStyle: 'Claymation-inspired 3D scene',
   keyDetails:
-    "Mom just moved from California to Georgia, and this is a card about wishing her a happy 90th birthday and giving her heartfelt thanks. I'm so excited that after 35 years, we're back in the same city together. She's gonna get to enjoy the best years of her life being around her children, grandchildren, and great-grandchildren.",
+    "Carol, my mom, recently moved from Georgia to California and is now living near us in the Bay Area. Carol has light brown hair. This card should celebrate her happy 90th birthday as a major milestone, with the heartfelt message that the greatest gift is having her here with all of us in Danville, California. As her son David, I am deeply grateful and excited that after 35 years, we are back in the same town together. The card should feel warm, celebratory, and family-centered, honoring the joy of Mom spending this season of life surrounded by her family: David, her 60-year-old son with gray hair, no facial hair, and modern black-framed glasses; Tiffanie, her daughter-in-law with long wavy brown hair; Emily, her 30-year-old granddaughter, and Emily's husband Alex, age 34 with brown hair; Naomi, her 3-year-old great-granddaughter; Silas, her 1-year-old great-grandson; and Audrey, her 28-year-old granddaughter with dark brown hair.",
 }
 
 const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging']
