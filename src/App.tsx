@@ -408,7 +408,7 @@ function App() {
       <section className="hero-section">
         <div className="eyebrow">Card Genie</div>
         <h1>Any Card Imaginable</h1>
-        <p>Powered by Card Genie. Thoughtfulness made easy.</p>
+        <p>Powered by GreetingCardUniverse.com. Thoughtfulness made easy.</p>
         <div className="credit-wallet" aria-label="Credit balance">
           <div>
             <span className="wallet-kicker">Welcome back, {senderLabel}</span>
