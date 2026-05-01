@@ -139,6 +139,7 @@ function App() {
     [details.recipientName, details.recipientType],
   )
   const senderLabel = useMemo(() => details.senderName.trim() || 'Your Name', [details.senderName])
+  const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
   const insideGreeting = cardGreeting.trim() || `Dear ${envelopeLabel},`
   const rawMessage = card?.message ?? ''
   const messageParts = useMemo(() => {
@@ -515,7 +516,7 @@ function App() {
                 <button className="proof-stage envelope-scene" type="button" onClick={flipEnvelope}>
                   <div className="envelope">
                     <div className="envelope-front-face">
-                      <img className="envelope-stamp" src="/stamp.webp" alt="" aria-hidden="true" />
+                      <img className="envelope-stamp" src={stampSrc} alt="" aria-hidden="true" />
                       <span className="envelope-front-address">To {envelopeLabel}</span>
                     </div>
                   </div>
@@ -527,7 +528,7 @@ function App() {
                 <div className="proof-stage envelope-scene" aria-live="polite">
                   <div className="envelope is-flipping">
                     <div className="envelope-front-face">
-                      <img className="envelope-stamp" src="/stamp.webp" alt="" aria-hidden="true" />
+                      <img className="envelope-stamp" src={stampSrc} alt="" aria-hidden="true" />
                       <span className="envelope-front-address">To {envelopeLabel}</span>
                     </div>
                     <div className="envelope-back-face">
