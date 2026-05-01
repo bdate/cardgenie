@@ -41,6 +41,52 @@
   font-size: 1.05rem;
 }
 
+.credit-wallet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 24px auto 0;
+  max-width: 720px;
+  border: 1px solid rgba(143, 208, 201, 0.36);
+  border-radius: 26px;
+  padding: 16px 18px;
+  text-align: left;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 248, 239, 0.9)),
+    radial-gradient(circle at 100% 0%, rgba(245, 158, 51, 0.18), transparent 34%);
+  box-shadow: 0 18px 54px rgba(63, 155, 145, 0.14);
+}
+
+.credit-wallet > div {
+  display: grid;
+  gap: 3px;
+}
+
+.wallet-kicker {
+  color: var(--gcu-dark-teal);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.credit-wallet strong {
+  color: var(--gcu-ink);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+}
+
+.credit-wallet small {
+  color: var(--gcu-grey);
+  font-size: 0.84rem;
+}
+
+.credit-wallet .secondary-button {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border: 1px solid rgba(63, 155, 145, 0.16);
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(340px, 0.9fr) minmax(420px, 1.1fr);
@@ -109,6 +155,25 @@
 .revise-top-button {
   margin-left: auto;
   white-space: nowrap;
+}
+
+.credit-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(245, 158, 51, 0.24);
+  border-radius: 20px;
+  padding: 12px 14px;
+  color: var(--gcu-dark-grey);
+  background: rgba(255, 248, 239, 0.72);
+  font-size: 0.9rem;
+}
+
+.credit-callout strong {
+  flex: 0 0 auto;
+  color: var(--gcu-dark-teal);
+  font-size: 0.88rem;
 }
 
 .field-grid {
@@ -1561,6 +1626,17 @@ textarea:focus {
 
   .hero-section p {
     font-size: 0.98rem;
+  }
+
+  .credit-wallet,
+  .credit-callout {
+    align-items: stretch;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .credit-wallet .secondary-button {
+    width: 100%;
   }
 
   .field-grid {

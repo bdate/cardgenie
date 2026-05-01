@@ -55,6 +55,10 @@ const styleOptions = [
   'Bold graphic poster art',
   'Vintage greeting card illustration',
 ]
+const initialCreditBalance = 50
+const creditPackAmount = 50
+const cardGenerationCost = 10
+const revisionCost = 2
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
@@ -147,6 +151,8 @@ function App() {
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
   const [showPolishDialog, setShowPolishDialog] = useState(false)
   const [cardGreeting, setCardGreeting] = useState('')
+  const [credits, setCredits] = useState(initialCreditBalance)
+  const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
   const [error, setError] = useState('')
 
   const recipientLabel = useMemo(
@@ -180,6 +186,8 @@ function App() {
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
+  const hasEnoughCreditsForCard = credits >= cardGenerationCost
+  const hasEnoughCreditsForRevision = credits >= revisionCost
 
   useEffect(() => {
     if (!isGenerating) {
@@ -200,9 +208,20 @@ function App() {
     }))
   }
 
+  const addCreditPack = () => {
+    setCredits((current) => current + creditPackAmount)
+    setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
+  }
+
   const generateCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
+
+    if (!hasEnoughCreditsForCard) {
+      setCreditNotice(`You need ${cardGenerationCost} credits to create a card. Add a credit pack to keep going.`)
+      return
+    }
+
     setIsGenerating(true)
     setShowCompletionNote(false)
     setActiveGenerationStep(0)
@@ -233,6 +252,8 @@ function App() {
       setCardGreeting(`Dear ${envelopeLabel},`)
       setStep('envelope')
       setShowCompletionNote(true)
+      setCredits((current) => current - cardGenerationCost)
+      setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
       window.setTimeout(() => setShowCompletionNote(false), 6000)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Unable to generate the card.')
@@ -288,6 +309,12 @@ function App() {
     }
 
     setError('')
+
+    if (!hasEnoughCreditsForRevision) {
+      setCreditNotice(`You need ${revisionCost} credits to revise the cover. Add a credit pack to keep going.`)
+      return
+    }
+
     setIsRefiningImage(true)
 
     try {
@@ -312,6 +339,8 @@ function App() {
       setCard((current) => (current ? { ...current, imageUrl: data.imageUrl } : current))
       setImageRefinement('')
       setStep('front')
+      setCredits((current) => current - revisionCost)
+      setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Unable to refine the cover image.')
     } finally {
@@ -325,6 +354,12 @@ function App() {
     }
 
     setError('')
+
+    if (!hasEnoughCreditsForRevision) {
+      setCreditNotice(`You need ${revisionCost} credits to polish the message. Add a credit pack to keep going.`)
+      return
+    }
+
     setIsRefiningCopy(true)
 
     try {
@@ -359,6 +394,8 @@ function App() {
       setCopyRefinement('')
       setShowPolishDialog(false)
       setStep('inside')
+      setCredits((current) => current - revisionCost)
+      setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Unable to refine the inside message.')
     } finally {
@@ -372,6 +409,18 @@ function App() {
         <div className="eyebrow">Card Genie</div>
         <h1>Any Card Imaginable</h1>
         <p>Powered by Card Genie. Thoughtfulness made easy.</p>
+        <div className="credit-wallet" aria-label="Credit balance">
+          <div>
+            <span className="wallet-kicker">Welcome back, {senderLabel}</span>
+            <strong>{credits} credits available</strong>
+            <small>
+              Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
+            </small>
+          </div>
+          <button className="secondary-button" type="button" onClick={addCreditPack}>
+            Buy 50 credits - $10
+          </button>
+        </div>
       </section>
 
       <section className="workspace">
@@ -382,6 +431,11 @@ function App() {
               <h2>Tell us about the card</h2>
               <p>One set of details powers both the image and the message.</p>
             </div>
+          </div>
+
+          <div className="credit-callout">
+            <span>{creditNotice}</span>
+            <strong>{credits} credits</strong>
           </div>
 
           <div className="field-grid">
@@ -476,7 +530,11 @@ function App() {
           {error && <div className="error-message">{error}</div>}
 
           <button className="primary-button" disabled={isGenerating}>
-            {isGenerating ? 'Generating your card...' : card ? 'Regenerate card' : 'Generate card'}
+            {isGenerating
+              ? 'Generating your card...'
+              : card
+                ? `Regenerate card - ${cardGenerationCost} credits`
+                : `Generate card - ${cardGenerationCost} credits`}
           </button>
         </form>
 
@@ -715,14 +773,14 @@ function App() {
                           <button
                             className="secondary-button"
                             type="button"
-                            disabled={isRefiningImage || !imageRefinement.trim()}
+                            disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForRevision}
                             onClick={refineImage}
                           >
                             {isRefiningImage
                               ? 'Updating cover...'
                               : coverRefinementMode === 'revise'
-                                ? 'Revise cover image'
-                                : 'Create new concept'}
+                                ? `Revise cover image - ${revisionCost} credits`
+                                : `Create new concept - ${revisionCost} credits`}
                           </button>
                         </div>
                       ) : (
@@ -786,10 +844,10 @@ function App() {
                       <button
                         className="primary-button"
                         type="button"
-                        disabled={isRefiningCopy || !copyRefinement.trim()}
+                        disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
                         onClick={refineCopy}
                       >
-                        {isRefiningCopy ? 'Polishing...' : 'Polish copy'}
+                        {isRefiningCopy ? 'Polishing...' : `Polish copy - ${revisionCost} credits`}
                       </button>
                     </div>
                   </div>
