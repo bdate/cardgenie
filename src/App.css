@@ -1505,55 +1505,262 @@ textarea:focus {
     padding: 28px 18px;
   }
 
-  .workspace,
-  .open-card,
-  .proof-with-thumbs.has-thumbnails {
+  .hero-section {
+    margin-bottom: 26px;
+  }
+
+  .workspace {
     grid-template-columns: 1fr;
+    gap: 22px;
+    max-width: 720px;
+  }
+
+  .form-panel {
+    order: 1;
+  }
+
+  .preview-panel {
+    order: 2;
+    min-height: auto;
+  }
+
+  .proof-with-thumbs.has-thumbnails,
+  .editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-preview {
+    min-height: 300px;
+  }
+
+  .refinement-panel,
+  .editor-layout.is-inside-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .proof-actions {
+    justify-content: center;
   }
 
   .card-thumbnails {
     grid-template-columns: repeat(2, minmax(0, 86px));
     justify-content: center;
   }
-
-  .preview-panel {
-    min-height: auto;
-  }
-
-  .refinement-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .editor-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .editor-heading,
-  .proof-actions {
-    flex-direction: column;
-  }
-
-  .proof-actions .primary-button,
-  .proof-actions .secondary-button {
-    width: 100%;
-  }
-
-  .scene-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 620px) {
+  .app-shell {
+    padding: 18px 12px 28px;
+  }
+
+  .hero-section h1 {
+    font-size: clamp(2.4rem, 14vw, 3.5rem);
+    letter-spacing: -0.045em;
+    line-height: 0.98;
+  }
+
+  .hero-section p {
+    font-size: 0.98rem;
+  }
+
   .field-grid {
     grid-template-columns: 1fr;
   }
 
   .card-panel {
     border-radius: 24px;
-    padding: 20px;
+    padding: 18px;
+  }
+
+  .panel-heading {
+    gap: 10px;
+  }
+
+  .panel-heading span {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 14px;
+  }
+
+  .proof-heading {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .revise-top-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .creative-loader,
+  .empty-state,
+  .proof-stage {
+    min-height: 440px;
+  }
+
+  .envelope-scene,
+  .card-reveal {
+    grid-template-rows: 224px auto;
+    row-gap: 16px;
+    padding: 56px 14px 20px;
+  }
+
+  .envelope {
+    width: min(92vw, 360px);
+    height: 224px;
+  }
+
+  .envelope-front-address {
+    font-size: clamp(1.45rem, 7vw, 2rem);
+  }
+
+  .envelope-stamp {
+    top: 22px;
+    right: 24px;
+    width: 58px;
+  }
+
+  .envelope-card-rise {
+    bottom: 78px;
+    width: min(250px, 62%);
+  }
+
+  .card-cover-frame,
+  .card-open-stage,
+  .open-card {
+    width: min(300px, 82vw);
+  }
+
+  .card-open-scene {
+    min-height: 440px;
+    padding: 32px 12px;
   }
 
   .open-card-message {
-    padding: 28px;
+    padding: 30px 24px 28px;
+  }
+
+  .open-card-message span,
+  .message-paragraphs p {
+    font-size: clamp(0.82rem, 3.2vw, 1rem);
+  }
+
+  .card-signature {
+    font-size: clamp(1.8rem, 8vw, 2.35rem);
+  }
+
+  .proof-actions .secondary-button {
+    width: min(280px, 100%);
+  }
+
+  .card-editor {
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .editor-thumbnails {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card-thumbnails button {
+    min-height: 92px;
+  }
+
+  .editor-preview {
+    min-height: 260px;
+    padding: 16px;
+  }
+
+  .editor-cover-frame {
+    width: min(240px, 76vw);
+  }
+
+  .refinement-card {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .mode-toggle {
+    grid-template-columns: 1fr;
+  }
+
+  .inside-editor-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .polish-button,
+  .refinement-card .secondary-button {
+    width: 100%;
+  }
+
+  .inside-refinement-card label textarea {
+    min-height: 300px;
+  }
+
+  .polish-dialog-backdrop {
+    padding: 14px;
+  }
+
+  .polish-dialog {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .polish-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .polish-dialog-actions .primary-button,
+  .polish-dialog-actions .secondary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-shell {
+    padding-inline: 8px;
+  }
+
+  .card-panel {
+    padding: 14px;
+  }
+
+  .envelope-scene,
+  .card-reveal {
+    grid-template-rows: 196px auto;
+    padding-top: 44px;
+  }
+
+  .envelope {
+    width: min(90vw, 320px);
+    height: 196px;
+  }
+
+  .envelope-card-rise {
+    bottom: 66px;
+    width: min(220px, 62%);
+  }
+
+  .card-cover-frame,
+  .card-open-stage,
+  .open-card {
+    width: min(270px, 82vw);
+  }
+
+  .open-card-message {
+    padding: 24px 20px 22px;
+  }
+
+  .message-paragraphs {
+    gap: 8px;
+  }
+}
+
+@media (hover: none) {
+  .front-reveal:hover .card-cover-frame {
+    transform: none;
   }
 }
