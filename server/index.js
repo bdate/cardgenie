@@ -5,8 +5,33 @@ import OpenAI from 'openai'
 
 const app = express()
 const port = process.env.PORT || 8787
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://starman965.github.io')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204)
+  }
+
+  next()
+})
 app.use(express.json({ limit: '1mb' }))
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true })
+})
 
 const buildCopyPrompt = (details, refinement = '') => `
 Write the inside message for a personalized greeting card.

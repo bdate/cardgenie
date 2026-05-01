@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: gcu-card-genie-api
+    env: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-2
+      - key: ALLOWED_ORIGINS
+        value: https://starman965.github.io
+      - key: OPENAI_API_KEY
+        sync: false
