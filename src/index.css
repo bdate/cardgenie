@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700;800;900&family=Playfair+Display:wght@700;800&display=swap");
+
+:root {
+  --gcu-blue: #849bcd;
+  --gcu-orange: #f59e33;
+  --gcu-teal: #8fd0c9;
+  --gcu-dark-teal: #3f9b91;
+  --gcu-green: #c6c92b;
+  --gcu-grey: #7d7d7d;
+  --gcu-dark-grey: #666666;
+  --gcu-cream: #fff8ef;
+  --gcu-ink: #315f5b;
+
+  color: var(--gcu-ink);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(245, 158, 51, 0.34), transparent 34%),
+    radial-gradient(circle at 85% 4%, rgba(143, 208, 201, 0.4), transparent 30%),
+    linear-gradient(135deg, #fff8ef 0%, #f3fbfa 48%, #eef3ff 100%);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(245, 158, 51, 0.38);
+  outline-offset: 3px;
+}
