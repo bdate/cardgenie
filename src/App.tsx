@@ -449,7 +449,7 @@ function App() {
             </label>
 
             <label>
-              Recipient type
+              Recipient type or relation
               <input
                 required
                 value={details.recipientType}
@@ -471,7 +471,7 @@ function App() {
             </label>
 
             <label>
-              From
+              From / Signature
               <input
                 required
                 value={details.senderName}
@@ -731,9 +731,15 @@ function App() {
                   <div className={`editor-layout ${editorTab === 'inside' ? 'is-inside-editor' : ''}`}>
                     {editorTab === 'front' && (
                       <div className="editor-preview">
-                        <div className="card-cover-frame editor-cover-frame">
-                          <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
+                        <div className="image-zoom" tabIndex={0} aria-label="Cover preview. Hover or focus to enlarge.">
+                          <div className="card-cover-frame editor-cover-frame">
+                            <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
+                          </div>
+                          <div className="image-zoom-popover" aria-hidden="true">
+                            <img src={card.imageUrl} alt="" />
+                          </div>
                         </div>
+                        <span className="zoom-hint">Hover over the cover to enlarge</span>
                       </div>
                     )}
 
@@ -771,7 +777,7 @@ function App() {
                             }
                           />
                           <button
-                            className="secondary-button"
+                            className="primary-button"
                             type="button"
                             disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForRevision}
                             onClick={refineImage}
@@ -779,19 +785,16 @@ function App() {
                             {isRefiningImage
                               ? 'Updating cover...'
                               : coverRefinementMode === 'revise'
-                                ? `Revise cover image - ${revisionCost} credits`
-                                : `Create new concept - ${revisionCost} credits`}
+                                ? `Revise Card Image - ${revisionCost} points`
+                                : `Create New Card Image - ${revisionCost} points`}
                           </button>
                         </div>
                       ) : (
                         <div className="refinement-card inside-refinement-card">
                           <div className="inside-editor-header">
                             <h3>Edit Inside</h3>
-                            <button className="polish-button" type="button" onClick={() => setShowPolishDialog(true)}>
-                              <span className="polish-icon" aria-hidden="true">
-                                CG
-                              </span>
-                              Card Genie
+                            <button className="primary-button" type="button" onClick={() => setShowPolishDialog(true)}>
+                              Revise Card Inside - {revisionCost} points
                             </button>
                           </div>
                           <label>
@@ -827,7 +830,7 @@ function App() {
                         CG
                       </span>
                       <div>
-                        <h3 id="polish-title">Polish with Card Genie</h3>
+                        <h3 id="polish-title">Revise Card Inside</h3>
                         <p>Tell Card Genie how to revise the message while keeping it personal.</p>
                       </div>
                     </div>
@@ -847,7 +850,7 @@ function App() {
                         disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
                         onClick={refineCopy}
                       >
-                        {isRefiningCopy ? 'Polishing...' : `Polish copy - ${revisionCost} credits`}
+                        {isRefiningCopy ? 'Revising inside...' : `Revise Card Inside - ${revisionCost} points`}
                       </button>
                     </div>
                   </div>
