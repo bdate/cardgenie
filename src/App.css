@@ -292,6 +292,18 @@ textarea:focus {
   box-shadow: 0 12px 28px rgba(63, 155, 145, 0.12);
 }
 
+.cost-button {
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.button-points {
+  font-size: 0.82em;
+  font-weight: 750;
+  opacity: 0.86;
+}
+
 .error-message {
   border: 1px solid rgba(196, 47, 86, 0.25);
   border-radius: 18px;

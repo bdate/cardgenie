@@ -149,7 +149,8 @@ function App() {
   const [showEditor, setShowEditor] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
   const [showPolishDialog, setShowPolishDialog] = useState(false)
-  const [cardGreeting, setCardGreeting] = useState('')
+  const [cardGreeting, setCardGreeting] = useState<string | null>(null)
+  const [cardSignature, setCardSignature] = useState<string | null>(null)
   const [credits, setCredits] = useState(initialCreditBalance)
   const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
   const [error, setError] = useState('')
@@ -164,13 +165,15 @@ function App() {
   )
   const senderLabel = useMemo(() => details.senderName.trim() || 'Your Name', [details.senderName])
   const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
-  const insideGreeting = cardGreeting.trim() || `Dear ${envelopeLabel},`
+  const defaultGreeting = `Dear ${envelopeLabel},`
+  const insideGreeting = cardGreeting ?? defaultGreeting
+  const cardSignatureLabel = cardSignature ?? senderLabel
   const rawMessage = card?.message ?? ''
   const messageParts = useMemo(() => {
     const parts = splitMessageParts(rawMessage, senderLabel)
     return {
       body: parts.body,
-      closing: card?.closing?.trim() || parts.closing,
+      closing: card?.closing ?? parts.closing,
     }
   }, [card?.closing, rawMessage, senderLabel])
   const cardMessage = messageParts.body
@@ -249,6 +252,7 @@ function App() {
         closing: data.closing,
       })
       setCardGreeting(`Dear ${envelopeLabel},`)
+      setCardSignature(senderLabel)
       setStep('envelope')
       setShowCompletionNote(true)
       setCredits((current) => current - cardGenerationCost)
@@ -407,7 +411,7 @@ function App() {
       <section className="hero-section">
         <div className="eyebrow">Card Genie</div>
         <h1>Any Card Imaginable</h1>
-        <p>Powered by GreetingCardUniverse.com. Thoughtfulness made easy.</p>
+        <p>Powered by GreetingCardUniverse.com</p>
         <div className="credit-wallet" aria-label="Credit balance">
           <div>
             <span className="wallet-kicker">Welcome back, {senderLabel}</span>
@@ -522,7 +526,9 @@ function App() {
               rows={6}
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
-              placeholder="Example: share memories, interests, inside jokes, favorite places, colors, hobbies, or anything the card should include."
+              placeholder={
+                'Add memories, interests, relationship details, places, colors, or anything the card should include.\nIf you’re asking for people to be included in the image, please provide physical attributes like: grandma is tall with short blonde hair with green eyes.'
+              }
             />
           </label>
 
@@ -672,7 +678,7 @@ function App() {
                         ))}
                       </div>
                       <div className="card-closing">{messageParts.closing}</div>
-                      <div className="card-signature">{senderLabel}</div>
+                      <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                     <div className="card-opening-cover">
                       <img src={card.imageUrl} alt={`Opening card cover for ${recipientLabel}`} />
@@ -692,7 +698,7 @@ function App() {
                         ))}
                       </div>
                       <div className="card-closing">{messageParts.closing}</div>
-                      <div className="card-signature">{senderLabel}</div>
+                      <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                   </div>
                 </div>
@@ -776,24 +782,34 @@ function App() {
                             }
                           />
                           <button
-                            className="primary-button"
+                            className="primary-button cost-button"
                             type="button"
                             disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForRevision}
                             onClick={refineImage}
                           >
-                            {isRefiningImage
-                              ? 'Updating cover...'
-                              : coverRefinementMode === 'revise'
-                                ? `Revise Card Image - ${revisionCost} points`
-                                : `Create New Card Image - ${revisionCost} points`}
+                            {isRefiningImage ? (
+                              'Updating cover...'
+                            ) : (
+                              <>
+                                <span>
+                                  {coverRefinementMode === 'revise' ? 'Revise Card Image' : 'Create New Card Image'}
+                                </span>
+                                <span className="button-points">{revisionCost} points</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       ) : (
                         <div className="refinement-card inside-refinement-card">
                           <div className="inside-editor-header">
                             <h3>Edit Inside</h3>
-                            <button className="primary-button" type="button" onClick={() => setShowPolishDialog(true)}>
-                              Revise Card Inside - {revisionCost} points
+                            <button
+                              className="primary-button cost-button"
+                              type="button"
+                              onClick={() => setShowPolishDialog(true)}
+                            >
+                              <span>Revise Card Inside</span>
+                              <span className="button-points">{revisionCost} points</span>
                             </button>
                           </div>
                           <label>
@@ -813,6 +829,13 @@ function App() {
                             <input
                               value={messageParts.closing}
                               onChange={(event) => updateCardClosing(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            Signature name
+                            <input
+                              value={cardSignatureLabel}
+                              onChange={(event) => setCardSignature(event.target.value)}
                             />
                           </label>
                         </div>
@@ -844,12 +867,19 @@ function App() {
                         Cancel
                       </button>
                       <button
-                        className="primary-button"
+                        className="primary-button cost-button"
                         type="button"
                         disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
                         onClick={refineCopy}
                       >
-                        {isRefiningCopy ? 'Revising inside...' : `Revise Card Inside - ${revisionCost} points`}
+                        {isRefiningCopy ? (
+                          'Revising inside...'
+                        ) : (
+                          <>
+                            <span>Revise Card Inside</span>
+                            <span className="button-points">{revisionCost} points</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
