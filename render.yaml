@@ -14,6 +14,6 @@ services:
       - key: OPENAI_IMAGE_MODEL
         value: gpt-image-2
       - key: ALLOWED_ORIGINS
-        value: https://starman965.github.io
+        value: https://card-genie.com,https://www.card-genie.com
       - key: OPENAI_API_KEY
         sync: false

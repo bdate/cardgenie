@@ -5,7 +5,9 @@ import OpenAI from 'openai'
 
 const app = express()
 const port = process.env.PORT || 8787
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://starman965.github.io')
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
+)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)
