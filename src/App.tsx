@@ -24,15 +24,14 @@ type EditorTab = 'front' | 'inside'
 type CoverRefinementMode = 'revise' | 'new'
 
 const initialDetails: CardDetails = {
-  recipientName: 'Carol',
-  recipientType: 'Mom',
-  senderName: 'David',
-  occasion: '90th Birthday',
+  recipientName: '',
+  recipientType: '',
+  senderName: '',
+  occasion: '',
   tone: 'Heartfelt',
   length: 'Medium, 60-80 words',
-  imageStyle: 'Claymation-inspired 3D scene',
-  keyDetails:
-    "Carol, my mom, recently moved from Georgia to California and is now living near us in the Bay Area. Carol has light brown hair. This card should celebrate her happy 90th birthday as a major milestone, with the heartfelt message that the greatest gift is having her here with all of us in Danville, California. As her son David, I am deeply grateful and excited that after 35 years, we are back in the same town together. The card should feel warm, celebratory, and family-centered, honoring the joy of Mom spending this season of life surrounded by her family: David, her 60-year-old son with gray hair, no facial hair, and modern black-framed glasses; Tiffanie, her daughter-in-law with long wavy brown hair; Emily, her 30-year-old granddaughter, and Emily's husband Alex, age 34 with brown hair; Naomi, her 3-year-old great-granddaughter; Silas, her 1-year-old great-grandson; and Audrey, her 28-year-old granddaughter with dark brown hair.",
+  imageStyle: 'AI chooses the best style for this card',
+  keyDetails: '',
 }
 
 const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging']
@@ -444,7 +443,7 @@ function App() {
               <input
                 value={details.recipientName}
                 onChange={(event) => updateDetails('recipientName', event.target.value)}
-                placeholder="David"
+                placeholder="Example: Jamie"
               />
             </label>
 
@@ -454,7 +453,7 @@ function App() {
                 required
                 value={details.recipientType}
                 onChange={(event) => updateDetails('recipientType', event.target.value)}
-                placeholder="Mom, spouse, friend, coworker"
+                placeholder="Example: mom, spouse, friend, coworker"
               />
             </label>
           </div>
@@ -466,7 +465,7 @@ function App() {
                 required
                 value={details.occasion}
                 onChange={(event) => updateDetails('occasion', event.target.value)}
-                placeholder="90th birthday, thank you, anniversary"
+                placeholder="Example: birthday, thank you, anniversary"
               />
             </label>
 
@@ -476,7 +475,7 @@ function App() {
                 required
                 value={details.senderName}
                 onChange={(event) => updateDetails('senderName', event.target.value)}
-                placeholder="Your name"
+                placeholder="Example: your name"
               />
             </label>
           </div>
@@ -523,7 +522,7 @@ function App() {
               rows={6}
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
-              placeholder="Add memories, interests, relationship details, places, colors, or anything the card should include."
+              placeholder="Example: share memories, interests, inside jokes, favorite places, colors, hobbies, or anything the card should include."
             />
           </label>
 
@@ -838,7 +837,7 @@ function App() {
                       rows={5}
                       value={copyRefinement}
                       onChange={(event) => setCopyRefinement(event.target.value)}
-                      placeholder="Example: make it shorter, warmer, funnier, or more specific about the move to Georgia."
+                      placeholder="Example: make it shorter, warmer, funnier, or more specific about a favorite memory."
                     />
                     <div className="polish-dialog-actions">
                       <button className="secondary-button" type="button" onClick={() => setShowPolishDialog(false)}>
