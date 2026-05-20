@@ -34,6 +34,15 @@
   letter-spacing: -0.06em;
 }
 
+.trademark-mark {
+  display: inline-block;
+  margin-left: 0.08em;
+  font-size: 0.22em;
+  line-height: 1;
+  vertical-align: super;
+  letter-spacing: 0;
+}
+
 .hero-section p {
   margin: 0 auto;
   max-width: 720px;
@@ -275,9 +284,13 @@ textarea:focus {
 }
 
 .primary-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.7;
   transform: none;
+}
+
+.primary-button[aria-busy="true"] {
+  cursor: wait;
 }
 
 .secondary-button:disabled {

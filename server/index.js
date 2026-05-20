@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 import express from 'express'
-import OpenAI from 'openai'
+import OpenAI, { toFile } from 'openai'
 
 const app = express()
 const port = process.env.PORT || 8787
@@ -29,7 +29,7 @@ app.use((req, res, next) => {
 
   next()
 })
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '25mb' }))
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
@@ -106,6 +106,24 @@ Negative requirements:
 - No cropped-off subject, no text near margins, no layout elements near edges.
 `
 
+const buildImageEditPrompt = (details, refinement = '') => `
+Edit the provided greeting-card cover image. Use the uploaded image as the source of truth.
+
+User edit request: ${refinement}
+
+Preserve the existing card concept, subject matter, composition, crop, visual style, color palette, mood, and emotional intent unless the user explicitly asks to change one of those things. Make only the requested edit. For example, if the user asks to make one person blonde, keep the same people, pose, setting, style, and layout while changing only that person's hair color.
+
+Card context:
+- Occasion: ${details.occasion}
+- Recipient: ${details.recipientName || details.recipientType}
+- Relationship: ${details.recipientType}
+- Tone: ${details.tone}
+- Visual style: ${details.imageStyle || 'AI chooses the best style for this card'}
+- Personal context: ${details.keyDetails}
+
+Keep the output as portrait artwork composed for a 5x7 greeting-card cover. Do not add borders, paper edges, frames, mockups, envelopes, UI, or new text near the image edges.
+`
+
 const getOpenAI = () =>
   new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -140,6 +158,51 @@ const generateImage = async (openai, details, refinement = '', imageMode = 'new'
 
   if (!imageUrl) {
     throw new Error('OpenAI did not return an image.')
+  }
+
+  return imageUrl
+}
+
+const imageUrlToFile = async (imageUrl) => {
+  const dataUrlMatch = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(imageUrl || '')
+
+  if (dataUrlMatch) {
+    const [, mimeType, imageBase64] = dataUrlMatch
+    return toFile(Buffer.from(imageBase64, 'base64'), 'current-cover.png', { type: mimeType })
+  }
+
+  if (/^https?:\/\//.test(imageUrl || '')) {
+    const response = await fetch(imageUrl)
+
+    if (!response.ok) {
+      throw new Error('Unable to load the current cover image for editing.')
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png'
+    const imageBuffer = Buffer.from(await response.arrayBuffer())
+    return toFile(imageBuffer, 'current-cover.png', { type: contentType })
+  }
+
+  throw new Error('Unable to edit the cover because the current image is missing or invalid.')
+}
+
+const editImage = async (openai, details, refinement, currentImageUrl) => {
+  const currentImage = await imageUrlToFile(currentImageUrl)
+  const imageResponse = await openai.images.edit({
+    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    image: currentImage,
+    prompt: buildImageEditPrompt(details, refinement),
+    size: '1024x1536',
+    quality: 'medium',
+  })
+
+  const imageBase64 = imageResponse.data?.[0]?.b64_json
+  const imageUrl = imageBase64
+    ? `data:image/png;base64,${imageBase64}`
+    : imageResponse.data?.[0]?.url
+
+  if (!imageUrl) {
+    throw new Error('OpenAI did not return an edited image.')
   }
 
   return imageUrl
@@ -221,7 +284,7 @@ app.post('/api/refine-image', async (req, res) => {
     })
   }
 
-  const { details, refinement, imageMode } = req.body
+  const { details, refinement, imageMode, currentImageUrl } = req.body
   const missingFields = validateDetails(details || {})
 
   if (missingFields.length > 0) {
@@ -237,7 +300,12 @@ app.post('/api/refine-image', async (req, res) => {
   }
 
   try {
-    const imageUrl = await generateImage(getOpenAI(), details, refinement, imageMode === 'new' ? 'new' : 'revise')
+    const openai = getOpenAI()
+    const imageUrl =
+      imageMode === 'new'
+        ? await generateImage(openai, details, refinement, 'new')
+        : await editImage(openai, details, refinement, currentImageUrl)
+
     res.json({ imageUrl })
   } catch (error) {
     console.error(error)

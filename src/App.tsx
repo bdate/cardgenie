@@ -330,6 +330,7 @@ function App() {
           details,
           refinement: imageRefinement,
           imageMode: coverRefinementMode,
+          currentImageUrl: coverRefinementMode === 'revise' ? card.imageUrl : undefined,
         }),
       })
 
@@ -410,7 +411,9 @@ function App() {
     <main className="app-shell">
       <section className="hero-section">
         <div className="eyebrow">Card Genie</div>
-        <h1>Any Card Imaginable™</h1>
+        <h1>
+          Any Card Imaginable<span className="trademark-mark">™</span>
+        </h1>
         <p>Powered by GreetingCardUniverse.com</p>
         <div className="credit-wallet" aria-label="Credit balance">
           <div>
@@ -534,7 +537,7 @@ function App() {
 
           {error && <div className="error-message">{error}</div>}
 
-          <button className="primary-button" disabled={isGenerating}>
+          <button className="primary-button" disabled={isGenerating} aria-busy={isGenerating}>
             {isGenerating
               ? 'Generating your card...'
               : card
@@ -785,6 +788,7 @@ function App() {
                             className="primary-button cost-button"
                             type="button"
                             disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForRevision}
+                            aria-busy={isRefiningImage}
                             onClick={refineImage}
                           >
                             {isRefiningImage ? (
@@ -870,6 +874,7 @@ function App() {
                         className="primary-button cost-button"
                         type="button"
                         disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
+                        aria-busy={isRefiningCopy}
                         onClick={refineCopy}
                       >
                         {isRefiningCopy ? (
