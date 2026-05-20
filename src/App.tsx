@@ -410,7 +410,7 @@ function App() {
     <main className="app-shell">
       <section className="hero-section">
         <div className="eyebrow">Card Genie</div>
-        <h1>Any Card Imaginable</h1>
+        <h1>Any Card Imaginable™</h1>
         <p>Powered by GreetingCardUniverse.com</p>
         <div className="credit-wallet" aria-label="Credit balance">
           <div>
