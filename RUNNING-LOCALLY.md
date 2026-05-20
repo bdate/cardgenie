@@ -1,79 +1,94 @@
 # Running Locally
 
-The repo now contains the Vite + React app for PKL Universe.
+This repo contains a Vite + React frontend and a small Express API server.
 
 ## Recommended
 
-From PowerShell in the project root:
+From the project root:
 
-```powershell
+```bash
 npm install
-npm run dev -- --host 127.0.0.1 --port 5173
+npm run dev
 ```
 
 Then open:
 
-- `http://127.0.0.1:5173/#/`
+- `http://localhost:5173/`
 
-## Blank page or Vite 504 dependency errors
+The `dev` script starts both services:
 
-This repo is often run from a Dropbox-synced folder on Windows. To avoid file-lock issues with Vite's optimized dependency cache, `vite.config.js` stores the dev cache under local AppData instead of `node_modules/.vite`.
+- Vite frontend: `http://localhost:5173/`
+- Express API: `http://localhost:8787/`
+
+## If the Latest Changes Do Not Show
+
+First do a hard refresh in the browser. If the page still looks stale, stop any old local server processes and restart:
+
+```bash
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+lsof -nP -iTCP:8787 -sTCP:LISTEN
+kill <PID>
+npm run dev
+```
+
+If port `5173` is still busy, Vite may start on another port such as `5174`. Use the `Local:` URL printed by Vite, or stop the old process and restart to get back to `5173`.
+
+## macOS Dependency Permission Fixes
+
+If copied files or downloaded dependencies lose executable permissions, `npm run dev` may fail with errors like `Permission denied`, `EACCES`, or macOS blocking Rollup/esbuild. Fix the local dependency permissions, then restart:
+
+```bash
+chmod +x node_modules/.bin/*
+chmod +x node_modules/@esbuild/darwin-x64/bin/esbuild
+xattr -dr com.apple.quarantine node_modules || true
+npm run dev
+```
+
+If that still fails, reinstall dependencies:
+
+```bash
+rm -rf node_modules
+npm install
+npm run dev
+```
+
+## Local API Setup
+
+Copy `.env.example` to `.env` and fill in the needed values for local API-backed features:
+
+```bash
+cp .env.example .env
+```
+
+Until `.env` is configured, the app may still load, but API-backed card generation will not work without a valid `OPENAI_API_KEY`.
+
+## Blank Page or Vite 504 Dependency Errors
 
 If the page is blank and the browser console shows errors like `504 (Outdated Optimize Dep)` for `/node_modules/.vite/deps/...`, the browser is using stale Vite module URLs. Fix it by clearing the page cache:
 
 1. Open browser DevTools.
 2. Go to the Network tab.
 3. Check Disable cache.
-4. Press `Ctrl+F5`.
+4. Hard refresh the page.
 
-If needed, close all `127.0.0.1:5173` tabs and reopen:
+If needed, close all local app tabs and reopen:
 
-- `http://127.0.0.1:5173/?fresh=1#/`
+- `http://localhost:5173/?fresh=1`
 
-## Firebase setup for local auth
-
-1. Copy `.env.example` to `.env`.
-2. Fill in the Firebase web app values.
-3. Restart the Vite dev server if it was already running.
-
-Until `.env` is configured, the app still loads but protected routes will show a Firebase setup message instead of allowing sign-in.
-
-## Production build check
+## Production Build Check
 
 To verify the static build locally:
 
-```powershell
+```bash
 npm run build
 ```
 
-If Windows has a file lock on `dist`, use a fresh output folder instead:
+## GitHub Pages Path
 
-```powershell
-npx vite build --outDir dist-pages-check
-```
+The app is set up to live at the site root for its dedicated repo/domain.
 
-## GitHub Pages path
+Current custom domain:
 
-The rebuilt app is now set up to live at the site root for its own dedicated repo/domain.
+- `https://www.card-genie.com/`
 
-If you later host it on GitHub Pages, the expected URL shape is the root site, for example:
-
-- `https://yourname.github.io/your-repo/`
-
-If you connect a custom domain, that custom domain becomes the primary app URL.
-
-## Deployment notes
-
-For the quickest repeatable GitHub Pages push flow, see:
-
-- `PUSHING-TO-GITHUB-PAGES.md`
-
-## Legacy files
-
-The old single-team implementation is still in the repo as reference material:
-
-- `hawks2026.html`
-- `roster-app.js`
-- `roster-styles.css`
-
-Those files are no longer the primary local run path for the rebuild.
+GitHub Pages should deploy from the GitHub Actions workflow artifact, not from the raw `main` branch root. If the live site serves `/src/main.tsx`, Pages is serving source files instead of the built Vite `dist` output.
