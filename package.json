@@ -9,6 +9,8 @@
     "dev:server": "node server/index.js",
     "start": "node server/index.js",
     "build": "tsc -b && vite build",
+    "deploy:worker": "wrangler deploy",
+    "dev:worker": "wrangler dev",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -32,6 +34,7 @@
     "globals": "^17.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.58.2",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "wrangler": "^4.93.0"
   }
 }

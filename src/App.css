@@ -35,11 +35,13 @@
 }
 
 .trademark-mark {
+  position: relative;
+  top: -0.42em;
   display: inline-block;
   margin-left: 0.08em;
   font-size: 0.22em;
   line-height: 1;
-  vertical-align: super;
+  vertical-align: baseline;
   letter-spacing: 0;
 }
 
