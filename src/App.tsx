@@ -34,7 +34,7 @@ const initialDetails: CardDetails = {
   keyDetails: '',
 }
 
-const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging']
+const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
 const lengthOptions = ['Short, 25-40 words', 'Medium, 60-80 words', 'Long, 100-130 words']
 const styleOptions = [
   'AI chooses the best style for this card',
@@ -574,6 +574,14 @@ function App() {
 
           {isGenerating && (
             <div className="creative-loader" role="status" aria-live="polite">
+              <div className="writing-loader" aria-hidden="true">
+                <div className="writing-paper">
+                  <span className="writing-line writing-line-one" />
+                  <span className="writing-line writing-line-two" />
+                  <span className="writing-line writing-line-three" />
+                </div>
+                <div className="writing-pen" />
+              </div>
               <span className="loader-kicker">Card Genie is creating</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
             </div>

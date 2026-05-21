@@ -293,12 +293,25 @@ textarea:focus {
 
 .primary-button[aria-busy="true"] {
   cursor: wait;
+  opacity: 1;
+  animation: actionTextFlash 900ms ease-in-out infinite;
 }
 
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
   transform: none;
+}
+
+@keyframes actionTextFlash {
+  0%,
+  100% {
+    color: #fff;
+  }
+
+  50% {
+    color: rgba(255, 255, 255, 0.42);
+  }
 }
 
 .secondary-button {
@@ -367,48 +380,91 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.loader-orb {
+.writing-loader {
   position: relative;
   display: grid;
   place-items: center;
-  width: 116px;
-  height: 116px;
+  width: 174px;
+  height: 126px;
   margin-bottom: 22px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(245, 158, 51, 0.2), rgba(143, 208, 201, 0.24));
 }
 
-.loader-orb::before {
+.writing-paper {
+  position: absolute;
+  bottom: 4px;
+  left: 14px;
+  width: 132px;
+  height: 92px;
+  border: 2px solid rgba(245, 158, 51, 0.38);
+  border-radius: 14px;
+  padding: 24px 18px 18px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(245, 158, 51, 0.22), transparent 16%),
+    linear-gradient(180deg, #fff, #fff8ef);
+  box-shadow:
+    0 20px 44px rgba(63, 155, 145, 0.14),
+    inset 0 0 0 5px rgba(255, 255, 255, 0.56);
+  overflow: hidden;
+}
+
+.writing-paper::before {
   content: "";
   position: absolute;
-  inset: 16px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, var(--gcu-orange), var(--gcu-dark-teal));
-  box-shadow: 0 18px 42px rgba(245, 158, 51, 0.24);
-  animation: breathe 1.8s ease-in-out infinite;
-}
-
-.loader-orb span {
-  position: absolute;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
+  top: 10px;
+  left: 50%;
+  width: 28px;
+  height: 8px;
   border-radius: 999px;
-  background: #fff;
-  animation: orbitDots 1.4s ease-in-out infinite;
+  background: rgba(245, 158, 51, 0.28);
+  transform: translateX(-50%);
 }
 
-.loader-orb span:nth-child(1) {
-  transform: translateX(-18px);
+.writing-line {
+  display: block;
+  width: 0;
+  height: 6px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gcu-dark-teal), rgba(63, 155, 145, 0.46));
+  animation: writingLine 2.4s ease-in-out infinite;
 }
 
-.loader-orb span:nth-child(2) {
-  animation-delay: 180ms;
+.writing-line-two {
+  max-width: 82px;
+  animation-delay: 420ms;
 }
 
-.loader-orb span:nth-child(3) {
-  animation-delay: 360ms;
-  transform: translateX(18px);
+.writing-line-three {
+  max-width: 58px;
+  background: rgba(245, 158, 51, 0.46);
+  animation-delay: 840ms;
+}
+
+.writing-pen {
+  position: absolute;
+  z-index: 2;
+  top: 50px;
+  left: 44px;
+  width: 78px;
+  height: 13px;
+  border-radius: 999px 8px 8px 999px;
+  background: linear-gradient(90deg, var(--gcu-ink) 0 68%, var(--gcu-orange) 68% 100%);
+  box-shadow: 0 12px 26px rgba(48, 38, 50, 0.18);
+  transform: rotate(-22deg);
+  transform-origin: 88% 50%;
+  animation: writingPen 2.4s ease-in-out infinite;
+}
+
+.writing-pen::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  top: 3px;
+  width: 0;
+  height: 0;
+  border-left: 14px solid var(--gcu-dark-teal);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
 }
 
 .creative-loader h3 {
@@ -1507,25 +1563,36 @@ textarea:focus {
   }
 }
 
-@keyframes breathe {
+@keyframes writingLine {
   0%,
   100% {
-    transform: scale(0.96);
+    width: 0;
+    opacity: 0.45;
   }
-  50% {
-    transform: scale(1.05);
+
+  35%,
+  72% {
+    width: 96px;
+    opacity: 1;
   }
 }
 
-@keyframes orbitDots {
+@keyframes writingPen {
   0%,
   100% {
-    opacity: 0.48;
-    transform: translateY(0) scale(0.9);
+    transform: translate(0, 0) rotate(-22deg);
   }
-  50% {
-    opacity: 1;
-    transform: translateY(-8px) scale(1.15);
+
+  28% {
+    transform: translate(58px, 18px) rotate(-18deg);
+  }
+
+  56% {
+    transform: translate(26px, 42px) rotate(-20deg);
+  }
+
+  76% {
+    transform: translate(68px, 42px) rotate(-18deg);
   }
 }
 
