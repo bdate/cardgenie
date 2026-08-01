@@ -108,6 +108,45 @@ const getApiJson = async (response: Response, fallbackMessage: string) => {
   throw new Error(fallbackMessage)
 }
 
+const getLengthRange = (length: string) => {
+  const match = length.match(/(\d+)\s*-\s*(\d+)\s*words/i)
+  return match ? { min: Number(match[1]), max: Number(match[2]) } : null
+}
+
+const trimToWordLimit = (message: string, length: string) => {
+  const range = getLengthRange(length)
+
+  if (!range) {
+    return message.trim()
+  }
+
+  const cleanMessage = message.trim().replace(/\s+/g, ' ')
+  const words = cleanMessage.split(/\s+/).filter(Boolean)
+
+  if (words.length <= range.max) {
+    return cleanMessage
+  }
+
+  const sentences = cleanMessage.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []
+  let fitted = ''
+
+  for (const sentence of sentences) {
+    const candidate = `${fitted} ${sentence.trim()}`.trim()
+
+    if (candidate.split(/\s+/).filter(Boolean).length > range.max) {
+      break
+    }
+
+    fitted = candidate
+  }
+
+  if (fitted) {
+    return /[.!?]$/.test(fitted) ? fitted : `${fitted}.`
+  }
+
+  return `${words.slice(0, range.max).join(' ').replace(/[,\s]+$/, '')}.`
+}
+
 const splitMessageParts = (message: string, senderName: string) => {
   const senderPattern = senderName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   let cleanMessage = message
@@ -214,7 +253,7 @@ function App() {
       closing: card?.closing ?? parts.closing,
     }
   }, [card?.closing, rawMessage, senderLabel])
-  const cardMessage = messageParts.body
+  const cardMessage = useMemo(() => trimToWordLimit(messageParts.body, details.length), [details.length, messageParts.body])
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
   const messageDensity = cardMessage.length > 620 ? 'is-long' : cardMessage.length > 420 ? 'is-medium' : 'is-short'
   const generationLines = useMemo(

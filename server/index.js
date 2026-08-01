@@ -222,10 +222,28 @@ const getLengthRange = (length = '') => {
 const countWords = (message = '') => message.trim().split(/\s+/).filter(Boolean).length
 
 const trimToWordLimit = (message, maxWords) => {
-  const words = message.trim().split(/\s+/).filter(Boolean)
+  const cleanMessage = message.trim().replace(/\s+/g, ' ')
+  const words = cleanMessage.split(/\s+/).filter(Boolean)
 
   if (words.length <= maxWords) {
-    return message.trim()
+    return cleanMessage
+  }
+
+  const sentences = cleanMessage.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []
+  let fitted = ''
+
+  for (const sentence of sentences) {
+    const candidate = `${fitted} ${sentence.trim()}`.trim()
+
+    if (candidate.split(/\s+/).filter(Boolean).length > maxWords) {
+      break
+    }
+
+    fitted = candidate
+  }
+
+  if (fitted) {
+    return /[.!?]$/.test(fitted) ? fitted : `${fitted}.`
   }
 
   return `${words.slice(0, maxWords).join(' ').replace(/[,\s]+$/, '')}.`
