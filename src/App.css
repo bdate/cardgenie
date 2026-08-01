@@ -1129,6 +1129,92 @@ textarea:focus {
   min-width: 170px;
 }
 
+.delivery-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  border: 1px solid rgba(143, 208, 201, 0.34);
+  border-radius: 24px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(245, 158, 51, 0.14), transparent 34%),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(63, 155, 145, 0.1);
+}
+
+.delivery-panel h3 {
+  margin: 4px 0 2px;
+  color: var(--gcu-ink);
+  font-size: 1.15rem;
+}
+
+.delivery-panel p {
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.delivery-kicker {
+  color: var(--gcu-dark-teal);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.delivery-methods {
+  max-width: 360px;
+}
+
+.delivery-panel .primary-button {
+  width: min(260px, 100%);
+}
+
+.sms-consent {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(245, 158, 51, 0.24);
+  border-radius: 16px;
+  padding: 12px;
+  color: var(--gcu-dark-grey);
+  background: rgba(255, 248, 239, 0.76);
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.sms-consent input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--gcu-orange);
+}
+
+.sms-consent a {
+  color: var(--gcu-dark-teal);
+  font-weight: 900;
+}
+
+.share-link {
+  color: var(--gcu-dark-teal);
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.delivery-notice {
+  border: 1px solid rgba(63, 155, 145, 0.24);
+  border-radius: 16px;
+  padding: 11px 13px;
+  color: var(--gcu-ink);
+  background: rgba(255, 255, 255, 0.76);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
 .card-editor {
   display: grid;
   gap: 18px;
@@ -1880,6 +1966,15 @@ textarea:focus {
 
   .proof-actions .secondary-button {
     width: min(280px, 100%);
+  }
+
+  .delivery-panel {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .delivery-panel .primary-button {
+    width: 100%;
   }
 
   .card-editor {

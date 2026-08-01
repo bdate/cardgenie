@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 
 const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
+const fallbackCardStore = new Map()
 
 const buildCopyPrompt = (details, refinement = '') => `
 Write the inside message for a personalized greeting card.
@@ -163,6 +164,166 @@ const parseCopyResponse = (response) => {
   }
 }
 
+const createCardId = () => crypto.randomUUID()
+
+const getPublicAppUrl = (request, env) => {
+  const requestUrl = new URL(request.url)
+  return (env.PUBLIC_APP_URL || request.headers.get('Origin') || requestUrl.origin).replace(/\/$/, '')
+}
+
+const getShareUrl = (request, env, cardId) => `${getPublicAppUrl(request, env)}/?card=${encodeURIComponent(cardId)}`
+
+const buildCardRecord = (payload) => {
+  const card = payload?.card || {}
+  const details = payload?.details || {}
+  const imageUrl = card.imageUrl?.trim()
+  const message = card.message?.trim()
+
+  if (!imageUrl || !message) {
+    throw new Error('Missing card image or message.')
+  }
+
+  return {
+    id: createCardId(),
+    createdAt: new Date().toISOString(),
+    details: {
+      recipientName: details.recipientName?.trim() || '',
+      recipientType: details.recipientType?.trim() || '',
+      senderName: details.senderName?.trim() || '',
+      occasion: details.occasion?.trim() || '',
+    },
+    card: {
+      imageUrl,
+      message,
+      closing: card.closing?.trim() || 'With love,',
+    },
+    greeting: payload?.greeting?.trim() || `Dear ${details.recipientName || details.recipientType || 'Someone special'},`,
+    signature: payload?.signature?.trim() || details.senderName?.trim() || 'Your Name',
+  }
+}
+
+const saveCardRecord = async (env, record) => {
+  if (env.CARD_STORE) {
+    await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+    return
+  }
+
+  fallbackCardStore.set(record.id, record)
+}
+
+const getCardRecord = async (env, cardId) => {
+  if (env.CARD_STORE) {
+    const record = await env.CARD_STORE.get(cardId, 'json')
+    return record || null
+  }
+
+  return fallbackCardStore.get(cardId) || null
+}
+
+const getCardSummary = (record, request, env) => ({
+  ...record,
+  shareUrl: getShareUrl(request, env, record.id),
+})
+
+const buildDeliveryCopy = (record, shareUrl) => {
+  const recipient = record.details.recipientName || record.details.recipientType || 'you'
+  const sender = record.signature || record.details.senderName || 'Someone special'
+  const occasion = record.details.occasion || 'card'
+
+  return {
+    subject: `${sender} sent you a ${occasion} card`,
+    text: `${sender} made a card for ${recipient}. Open it here: ${shareUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        <h1 style="margin: 0 0 12px;">${sender} sent you a card</h1>
+        <p>Open your personalized ${occasion} card from ${sender}.</p>
+        <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
+        <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+      </div>
+    `,
+  }
+}
+
+const sendEmailDelivery = async ({ env, to, copy }) => {
+  if (!env.POSTMARK_SERVER_TOKEN || !env.EMAIL_FROM) {
+    throw new Error('Email delivery is not configured. Add POSTMARK_SERVER_TOKEN and EMAIL_FROM.')
+  }
+
+  const response = await fetch('https://api.postmarkapp.com/email', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Postmark-Server-Token': env.POSTMARK_SERVER_TOKEN,
+    },
+    body: JSON.stringify({
+      From: env.EMAIL_FROM,
+      To: to,
+      Subject: copy.subject,
+      TextBody: copy.text,
+      HtmlBody: copy.html,
+      MessageStream: env.POSTMARK_MESSAGE_STREAM || 'outbound',
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Postmark could not send the card. ${errorText}`)
+  }
+}
+
+const getTwilioAuthCredentials = (env) => {
+  if (!env.TWILIO_ACCOUNT_SID) {
+    throw new Error('Text delivery is not configured. Add TWILIO_ACCOUNT_SID.')
+  }
+
+  if (env.TWILIO_API_KEY_SID && env.TWILIO_API_KEY_SECRET) {
+    return {
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      username: env.TWILIO_API_KEY_SID,
+      password: env.TWILIO_API_KEY_SECRET,
+    }
+  }
+
+  if (env.TWILIO_AUTH_TOKEN) {
+    return {
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      username: env.TWILIO_ACCOUNT_SID,
+      password: env.TWILIO_AUTH_TOKEN,
+    }
+  }
+
+  throw new Error('Text delivery is not configured. Add TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.')
+}
+
+const sendTextDelivery = async ({ env, to, copy }) => {
+  if (!env.TWILIO_FROM_NUMBER) {
+    throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
+  }
+
+  const twilioAuth = getTwilioAuthCredentials(env)
+
+  const form = new URLSearchParams({
+    From: env.TWILIO_FROM_NUMBER,
+    To: to,
+    Body: copy.text,
+  })
+
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioAuth.accountSid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${twilioAuth.username}:${twilioAuth.password}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: form,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Twilio could not send the card. ${errorText}`)
+  }
+}
+
 const generateCopy = async (openai, env, details, refinement = '') => {
   const copyResponse = await openai.responses.create({
     model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
@@ -260,6 +421,83 @@ const readJson = async (request) => {
     return await request.json()
   } catch {
     return null
+  }
+}
+
+const handleSaveCard = async (request, env) => {
+  try {
+    const record = buildCardRecord(await readJson(request))
+    await saveCardRecord(env, record)
+
+    return jsonResponse(request, env, getCardSummary(record, request, env), 201)
+  } catch (error) {
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to save the card.' }, 400)
+  }
+}
+
+const handleGetCard = async (request, env, cardId) => {
+  const record = await getCardRecord(env, cardId)
+
+  if (!record) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+
+  return jsonResponse(request, env, getCardSummary(record, request, env))
+}
+
+const handleDeliverCard = async (request, env) => {
+  const { cardId, method, destination, recipientConsentConfirmed } = (await readJson(request)) || {}
+  const record = await getCardRecord(env, cardId)
+  const cleanDestination = destination?.trim()
+
+  if (!record) {
+    return jsonResponse(request, env, { error: 'Save the card before delivering it.' }, 404)
+  }
+
+  if (!['email', 'text'].includes(method)) {
+    return jsonResponse(request, env, { error: 'Choose email or text delivery.' }, 400)
+  }
+
+  if (!cleanDestination) {
+    return jsonResponse(
+      request,
+      env,
+      { error: method === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.' },
+      400,
+    )
+  }
+
+  if (method === 'text' && recipientConsentConfirmed !== true) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Confirm the recipient agreed to receive this one-time card delivery text.' },
+      400,
+    )
+  }
+
+  try {
+    const shareUrl = getShareUrl(request, env, record.id)
+    const copy = buildDeliveryCopy(record, shareUrl)
+
+    if (method === 'email') {
+      await sendEmailDelivery({ env, to: cleanDestination, copy })
+    } else {
+      await sendTextDelivery({ env, to: cleanDestination, copy })
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      shareUrl,
+      message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
+    })
+  } catch (error) {
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to deliver the card.' },
+      500,
+    )
   }
 }
 
@@ -381,6 +619,18 @@ const handleRequest = async (request, env) => {
 
   if (request.method === 'GET' && url.pathname === '/api/health') {
     return jsonResponse(request, env, { ok: true })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/cards') {
+    return handleSaveCard(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname.startsWith('/api/cards/')) {
+    return handleGetCard(request, env, decodeURIComponent(url.pathname.replace('/api/cards/', '')))
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/deliver-card') {
+    return handleDeliverCard(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/generate-card') {

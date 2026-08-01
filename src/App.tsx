@@ -19,9 +19,19 @@ type GeneratedCard = {
   closing?: string
 }
 
+type SharedCard = {
+  id: string
+  shareUrl: string
+  details: Partial<CardDetails>
+  card: GeneratedCard
+  greeting?: string
+  signature?: string
+}
+
 type ExperienceStep = 'envelope' | 'envelopeFlip' | 'envelopeBack' | 'opening' | 'front' | 'cardOpening' | 'inside'
 type EditorTab = 'front' | 'inside'
 type CoverRefinementMode = 'revise' | 'new'
+type DeliveryMethod = 'email' | 'text'
 
 const initialDetails: CardDetails = {
   recipientName: '',
@@ -63,6 +73,18 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
 const hostedApiMessage =
   'This online demo needs a deployed API server before Card Genie can generate cards. Run it locally with the Express server, or connect VITE_API_BASE_URL to a hosted backend.'
+const staticPageRedirects: Record<string, string> = {
+  '/privacy': '/privacy/index.html',
+  '/privacy/': '/privacy/index.html',
+  '/terms': '/terms/index.html',
+  '/terms/': '/terms/index.html',
+}
+
+const staticPageRedirect = staticPageRedirects[window.location.pathname]
+
+if (staticPageRedirect) {
+  window.location.replace(staticPageRedirect)
+}
 
 const getApiJson = async (response: Response, fallbackMessage: string) => {
   const contentType = response.headers.get('content-type') || ''
@@ -154,6 +176,13 @@ function App() {
   const [credits, setCredits] = useState(initialCreditBalance)
   const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
   const [error, setError] = useState('')
+  const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
+  const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
+  const [deliveryDestination, setDeliveryDestination] = useState('')
+  const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
+  const [isDelivering, setIsDelivering] = useState(false)
+  const [deliveryNotice, setDeliveryNotice] = useState('')
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -203,6 +232,50 @@ function App() {
     return () => window.clearInterval(timer)
   }, [generationLines.length, isGenerating])
 
+  useEffect(() => {
+    const cardId = new URLSearchParams(window.location.search).get('card')
+
+    if (!cardId) {
+      return
+    }
+
+    const loadSharedCard = async () => {
+      setIsLoadingSharedCard(true)
+      setError('')
+
+      try {
+        const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(cardId)}`))
+        const data = await getApiJson(response, 'Unable to load the shared card.')
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to load the shared card.')
+        }
+
+        const shared = data as SharedCard
+        setSharedCard(shared)
+        setDetails((current) => ({
+          ...current,
+          recipientName: shared.details.recipientName || current.recipientName,
+          recipientType: shared.details.recipientType || current.recipientType,
+          senderName: shared.details.senderName || current.senderName,
+          occasion: shared.details.occasion || current.occasion,
+        }))
+        setCard(shared.card)
+        setCardGreeting(shared.greeting || null)
+        setCardSignature(shared.signature || null)
+        setShowEditor(false)
+        setShowCompletionNote(false)
+        setStep('envelope')
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Unable to load the shared card.')
+      } finally {
+        setIsLoadingSharedCard(false)
+      }
+    }
+
+    void loadSharedCard()
+  }, [])
+
   const updateDetails = (field: keyof CardDetails, value: string) => {
     setDetails((current) => ({
       ...current,
@@ -229,6 +302,8 @@ function App() {
     setActiveGenerationStep(0)
     setShowEditor(false)
     setShowPolishDialog(false)
+    setSharedCard(null)
+    setDeliveryNotice('')
     setStep('envelope')
 
     try {
@@ -404,6 +479,89 @@ function App() {
       setError(caughtError instanceof Error ? caughtError.message : 'Unable to refine the inside message.')
     } finally {
       setIsRefiningCopy(false)
+    }
+  }
+
+  const buildCurrentCardPayload = () => {
+    if (!card) {
+      throw new Error('Create a card before delivering it.')
+    }
+
+    return {
+      details,
+      card: {
+        imageUrl: card.imageUrl,
+        message: cardMessage,
+        closing: messageParts.closing,
+      },
+      greeting: insideGreeting,
+      signature: cardSignatureLabel,
+    }
+  }
+
+  const saveCurrentCard = async () => {
+    const response = await fetch(apiUrl('/api/cards'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildCurrentCardPayload()),
+    })
+    const data = await getApiJson(response, 'Unable to save the card for delivery.')
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Unable to save the card for delivery.')
+    }
+
+    const shared = data as SharedCard
+    setSharedCard(shared)
+    return shared
+  }
+
+  const deliverCard = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setDeliveryNotice('')
+
+    if (!deliveryDestination.trim()) {
+      setDeliveryNotice(
+        deliveryMethod === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.',
+      )
+      return
+    }
+
+    if (deliveryMethod === 'text' && !smsConsentConfirmed) {
+      setDeliveryNotice('Confirm the recipient agreed to receive this one-time card delivery text.')
+      return
+    }
+
+    setIsDelivering(true)
+
+    try {
+      const shared = await saveCurrentCard()
+      const response = await fetch(apiUrl('/api/deliver-card'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cardId: shared.id,
+          method: deliveryMethod,
+          destination: deliveryDestination,
+          recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to deliver the card.')
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to deliver the card.')
+      }
+
+      setDeliveryNotice(data.message || 'Card sent.')
+    } catch (caughtError) {
+      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to deliver the card.')
+    } finally {
+      setIsDelivering(false)
     }
   }
 
@@ -587,7 +745,15 @@ function App() {
             </div>
           )}
 
-          {!isGenerating && !card && (
+          {isLoadingSharedCard && (
+            <div className="empty-state" role="status" aria-live="polite">
+              <div className="sparkle">CG</div>
+              <h3>Loading your card</h3>
+              <p>Opening the shared greeting card proof.</p>
+            </div>
+          )}
+
+          {!isGenerating && !isLoadingSharedCard && !card && (
             <div className="empty-state">
               <div className="sparkle">✦</div>
               <h3>No proof yet</h3>
@@ -720,6 +886,83 @@ function App() {
                   Replay animation
                 </button>
               </div>
+              <form className="delivery-panel" onSubmit={deliverCard}>
+                <div>
+                  <span className="delivery-kicker">Ready to send?</span>
+                  <h3>Deliver this card</h3>
+                  <p>Send a secure card link by email or text after you approve the proof.</p>
+                </div>
+                <div className="mode-toggle delivery-methods" aria-label="Delivery method">
+                  <button
+                    className={deliveryMethod === 'email' ? 'is-selected' : ''}
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMethod('email')
+                      setDeliveryDestination('')
+                      setSmsConsentConfirmed(false)
+                      setDeliveryNotice('')
+                    }}
+                  >
+                    Email
+                  </button>
+                  <button
+                    className={deliveryMethod === 'text' ? 'is-selected' : ''}
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMethod('text')
+                      setDeliveryDestination('')
+                      setSmsConsentConfirmed(false)
+                      setDeliveryNotice('')
+                    }}
+                  >
+                    Cellphone
+                  </button>
+                </div>
+                <label>
+                  {deliveryMethod === 'email' ? 'Recipient email' : 'Recipient cellphone'}
+                  <input
+                    type={deliveryMethod === 'email' ? 'email' : 'tel'}
+                    value={deliveryDestination}
+                    onChange={(event) => setDeliveryDestination(event.target.value)}
+                    placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '+1 555 123 4567'}
+                  />
+                </label>
+                {deliveryMethod === 'text' && (
+                  <label className="sms-consent">
+                    <input
+                      type="checkbox"
+                      checked={smsConsentConfirmed}
+                      onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
+                    />
+                    <span>
+                      I confirm this recipient agreed to receive a one-time text message with a link to this card.
+                      Message and data rates may apply. Reply STOP to opt out or HELP for help. See our{' '}
+                      <a href="/privacy/index.html" target="_blank" rel="noreferrer">
+                        Privacy Policy
+                      </a>{' '}
+                      and{' '}
+                      <a href="/terms/index.html" target="_blank" rel="noreferrer">
+                        Terms
+                      </a>
+                      .
+                    </span>
+                  </label>
+                )}
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={isDelivering || (deliveryMethod === 'text' && !smsConsentConfirmed)}
+                  aria-busy={isDelivering}
+                >
+                  {isDelivering ? 'Sending card...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
+                </button>
+                {sharedCard && (
+                  <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
+                    Open shareable card link
+                  </a>
+                )}
+                {deliveryNotice && <div className="delivery-notice">{deliveryNotice}</div>}
+              </form>
                 </>
               )}
 

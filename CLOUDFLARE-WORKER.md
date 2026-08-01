@@ -18,6 +18,26 @@ npx wrangler secret put OPENAI_API_KEY
 
 When prompted, paste the OpenAI key. Do not commit the key to the repo.
 
+For delivery, add provider secrets when you are ready to send real cards:
+
+```bash
+npx wrangler secret put POSTMARK_SERVER_TOKEN
+npx wrangler secret put EMAIL_FROM
+npx wrangler secret put TWILIO_ACCOUNT_SID
+npx wrangler secret put TWILIO_API_KEY_SID
+npx wrangler secret put TWILIO_API_KEY_SECRET
+npx wrangler secret put TWILIO_FROM_NUMBER
+```
+
+Set `PUBLIC_APP_URL` to the production frontend URL so email and text links point at the app:
+
+```toml
+[vars]
+PUBLIC_APP_URL = "https://www.card-genie.com"
+```
+
+Shared cards use an in-memory fallback during local testing. For production, bind a Workers KV namespace named `CARD_STORE` so delivered card links survive Worker restarts.
+
 ## Deploy the Worker
 
 ```bash

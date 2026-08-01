@@ -1,10 +1,12 @@
 import 'dotenv/config'
 
+import crypto from 'node:crypto'
 import express from 'express'
 import OpenAI, { toFile } from 'openai'
 
 const app = express()
 const port = process.env.PORT || 8787
+const cardStore = new Map()
 const allowedOrigins = (
   process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 )
@@ -33,6 +35,82 @@ app.use(express.json({ limit: '25mb' }))
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+app.post('/api/cards', (req, res) => {
+  try {
+    const record = buildCardRecord(req.body)
+    cardStore.set(record.id, record)
+
+    res.status(201).json(getCardSummary(record, req))
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Unable to save the card.',
+    })
+  }
+})
+
+app.get('/api/cards/:cardId', (req, res) => {
+  const record = cardStore.get(req.params.cardId)
+
+  if (!record) {
+    return res.status(404).json({
+      error: 'Card not found.',
+    })
+  }
+
+  res.json(getCardSummary(record, req))
+})
+
+app.post('/api/deliver-card', async (req, res) => {
+  const { cardId, method, destination, recipientConsentConfirmed } = req.body || {}
+  const record = cardStore.get(cardId)
+  const cleanDestination = destination?.trim()
+
+  if (!record) {
+    return res.status(404).json({
+      error: 'Save the card before delivering it.',
+    })
+  }
+
+  if (!['email', 'text'].includes(method)) {
+    return res.status(400).json({
+      error: 'Choose email or text delivery.',
+    })
+  }
+
+  if (!cleanDestination) {
+    return res.status(400).json({
+      error: method === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.',
+    })
+  }
+
+  if (method === 'text' && recipientConsentConfirmed !== true) {
+    return res.status(400).json({
+      error: 'Confirm the recipient agreed to receive this one-time card delivery text.',
+    })
+  }
+
+  try {
+    const shareUrl = getShareUrl(req, record.id)
+    const copy = buildDeliveryCopy(record, shareUrl)
+
+    if (method === 'email') {
+      await sendEmailDelivery({ to: cleanDestination, copy })
+    } else {
+      await sendTextDelivery({ to: cleanDestination, copy })
+    }
+
+    res.json({
+      ok: true,
+      shareUrl,
+      message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unable to deliver the card.',
+    })
+  }
 })
 
 const buildCopyPrompt = (details, refinement = '') => `
@@ -236,6 +314,150 @@ const parseCopyResponse = (response) => {
       message: text,
       closing: 'With love,',
     }
+  }
+}
+
+const createCardId = () => crypto.randomUUID?.() || crypto.randomBytes(16).toString('hex')
+
+const getPublicAppUrl = (req) =>
+  (process.env.PUBLIC_APP_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
+
+const getShareUrl = (req, cardId) => `${getPublicAppUrl(req)}/?card=${encodeURIComponent(cardId)}`
+
+const buildCardRecord = (payload) => {
+  const card = payload?.card || {}
+  const details = payload?.details || {}
+  const imageUrl = card.imageUrl?.trim()
+  const message = card.message?.trim()
+
+  if (!imageUrl || !message) {
+    throw new Error('Missing card image or message.')
+  }
+
+  return {
+    id: createCardId(),
+    createdAt: new Date().toISOString(),
+    details: {
+      recipientName: details.recipientName?.trim() || '',
+      recipientType: details.recipientType?.trim() || '',
+      senderName: details.senderName?.trim() || '',
+      occasion: details.occasion?.trim() || '',
+    },
+    card: {
+      imageUrl,
+      message,
+      closing: card.closing?.trim() || 'With love,',
+    },
+    greeting: payload?.greeting?.trim() || `Dear ${details.recipientName || details.recipientType || 'Someone special'},`,
+    signature: payload?.signature?.trim() || details.senderName?.trim() || 'Your Name',
+  }
+}
+
+const getCardSummary = (record, req) => ({
+  ...record,
+  shareUrl: getShareUrl(req, record.id),
+})
+
+const buildDeliveryCopy = (record, shareUrl) => {
+  const recipient = record.details.recipientName || record.details.recipientType || 'you'
+  const sender = record.signature || record.details.senderName || 'Someone special'
+  const occasion = record.details.occasion || 'card'
+
+  return {
+    subject: `${sender} sent you a ${occasion} card`,
+    text: `${sender} made a card for ${recipient}. Open it here: ${shareUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        <h1 style="margin: 0 0 12px;">${sender} sent you a card</h1>
+        <p>Open your personalized ${occasion} card from ${sender}.</p>
+        <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
+        <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+      </div>
+    `,
+  }
+}
+
+const sendEmailDelivery = async ({ to, copy }) => {
+  if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.EMAIL_FROM) {
+    throw new Error('Email delivery is not configured. Add POSTMARK_SERVER_TOKEN and EMAIL_FROM.')
+  }
+
+  const response = await fetch('https://api.postmarkapp.com/email', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Postmark-Server-Token': process.env.POSTMARK_SERVER_TOKEN,
+    },
+    body: JSON.stringify({
+      From: process.env.EMAIL_FROM,
+      To: to,
+      Subject: copy.subject,
+      TextBody: copy.text,
+      HtmlBody: copy.html,
+      MessageStream: process.env.POSTMARK_MESSAGE_STREAM || 'outbound',
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Postmark could not send the card. ${errorText}`)
+  }
+}
+
+const getTwilioAuthCredentials = () => {
+  const { TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, TWILIO_AUTH_TOKEN } = process.env
+
+  if (!TWILIO_ACCOUNT_SID) {
+    throw new Error('Text delivery is not configured. Add TWILIO_ACCOUNT_SID.')
+  }
+
+  if (TWILIO_API_KEY_SID && TWILIO_API_KEY_SECRET) {
+    return {
+      accountSid: TWILIO_ACCOUNT_SID,
+      username: TWILIO_API_KEY_SID,
+      password: TWILIO_API_KEY_SECRET,
+    }
+  }
+
+  if (TWILIO_AUTH_TOKEN) {
+    return {
+      accountSid: TWILIO_ACCOUNT_SID,
+      username: TWILIO_ACCOUNT_SID,
+      password: TWILIO_AUTH_TOKEN,
+    }
+  }
+
+  throw new Error('Text delivery is not configured. Add TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.')
+}
+
+const sendTextDelivery = async ({ to, copy }) => {
+  const { TWILIO_FROM_NUMBER } = process.env
+
+  if (!TWILIO_FROM_NUMBER) {
+    throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
+  }
+
+  const twilioAuth = getTwilioAuthCredentials()
+
+  const form = new URLSearchParams({
+    From: TWILIO_FROM_NUMBER,
+    To: to,
+    Body: copy.text,
+  })
+
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioAuth.accountSid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${twilioAuth.username}:${twilioAuth.password}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: form,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Twilio could not send the card. ${errorText}`)
   }
 }
 
