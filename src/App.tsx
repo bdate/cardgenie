@@ -47,7 +47,7 @@ const initialDetails: CardDetails = {
   senderName: '',
   occasion: '',
   tone: 'Heartfelt',
-  length: 'Medium, 60-80 words',
+  length: 'Medium, 20-40 words',
   imageStyle: 'AI chooses the best style for this card',
   keyDetails: '',
 }
