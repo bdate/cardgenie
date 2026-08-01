@@ -130,6 +130,23 @@ const validateDetails = (details) => {
   return requiredFields.filter((field) => !details[field]?.trim())
 }
 
+const getLengthRange = (length = '') => {
+  const match = length.match(/(\d+)\s*-\s*(\d+)\s*words/i)
+  return match ? { min: Number(match[1]), max: Number(match[2]) } : null
+}
+
+const countWords = (message = '') => message.trim().split(/\s+/).filter(Boolean).length
+
+const trimToWordLimit = (message, maxWords) => {
+  const words = message.trim().split(/\s+/).filter(Boolean)
+
+  if (words.length <= maxWords) {
+    return message.trim()
+  }
+
+  return `${words.slice(0, maxWords).join(' ').replace(/[,\s]+$/, '')}.`
+}
+
 const getOpenAI = (env) =>
   new OpenAI({
     apiKey: env.OPENAI_API_KEY,
@@ -351,13 +368,45 @@ const sendTextDelivery = async ({ env, to, copy }) => {
   return normalizedTo
 }
 
+const fitCopyToLength = async (openai, env, details, copy) => {
+  const range = getLengthRange(details.length)
+
+  if (!range || countWords(copy.message) <= range.max) {
+    return copy
+  }
+
+  const rewriteResponse = await openai.responses.create({
+    model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+    input: `
+Rewrite this greeting card body to fit ${range.min}-${range.max} words.
+Return strict JSON only with this shape:
+{
+  "message": "Body copy only, ${range.min}-${range.max} words.",
+  "closing": "${copy.closing || 'With love,'}"
+}
+
+Keep the same recipient, occasion, tone, and most important personal detail.
+Do not include salutation, closing, sender name, placeholder, or signature in the message.
+
+Current body:
+${copy.message}
+`,
+  })
+  const rewritten = parseCopyResponse(rewriteResponse)
+
+  return {
+    message: trimToWordLimit(rewritten.message, range.max),
+    closing: rewritten.closing || copy.closing,
+  }
+}
+
 const generateCopy = async (openai, env, details, refinement = '') => {
   const copyResponse = await openai.responses.create({
     model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
     input: buildCopyPrompt(details, refinement),
   })
 
-  return parseCopyResponse(copyResponse)
+  return fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
 }
 
 const getImageUrl = (imageResponse, fallbackMessage) => {
