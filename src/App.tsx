@@ -53,7 +53,7 @@ const initialDetails: CardDetails = {
 }
 
 const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
-const lengthOptions = ['Short, 25-40 words', 'Medium, 60-80 words', 'Long, 100-130 words']
+const lengthOptions = ['Short, 5-20 words', 'Medium, 20-40 words', 'Long, 40-70 words']
 const styleOptions = [
   'AI chooses the best style for this card',
   'Photorealistic warm portrait photography',
