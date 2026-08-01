@@ -935,8 +935,10 @@ function App() {
                       onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
                     />
                     <span>
-                      I confirm this recipient agreed to receive a one-time text message with a link to this card.
-                      Message and data rates may apply. Reply STOP to opt out or HELP for help. See our{' '}
+                      Optional SMS delivery: I confirm this recipient agreed to receive a one-time SMS/text message from
+                      Card Genie with a link to this card. Message frequency is one message per card delivery request.
+                      Msg & data rates may apply. Reply STOP to cancel, HELP for help. SMS consent is optional and is
+                      not required to create a card or use email delivery. See our{' '}
                       <a href="/privacy/index.html" target="_blank" rel="noreferrer">
                         Privacy Policy
                       </a>{' '}
