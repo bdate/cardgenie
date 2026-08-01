@@ -16,6 +16,8 @@ Length: ${details.length}
 Personal details to include: ${details.keyDetails}
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
 
+Strictly obey the selected Length word-count range for the message body only. Count the body copy words, not the greeting, closing, or signature. Do not exceed the maximum word count in the selected range.
+
 Return strict JSON only, with this shape:
 {
   "message": "Body copy only, split into 2-4 short logical paragraphs separated by blank lines. No salutation, closing, sender name, placeholder, or signature.",
