@@ -1215,6 +1215,66 @@ textarea:focus {
   font-weight: 750;
 }
 
+.delivery-log-panel {
+  display: grid;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(63, 155, 145, 0.2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.delivery-log-panel h4 {
+  margin: 0;
+  padding: 12px 14px 0;
+  color: var(--gcu-ink);
+  font-size: 0.98rem;
+}
+
+.delivery-log-table {
+  display: grid;
+  overflow-x: auto;
+}
+
+.delivery-log-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(70px, 0.7fr) minmax(150px, 1.4fr) minmax(130px, 1fr);
+  gap: 10px;
+  min-width: 580px;
+  border-top: 1px solid rgba(63, 155, 145, 0.14);
+  padding: 10px 14px;
+  color: var(--gcu-dark-grey);
+  font-size: 0.82rem;
+  align-items: center;
+}
+
+.delivery-log-header {
+  color: var(--gcu-dark-teal);
+  background: rgba(143, 208, 201, 0.1);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.delivery-log-row small {
+  grid-column: 1 / -1;
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+}
+
+.delivery-log-row .is-sent,
+.delivery-log-row .is-failed {
+  font-weight: 900;
+}
+
+.delivery-log-row .is-sent {
+  color: var(--gcu-dark-teal);
+}
+
+.delivery-log-row .is-failed {
+  color: #972044;
+}
+
 .card-editor {
   display: grid;
   gap: 18px;

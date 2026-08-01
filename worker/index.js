@@ -270,6 +270,8 @@ const sendEmailDelivery = async ({ env, to, copy }) => {
     const errorText = await response.text()
     throw new Error(`Postmark could not send the card. ${errorText}`)
   }
+
+  return to
 }
 
 const getTwilioAuthCredentials = (env) => {
@@ -296,16 +298,37 @@ const getTwilioAuthCredentials = (env) => {
   throw new Error('Text delivery is not configured. Add TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.')
 }
 
+const normalizePhoneNumber = (phoneNumber) => {
+  const trimmed = phoneNumber?.trim() || ''
+
+  if (/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+    return trimmed
+  }
+
+  const digits = trimmed.replace(/\D/g, '')
+
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+
+  throw new Error('Enter the recipient cellphone number in US format, like +19259637453.')
+}
+
 const sendTextDelivery = async ({ env, to, copy }) => {
   if (!env.TWILIO_FROM_NUMBER) {
     throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
   }
 
   const twilioAuth = getTwilioAuthCredentials(env)
+  const normalizedTo = normalizePhoneNumber(to)
 
   const form = new URLSearchParams({
     From: env.TWILIO_FROM_NUMBER,
-    To: to,
+    To: normalizedTo,
     Body: copy.text,
   })
 
@@ -322,6 +345,8 @@ const sendTextDelivery = async ({ env, to, copy }) => {
     const errorText = await response.text()
     throw new Error(`Twilio could not send the card. ${errorText}`)
   }
+
+  return normalizedTo
 }
 
 const generateCopy = async (openai, env, details, refinement = '') => {
@@ -480,15 +505,15 @@ const handleDeliverCard = async (request, env) => {
     const shareUrl = getShareUrl(request, env, record.id)
     const copy = buildDeliveryCopy(record, shareUrl)
 
-    if (method === 'email') {
-      await sendEmailDelivery({ env, to: cleanDestination, copy })
-    } else {
-      await sendTextDelivery({ env, to: cleanDestination, copy })
-    }
+    const deliveredTo =
+      method === 'email'
+        ? await sendEmailDelivery({ env, to: cleanDestination, copy })
+        : await sendTextDelivery({ env, to: cleanDestination, copy })
 
     return jsonResponse(request, env, {
       ok: true,
       shareUrl,
+      deliveredTo,
       message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
     })
   } catch (error) {

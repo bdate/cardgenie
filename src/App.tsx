@@ -32,6 +32,14 @@ type ExperienceStep = 'envelope' | 'envelopeFlip' | 'envelopeBack' | 'opening' |
 type EditorTab = 'front' | 'inside'
 type CoverRefinementMode = 'revise' | 'new'
 type DeliveryMethod = 'email' | 'text'
+type DeliveryLog = {
+  id: string
+  method: DeliveryMethod
+  destination: string
+  status: 'Sent' | 'Failed'
+  message: string
+  createdAt: string
+}
 
 const initialDetails: CardDetails = {
   recipientName: '',
@@ -183,6 +191,7 @@ function App() {
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
+  const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -518,6 +527,17 @@ function App() {
     return shared
   }
 
+  const addDeliveryLog = (entry: Omit<DeliveryLog, 'id' | 'createdAt'>) => {
+    setDeliveryLogs((current) => [
+      {
+        ...entry,
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        createdAt: new Date().toLocaleString(),
+      },
+      ...current,
+    ])
+  }
+
   const deliverCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -558,8 +578,21 @@ function App() {
       }
 
       setDeliveryNotice(data.message || 'Card sent.')
+      addDeliveryLog({
+        method: deliveryMethod,
+        destination: data.deliveredTo || deliveryDestination,
+        status: 'Sent',
+        message: data.message || 'Card sent.',
+      })
     } catch (caughtError) {
-      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to deliver the card.')
+      const message = caughtError instanceof Error ? caughtError.message : 'Unable to deliver the card.'
+      setDeliveryNotice(message)
+      addDeliveryLog({
+        method: deliveryMethod,
+        destination: deliveryDestination,
+        status: 'Failed',
+        message,
+      })
     } finally {
       setIsDelivering(false)
     }
@@ -964,6 +997,30 @@ function App() {
                   </a>
                 )}
                 {deliveryNotice && <div className="delivery-notice">{deliveryNotice}</div>}
+                {deliveryLogs.length > 0 && (
+                  <div className="delivery-log-panel">
+                    <h4>Delivery activity</h4>
+                    <div className="delivery-log-table" role="table" aria-label="Delivery activity">
+                      <div className="delivery-log-row delivery-log-header" role="row">
+                        <span role="columnheader">Status</span>
+                        <span role="columnheader">Method</span>
+                        <span role="columnheader">Destination</span>
+                        <span role="columnheader">Time</span>
+                      </div>
+                      {deliveryLogs.map((log) => (
+                        <div className="delivery-log-row" role="row" key={log.id}>
+                          <span className={log.status === 'Sent' ? 'is-sent' : 'is-failed'} role="cell">
+                            {log.status}
+                          </span>
+                          <span role="cell">{log.method === 'email' ? 'Email' : 'Text'}</span>
+                          <span role="cell">{log.destination}</span>
+                          <span role="cell">{log.createdAt}</span>
+                          <small role="cell">{log.message}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </form>
                 </>
               )}

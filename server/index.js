@@ -95,15 +95,15 @@ app.post('/api/deliver-card', async (req, res) => {
     const shareUrl = getShareUrl(req, record.id)
     const copy = buildDeliveryCopy(record, shareUrl)
 
-    if (method === 'email') {
-      await sendEmailDelivery({ to: cleanDestination, copy })
-    } else {
-      await sendTextDelivery({ to: cleanDestination, copy })
-    }
+    const deliveredTo =
+      method === 'email'
+        ? await sendEmailDelivery({ to: cleanDestination, copy })
+        : await sendTextDelivery({ to: cleanDestination, copy })
 
     res.json({
       ok: true,
       shareUrl,
+      deliveredTo,
       message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
     })
   } catch (error) {
@@ -403,6 +403,8 @@ const sendEmailDelivery = async ({ to, copy }) => {
     const errorText = await response.text()
     throw new Error(`Postmark could not send the card. ${errorText}`)
   }
+
+  return to
 }
 
 const getTwilioAuthCredentials = () => {
@@ -431,6 +433,26 @@ const getTwilioAuthCredentials = () => {
   throw new Error('Text delivery is not configured. Add TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.')
 }
 
+const normalizePhoneNumber = (phoneNumber) => {
+  const trimmed = phoneNumber?.trim() || ''
+
+  if (/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+    return trimmed
+  }
+
+  const digits = trimmed.replace(/\D/g, '')
+
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+
+  throw new Error('Enter the recipient cellphone number in US format, like +19259637453.')
+}
+
 const sendTextDelivery = async ({ to, copy }) => {
   const { TWILIO_FROM_NUMBER } = process.env
 
@@ -439,10 +461,11 @@ const sendTextDelivery = async ({ to, copy }) => {
   }
 
   const twilioAuth = getTwilioAuthCredentials()
+  const normalizedTo = normalizePhoneNumber(to)
 
   const form = new URLSearchParams({
     From: TWILIO_FROM_NUMBER,
-    To: to,
+    To: normalizedTo,
     Body: copy.text,
   })
 
@@ -459,6 +482,8 @@ const sendTextDelivery = async ({ to, copy }) => {
     const errorText = await response.text()
     throw new Error(`Twilio could not send the card. ${errorText}`)
   }
+
+  return normalizedTo
 }
 
 app.post('/api/generate-card', async (req, res) => {
