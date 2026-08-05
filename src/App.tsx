@@ -84,6 +84,8 @@ const hostedApiMessage =
 const staticPageRedirects: Record<string, string> = {
   '/privacy': '/privacy/index.html',
   '/privacy/': '/privacy/index.html',
+  '/sms-opt-in': '/sms-opt-in/index.html',
+  '/sms-opt-in/': '/sms-opt-in/index.html',
   '/terms': '/terms/index.html',
   '/terms/': '/terms/index.html',
 }

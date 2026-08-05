@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Genie SMS Opt-In</title>
+    <style>
+      body {
+        margin: 0;
+        color: #302632;
+        background: #fff8ef;
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 48px 20px 72px;
+      }
+
+      a {
+        color: #287f78;
+        font-weight: 700;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.15;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+      }
+
+      h2 {
+        margin-top: 32px;
+      }
+
+      .card {
+        border: 1px solid rgba(63, 155, 145, 0.2);
+        border-radius: 24px;
+        padding: 28px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 24px 70px rgba(63, 155, 145, 0.12);
+      }
+
+      .notice {
+        border-left: 4px solid #287f78;
+        margin: 20px 0;
+        padding: 14px 18px;
+        background: rgba(63, 155, 145, 0.1);
+      }
+
+      .consent-box {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        border: 1px solid rgba(63, 155, 145, 0.28);
+        border-radius: 18px;
+        margin-top: 16px;
+        padding: 18px;
+        background: #fff;
+      }
+
+      .consent-box input {
+        width: 18px;
+        height: 18px;
+        margin-top: 4px;
+      }
+
+      code {
+        border-radius: 8px;
+        padding: 2px 6px;
+        background: rgba(48, 38, 50, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="/">Back to Card Genie</a>
+      <div class="card">
+        <h1>SMS Opt-In for Card Genie</h1>
+        <p>Last updated: August 5, 2026</p>
+
+        <p>
+          Card Genie by Greeting Card Universe lets users create personalized digital greeting cards and choose whether
+          to deliver a card by email or by one-time SMS/text message.
+        </p>
+
+        <div class="notice">
+          This page is provided so carrier reviewers can verify the Card Genie SMS call-to-action, consent language, and
+          message flow.
+        </div>
+
+        <h2>How SMS Consent Works</h2>
+        <p>
+          A user starts at <a href="https://www.card-genie.com/">https://www.card-genie.com/</a>, creates a digital
+          greeting card, and then chooses a delivery method. If the user selects Cellphone delivery, they enter the
+          recipient's cellphone number and must actively check an SMS consent checkbox before the card can be sent.
+        </p>
+        <p>
+          The SMS consent checkbox is unchecked by default. The Send button is disabled until the checkbox is checked.
+          SMS consent is optional and is not required to create a card or use email delivery.
+        </p>
+
+        <h2>Consent Checkbox Language</h2>
+        <div class="consent-box">
+          <input type="checkbox" aria-label="Example SMS consent checkbox" />
+          <span>
+            Optional SMS delivery: I confirm this recipient agreed to receive a one-time SMS/text message from Card
+            Genie with a link to this card. Message frequency is one message per card delivery request. Msg &amp; data
+            rates may apply. Reply STOP to cancel, HELP for help. SMS consent is optional and is not required to create
+            a card or use email delivery. See our
+            <a href="/privacy/index.html">Privacy Policy</a> and <a href="/terms/index.html">Terms</a>.
+          </span>
+        </div>
+
+        <h2>Message Type</h2>
+        <p>
+          Card Genie sends one-time delivery notifications only. We do not send marketing messages, recurring
+          promotional messages, or unrelated alerts.
+        </p>
+
+        <h2>Example SMS Message</h2>
+        <p>
+          <code>
+            Your digital greeting card from [Sender Name] is ready: https://www.card-genie.com/?card=[card-id] Reply
+            STOP to cancel, HELP for help.
+          </code>
+        </p>
+
+        <h2>Related Policies</h2>
+        <p>
+          Review our <a href="/privacy/index.html">Privacy Policy</a> and
+          <a href="/terms/index.html">Terms and Conditions</a>.
+        </p>
+      </div>
+    </main>
+  </body>
+</html>
