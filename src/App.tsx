@@ -783,9 +783,11 @@ function App() {
 
         <section className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           <div className="panel-heading proof-heading">
-            <span>{isRecipientView ? '01' : '02'}</span>
+            {!isRecipientView && <span>02</span>}
             <div>
-              <h2>{isRecipientView ? 'Your card' : showEditor ? 'Revise your card' : 'Your card proof'}</h2>
+              <h2>
+                {isRecipientView ? `Your card from ${senderLabel}` : showEditor ? 'Revise your card' : 'Your card proof'}
+              </h2>
             </div>
             {!isRecipientView &&
               !isGenerating &&
