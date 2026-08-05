@@ -417,7 +417,7 @@ const buildCardRecord = (payload) => {
       message,
       closing: card.closing?.trim() || 'With love,',
     },
-    greeting: payload?.greeting?.trim() || `Dear ${details.recipientName || details.recipientType || 'Someone special'},`,
+    greeting: payload?.greeting?.trim() || '',
     signature: payload?.signature?.trim() || details.senderName?.trim() || 'Your Name',
   }
 }

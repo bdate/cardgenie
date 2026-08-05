@@ -237,12 +237,12 @@ function App() {
     [details.recipientName, details.recipientType],
   )
   const envelopeLabel = useMemo(
-    () => details.recipientType.trim() || details.recipientName.trim() || 'Someone special',
+    () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
     [details.recipientName, details.recipientType],
   )
   const senderLabel = useMemo(() => details.senderName.trim() || 'Your Name', [details.senderName])
   const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
-  const defaultGreeting = `Dear ${envelopeLabel},`
+  const defaultGreeting = ''
   const insideGreeting = cardGreeting ?? defaultGreeting
   const cardSignatureLabel = cardSignature ?? senderLabel
   const rawMessage = card?.message ?? ''
@@ -275,7 +275,7 @@ function App() {
 
     const timer = window.setInterval(() => {
       setActiveGenerationStep((current) => (current + 1) % generationLines.length)
-    }, 2200)
+    }, 4400)
 
     return () => window.clearInterval(timer)
   }, [generationLines.length, isGenerating])
@@ -374,7 +374,7 @@ function App() {
         message: data.message,
         closing: data.closing,
       })
-      setCardGreeting(`Dear ${envelopeLabel},`)
+      setCardGreeting('')
       setCardSignature(senderLabel)
       setStep('envelope')
       setShowCompletionNote(true)
@@ -920,7 +920,7 @@ function App() {
                 <div className="proof-stage card-open-scene" aria-live="polite">
                   <div className="card-open-stage">
                     <div className={`open-card-message ${messageDensity}`}>
-                      <span>{insideGreeting}</span>
+                      {insideGreeting && <span>{insideGreeting}</span>}
                       <div className="message-paragraphs">
                         {messageParagraphs.map((paragraph) => (
                           <p key={paragraph}>{paragraph}</p>
@@ -940,7 +940,7 @@ function App() {
                 <div className="proof-stage card-open-scene is-static-inside">
                   <div className="open-card">
                     <div className={`open-card-message ${messageDensity}`}>
-                      <span>{insideGreeting}</span>
+                      {insideGreeting && <span>{insideGreeting}</span>}
                       <div className="message-paragraphs">
                         {messageParagraphs.map((paragraph) => (
                           <p key={paragraph}>{paragraph}</p>
@@ -951,6 +951,26 @@ function App() {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {(step === 'front' || step === 'inside') && (
+                <nav className="card-view-toggle" aria-label="Card view">
+                  <button
+                    className={step === 'front' ? 'is-selected' : ''}
+                    type="button"
+                    onClick={() => setStep('front')}
+                  >
+                    Cover
+                  </button>
+                  <span aria-hidden="true">|</span>
+                  <button
+                    className={step === 'inside' ? 'is-selected' : ''}
+                    type="button"
+                    onClick={() => setStep('inside')}
+                  >
+                    Inside
+                  </button>
+                </nav>
               )}
 
               <div className="proof-actions">
