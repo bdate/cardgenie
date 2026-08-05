@@ -107,6 +107,16 @@
   align-items: start;
 }
 
+.recipient-workspace {
+  grid-template-columns: minmax(320px, 760px);
+  justify-content: center;
+  max-width: 820px;
+}
+
+.recipient-preview-panel {
+  min-height: auto;
+}
+
 .card-panel {
   border: 1px solid rgba(143, 208, 201, 0.34);
   border-radius: 34px;

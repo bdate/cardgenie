@@ -204,6 +204,8 @@ const splitIntoParagraphs = (message: string) => {
 }
 
 function App() {
+  const sharedCardId = useMemo(() => new URLSearchParams(window.location.search).get('card'), [])
+  const isRecipientView = Boolean(sharedCardId)
   const [details, setDetails] = useState<CardDetails>(initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
@@ -281,9 +283,7 @@ function App() {
   }, [generationLines.length, isGenerating])
 
   useEffect(() => {
-    const cardId = new URLSearchParams(window.location.search).get('card')
-
-    if (!cardId) {
+    if (!sharedCardId) {
       return
     }
 
@@ -292,7 +292,7 @@ function App() {
       setError('')
 
       try {
-        const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(cardId)}`))
+        const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(sharedCardId)}`))
         const data = await getApiJson(response, 'Unable to load the shared card.')
 
         if (!response.ok) {
@@ -322,7 +322,7 @@ function App() {
     }
 
     void loadSharedCard()
-  }, [])
+  }, [sharedCardId])
 
   const updateDetails = (field: keyof CardDetails, value: string) => {
     setDetails((current) => ({
@@ -642,10 +642,15 @@ function App() {
       <section className="hero-section">
         <div className="eyebrow">Card Genie</div>
         <h1>
-          Any Card Imaginable<span className="trademark-mark">™</span>
+          {isRecipientView ? 'You received a card' : 'Any Card Imaginable'}
+          {!isRecipientView && <span className="trademark-mark">™</span>}
         </h1>
-        <p>Powered by GreetingCardUniverse.com</p>
-        <div className="credit-wallet" aria-label="Credit balance">
+        <p>
+          {isRecipientView
+            ? 'Click the envelope to open your personalized greeting card.'
+            : 'Powered by GreetingCardUniverse.com'}
+        </p>
+        {!isRecipientView && <div className="credit-wallet" aria-label="Credit balance">
           <div>
             <span className="wallet-kicker">Welcome back, {senderLabel}</span>
             <strong>{credits} credits available</strong>
@@ -656,11 +661,11 @@ function App() {
           <button className="secondary-button" type="button" onClick={addCreditPack}>
             Buy 50 credits - $10
           </button>
-        </div>
+        </div>}
       </section>
 
-      <section className="workspace">
-        <form className="card-panel form-panel" onSubmit={generateCard}>
+      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''}`}>
+        {!isRecipientView && <form className="card-panel form-panel" onSubmit={generateCard}>
           <div className="panel-heading">
             <span>01</span>
             <div>
@@ -774,15 +779,16 @@ function App() {
                 ? `Regenerate card - ${cardGenerationCost} credits`
                 : `Generate card - ${cardGenerationCost} credits`}
           </button>
-        </form>
+        </form>}
 
-        <section className="card-panel preview-panel">
+        <section className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           <div className="panel-heading proof-heading">
-            <span>02</span>
+            <span>{isRecipientView ? '01' : '02'}</span>
             <div>
-              <h2>{showEditor ? 'Revise your card' : 'Your card proof'}</h2>
+              <h2>{isRecipientView ? 'Your card' : showEditor ? 'Revise your card' : 'Your card proof'}</h2>
             </div>
-            {!isGenerating &&
+            {!isRecipientView &&
+              !isGenerating &&
               card &&
               (showEditor ? (
                 <button
@@ -824,6 +830,8 @@ function App() {
               <p>Opening the shared greeting card proof.</p>
             </div>
           )}
+
+          {isRecipientView && error && <div className="error-message">{error}</div>}
 
           {!isGenerating && !isLoadingSharedCard && !card && (
             <div className="empty-state">
@@ -978,7 +986,7 @@ function App() {
                   Replay animation
                 </button>
               </div>
-              <form className="delivery-panel" onSubmit={deliverCard}>
+              {!isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send?</span>
                   <h3>Deliver this card</h3>
@@ -1080,11 +1088,11 @@ function App() {
                     </div>
                   </div>
                 )}
-              </form>
+              </form>}
                 </>
               )}
 
-              {showEditor && (
+              {!isRecipientView && showEditor && (
                 <div className="card-editor">
                   <nav className="card-thumbnails editor-thumbnails" aria-label="Card editor pages">
                     <button
