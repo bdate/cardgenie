@@ -117,6 +117,15 @@
   min-height: auto;
 }
 
+.recipient-preview-panel .proof-heading {
+  display: flex;
+}
+
+.recipient-preview-panel .proof-heading > div {
+  min-width: 0;
+  width: 100%;
+}
+
 .card-panel {
   border: 1px solid rgba(143, 208, 201, 0.34);
   border-radius: 34px;
@@ -1998,6 +2007,10 @@ textarea:focus {
   .proof-heading {
     display: grid;
     grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .recipient-preview-panel .proof-heading {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .revise-top-button {
