@@ -1176,6 +1176,23 @@ textarea:focus {
   cursor: default;
 }
 
+.recipient-save-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+  color: var(--gcu-grey);
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.recipient-save-links a {
+  color: var(--gcu-dark-teal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .delivery-panel {
   display: grid;
   gap: 14px;

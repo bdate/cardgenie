@@ -205,6 +205,132 @@ const splitIntoParagraphs = (message: string) => {
   return paragraphs
 }
 
+const sanitizeFilePart = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'card'
+
+const getImageExtension = (imageUrl: string) => {
+  const match = imageUrl.match(/^data:image\/([a-z0-9+.-]+);/i)
+  const extension = match?.[1]?.toLowerCase()
+
+  if (extension === 'jpeg') {
+    return 'jpg'
+  }
+
+  return extension || 'png'
+}
+
+const wrapCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word
+
+    if (context.measureText(candidate).width > maxWidth && line) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+
+  if (line) {
+    lines.push(line)
+  }
+
+  return lines
+}
+
+const drawCenteredLines = (
+  context: CanvasRenderingContext2D,
+  lines: string[],
+  centerX: number,
+  startY: number,
+  lineHeight: number,
+) => {
+  lines.forEach((line, index) => {
+    context.fillText(line, centerX, startY + index * lineHeight)
+  })
+}
+
+const createInsideImageUrl = ({
+  greeting,
+  paragraphs,
+  closing,
+  signature,
+}: {
+  greeting: string
+  paragraphs: string[]
+  closing: string
+  signature: string
+}) => {
+  if (typeof document === 'undefined') {
+    return ''
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 1200
+  canvas.height = 1500
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return ''
+  }
+
+  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
+  gradient.addColorStop(0, '#fffdf6')
+  gradient.addColorStop(0.52, '#fdf7ef')
+  gradient.addColorStop(1, '#eefaf7')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  const cornerGlow = context.createRadialGradient(930, 190, 40, 930, 190, 520)
+  cornerGlow.addColorStop(0, 'rgba(245, 158, 51, 0.18)')
+  cornerGlow.addColorStop(1, 'rgba(245, 158, 51, 0)')
+  context.fillStyle = cornerGlow
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
+  context.lineWidth = 4
+  context.strokeRect(70, 70, canvas.width - 140, canvas.height - 140)
+
+  context.fillStyle = '#2d6762'
+  context.textAlign = 'center'
+  context.textBaseline = 'top'
+
+  let y = 190
+  const maxTextWidth = 840
+
+  if (greeting.trim()) {
+    context.font = '44px Georgia, serif'
+    const greetingLines = wrapCanvasText(context, greeting.trim(), maxTextWidth)
+    drawCenteredLines(context, greetingLines, canvas.width / 2, y, 58)
+    y += greetingLines.length * 58 + 36
+  }
+
+  context.font = '42px Georgia, serif'
+  for (const paragraph of paragraphs) {
+    const lines = wrapCanvasText(context, paragraph, maxTextWidth)
+    drawCenteredLines(context, lines, canvas.width / 2, y, 58)
+    y += lines.length * 58 + 34
+  }
+
+  context.font = '40px Georgia, serif'
+  const closingLines = wrapCanvasText(context, closing, maxTextWidth)
+  drawCenteredLines(context, closingLines, canvas.width / 2, Math.max(y + 22, 1110), 52)
+
+  context.fillStyle = '#d88a31'
+  context.font = '70px cursive'
+  const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
+  drawCenteredLines(context, signatureLines, canvas.width / 2, 1220, 82)
+
+  return canvas.toDataURL('image/png')
+}
+
 function App() {
   const sharedCardId = useMemo(() => new URLSearchParams(window.location.search).get('card'), [])
   const isRecipientView = Boolean(sharedCardId)
@@ -260,6 +386,24 @@ function App() {
   const cardMessage = useMemo(() => trimToWordLimit(messageParts.body, details.length), [details.length, messageParts.body])
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
   const messageDensity = cardMessage.length > 620 ? 'is-long' : cardMessage.length > 420 ? 'is-medium' : 'is-short'
+  const fileNameBase = useMemo(
+    () => sanitizeFilePart(`${recipientLabel}-${details.occasion || 'card'}`),
+    [details.occasion, recipientLabel],
+  )
+  const coverDownloadName = card ? `${fileNameBase}-cover.${getImageExtension(card.imageUrl)}` : 'card-cover.png'
+  const insideDownloadName = `${fileNameBase}-inside.png`
+  const insideDownloadUrl = useMemo(
+    () =>
+      card && isRecipientView
+        ? createInsideImageUrl({
+            greeting: insideGreeting,
+            paragraphs: messageParagraphs,
+            closing: messageParts.closing,
+            signature: cardSignatureLabel,
+          })
+        : '',
+    [card, cardSignatureLabel, insideGreeting, isRecipientView, messageParagraphs, messageParts.closing],
+  )
   const generationLines = useMemo(
     () => [
       `Coming up with a creative ${details.occasion || 'card'} image for ${envelopeLabel}.`,
@@ -983,6 +1127,17 @@ function App() {
                     Inside
                   </button>
                 </nav>
+              )}
+              {isRecipientView && card && (step === 'front' || step === 'inside') && (
+                <div className="recipient-save-links" aria-label="Save card images">
+                  <a href={card.imageUrl} download={coverDownloadName}>
+                    Save cover image
+                  </a>
+                  <span aria-hidden="true">|</span>
+                  <a href={insideDownloadUrl} download={insideDownloadName}>
+                    Save inside image
+                  </a>
+                </div>
               )}
 
               <div className="proof-actions">
