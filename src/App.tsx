@@ -222,6 +222,26 @@ const getImageExtension = (imageUrl: string) => {
   return extension || 'png'
 }
 
+const getImageMimeType = (imageUrl: string) => {
+  const match = imageUrl.match(/^data:(image\/[a-z0-9+.-]+);/i)
+  return match?.[1] || 'image/png'
+}
+
+const imageUrlToFile = async (imageUrl: string, fileName: string) => {
+  const response = await fetch(imageUrl)
+  const blob = await response.blob()
+  return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
+}
+
+const downloadImageFallback = (imageUrl: string, fileName: string) => {
+  const link = document.createElement('a')
+  link.href = imageUrl
+  link.download = fileName
+  document.body.append(link)
+  link.click()
+  link.remove()
+}
+
 const wrapCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const words = text.split(/\s+/).filter(Boolean)
   const lines: string[] = []
@@ -361,6 +381,7 @@ function App() {
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
+  const [saveNotice, setSaveNotice] = useState('')
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -573,6 +594,39 @@ function App() {
 
   const updateCardClosing = (closing: string) => {
     setCard((current) => (current ? { ...current, closing } : current))
+  }
+
+  const saveImageToDevice = async (imageUrl: string, fileName: string, label: string) => {
+    if (!imageUrl) {
+      return
+    }
+
+    setSaveNotice('')
+
+    try {
+      const imageFile = await imageUrlToFile(imageUrl, fileName)
+
+      if (
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [imageFile] })
+      ) {
+        await navigator.share({
+          files: [imageFile],
+          title: `Card Genie ${label}`,
+          text: `Save this ${label.toLowerCase()} from Card Genie.`,
+        })
+        setSaveNotice('Choose Save Image or Save to Photos from your phone share sheet.')
+        return
+      }
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+        return
+      }
+    }
+
+    downloadImageFallback(imageUrl, fileName)
+    setSaveNotice('If your phone downloads the image, open it and use the share menu to save it to Photos.')
   }
 
   const refineImage = async () => {
@@ -1129,15 +1183,24 @@ function App() {
                 </nav>
               )}
               {isRecipientView && card && (step === 'front' || step === 'inside') && (
-                <div className="recipient-save-links" aria-label="Save card images">
-                  <a href={card.imageUrl} download={coverDownloadName}>
-                    Save cover image
-                  </a>
-                  <span aria-hidden="true">|</span>
-                  <a href={insideDownloadUrl} download={insideDownloadName}>
-                    Save inside image
-                  </a>
-                </div>
+                <>
+                  <div className="recipient-save-links" aria-label="Save card images">
+                    <button
+                      type="button"
+                      onClick={() => void saveImageToDevice(card.imageUrl, coverDownloadName, 'Cover image')}
+                    >
+                      Save cover to photos
+                    </button>
+                    <span aria-hidden="true">|</span>
+                    <button
+                      type="button"
+                      onClick={() => void saveImageToDevice(insideDownloadUrl, insideDownloadName, 'Inside image')}
+                    >
+                      Save inside to photos
+                    </button>
+                  </div>
+                  {saveNotice && <p className="recipient-save-note">{saveNotice}</p>}
+                </>
               )}
 
               <div className="proof-actions">
