@@ -149,9 +149,36 @@ const trimToWordLimit = (message: string, length: string) => {
   return `${words.slice(0, range.max).join(' ').replace(/[,\s]+$/, '')}.`
 }
 
+const stripCodeFence = (value: string) =>
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+
+const cleanGeneratedMessage = (message: string) => {
+  const unfenced = stripCodeFence(message)
+  const jsonStart = unfenced.indexOf('{')
+  const jsonEnd = unfenced.lastIndexOf('}')
+
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      const parsed = JSON.parse(unfenced.slice(jsonStart, jsonEnd + 1))
+
+      if (typeof parsed.message === 'string') {
+        return parsed.message.trim()
+      }
+    } catch {
+      // Fall through to display-safe cleanup below.
+    }
+  }
+
+  return unfenced.replace(/^["'`]+|["'`]+$/g, '').trim()
+}
+
 const splitMessageParts = (message: string, senderName: string) => {
   const senderPattern = senderName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  let cleanMessage = message
+  let cleanMessage = cleanGeneratedMessage(message)
     .replace(/\[your name\]/gi, '')
     .replace(/^\s*dear\s+[^,\n]+,?\s*/i, '')
     .trim()

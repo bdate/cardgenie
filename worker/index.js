@@ -184,20 +184,43 @@ const getMessageText = (response) => {
   return text?.trim() || ''
 }
 
-const parseCopyResponse = (response) => {
-  const text = getMessageText(response)
+const stripCodeFence = (value = '') =>
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+
+const parseJsonishText = (value = '') => {
+  const unfenced = stripCodeFence(value)
+  const jsonStart = unfenced.indexOf('{')
+  const jsonEnd = unfenced.lastIndexOf('}')
+
+  if (jsonStart === -1 || jsonEnd <= jsonStart) {
+    return null
+  }
 
   try {
-    const parsed = JSON.parse(text)
+    return JSON.parse(unfenced.slice(jsonStart, jsonEnd + 1))
+  } catch {
+    return null
+  }
+}
+
+const parseCopyResponse = (response) => {
+  const text = stripCodeFence(getMessageText(response))
+  const parsed = parseJsonishText(text)
+
+  if (parsed) {
     return {
       message: parsed.message?.trim() || text,
       closing: parsed.closing?.trim() || 'With love,',
     }
-  } catch {
-    return {
-      message: text,
-      closing: 'With love,',
-    }
+  }
+
+  return {
+    message: text,
+    closing: 'With love,',
   }
 }
 
