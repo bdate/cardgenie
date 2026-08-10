@@ -469,7 +469,55 @@ const buildDeliveryCopy = (record, shareUrl) => {
   }
 }
 
-const sendEmailDelivery = async ({ to, copy }) => {
+const parseEmailSender = (from = '') => {
+  const match = from.trim().match(/^(.*?)\s*<([^>]+)>$/)
+
+  if (!match) {
+    return { email: from.trim() }
+  }
+
+  const [, name, email] = match
+  return {
+    email: email.trim(),
+    ...(name.trim() ? { name: name.trim().replace(/^"|"$/g, '') } : {}),
+  }
+}
+
+const sendSendGridEmailDelivery = async ({ to, copy }) => {
+  if (!process.env.SENDGRID_API_KEY || !process.env.EMAIL_FROM) {
+    throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
+  }
+
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      personalizations: [
+        {
+          to: [{ email: to }],
+          subject: copy.subject,
+        },
+      ],
+      from: parseEmailSender(process.env.EMAIL_FROM),
+      content: [
+        { type: 'text/plain', value: copy.text },
+        { type: 'text/html', value: copy.html },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`SendGrid could not send the card. ${errorText}`)
+  }
+
+  return to
+}
+
+const sendPostmarkEmailDelivery = async ({ to, copy }) => {
   if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.EMAIL_FROM) {
     throw new Error('Email delivery is not configured. Add POSTMARK_SERVER_TOKEN and EMAIL_FROM.')
   }
@@ -497,6 +545,18 @@ const sendEmailDelivery = async ({ to, copy }) => {
   }
 
   return to
+}
+
+const sendEmailDelivery = async ({ to, copy }) => {
+  if (process.env.SENDGRID_API_KEY) {
+    return sendSendGridEmailDelivery({ to, copy })
+  }
+
+  if (process.env.POSTMARK_SERVER_TOKEN) {
+    return sendPostmarkEmailDelivery({ to, copy })
+  }
+
+  throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
 }
 
 const getTwilioAuthCredentials = () => {

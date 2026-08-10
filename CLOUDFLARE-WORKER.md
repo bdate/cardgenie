@@ -21,13 +21,15 @@ When prompted, paste the OpenAI key. Do not commit the key to the repo.
 For delivery, add provider secrets when you are ready to send real cards:
 
 ```bash
-npx wrangler secret put POSTMARK_SERVER_TOKEN
+npx wrangler secret put SENDGRID_API_KEY
 npx wrangler secret put EMAIL_FROM
 npx wrangler secret put TWILIO_ACCOUNT_SID
 npx wrangler secret put TWILIO_API_KEY_SID
 npx wrangler secret put TWILIO_API_KEY_SECRET
 npx wrangler secret put TWILIO_FROM_NUMBER
 ```
+
+Email delivery uses Twilio SendGrid when `SENDGRID_API_KEY` is configured. Postmark can still be used as an optional fallback with `POSTMARK_SERVER_TOKEN`.
 
 Set `PUBLIC_APP_URL` to the production frontend URL so email and text links point at the app:
 
