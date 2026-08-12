@@ -573,6 +573,7 @@ function App() {
   const [details, setDetails] = useState<CardDetails>(initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
+  const [hasViewedInside, setHasViewedInside] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showCompletionNote, setShowCompletionNote] = useState(false)
   const [activeGenerationStep, setActiveGenerationStep] = useState(0)
@@ -658,6 +659,13 @@ function App() {
   const hasEnoughCreditsForCard = credits >= cardGenerationCost
   const hasEnoughCreditsForRevision = credits >= revisionCost
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
+  const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
+
+  useEffect(() => {
+    if (step === 'inside') {
+      setHasViewedInside(true)
+    }
+  }, [step])
 
   useEffect(() => {
     if (!isGenerating) {
@@ -789,6 +797,7 @@ function App() {
     setShowPolishDialog(false)
     setSharedCard(null)
     setDeliveryNotice('')
+    setHasViewedInside(false)
     setStep('envelope')
 
     try {
@@ -846,6 +855,7 @@ function App() {
   const replayAnimation = () => {
     setShowEditor(false)
     setShowPolishDialog(false)
+    setHasViewedInside(false)
     setStep('envelope')
   }
 
@@ -1554,11 +1564,13 @@ function App() {
                 </>
               )}
 
-              <div className="proof-actions">
-                <button className="secondary-button" type="button" onClick={replayAnimation}>
-                  Open envelope again
-                </button>
-              </div>
+              {showSendActions && (
+                <div className="proof-actions">
+                  <button className="secondary-button" type="button" onClick={replayAnimation}>
+                    Open envelope again
+                  </button>
+                </div>
+              )}
               {isRecipientView && (step === 'front' || step === 'inside') && (
                 <aside className="recipient-invite" aria-label="Create your own card">
                   <h3>Loved this card?</h3>
@@ -1568,7 +1580,7 @@ function App() {
                   </a>
                 </aside>
               )}
-              {!isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
+              {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send?</span>
                   <h3>Deliver this card</h3>
