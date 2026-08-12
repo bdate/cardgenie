@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import './App.css'
 
 type CardDetails = {
@@ -41,6 +41,12 @@ type DeliveryLog = {
   createdAt: string
 }
 
+type ReferencePhoto = {
+  id: string
+  name: string
+  dataUrl: string
+}
+
 const initialDetails: CardDetails = {
   recipientName: '',
   recipientType: '',
@@ -76,6 +82,9 @@ const initialCreditBalance = 50
 const creditPackAmount = 50
 const cardGenerationCost = 10
 const revisionCost = 2
+const maxReferencePhotos = 3
+const referencePhotoMaxEdge = 1280
+const referencePhotoJpegQuality = 0.82
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
@@ -258,6 +267,50 @@ const imageUrlToFile = async (imageUrl: string, fileName: string) => {
   const response = await fetch(imageUrl)
   const blob = await response.blob()
   return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
+}
+
+const bitmapToJpegDataUrl = (source: CanvasImageSource, width: number, height: number) => {
+  const scale = Math.min(1, referencePhotoMaxEdge / Math.max(width, height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(width * scale))
+  canvas.height = Math.max(1, Math.round(height * scale))
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('Unable to prepare that photo.')
+  }
+
+  context.drawImage(source, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', referencePhotoJpegQuality)
+}
+
+const resizeReferencePhoto = async (file: File) => {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+      const dataUrl = bitmapToJpegDataUrl(bitmap, bitmap.width, bitmap.height)
+      bitmap.close()
+      return dataUrl
+    } catch {
+      // Fall through to the image-element path below.
+    }
+  }
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Unable to read that photo.'))
+    reader.readAsDataURL(file)
+  })
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image()
+    element.onload = () => resolve(element)
+    element.onerror = () => reject(new Error('Please choose a photo file, such as a JPG or PNG.'))
+    element.src = dataUrl
+  })
+
+  return bitmapToJpegDataUrl(image, image.naturalWidth, image.naturalHeight)
 }
 
 const downloadImageFallback = (imageUrl: string, fileName: string) => {
@@ -545,6 +598,8 @@ function App() {
   const [deliveryNotice, setDeliveryNotice] = useState('')
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
   const [saveNotice, setSaveNotice] = useState('')
+  const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
+  const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -664,6 +719,54 @@ function App() {
     }))
   }
 
+  const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
+
+  const addReferencePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+
+    if (files.length === 0) {
+      return
+    }
+
+    const remainingSlots = maxReferencePhotos - referencePhotos.length
+
+    if (remainingSlots <= 0) {
+      setReferencePhotoNotice('You can add up to 3 photos.')
+      return
+    }
+
+    const acceptedFiles = files.slice(0, remainingSlots)
+    setReferencePhotoNotice(files.length > remainingSlots ? 'You can add up to 3 photos.' : '')
+
+    try {
+      const nextPhotos = await Promise.all(
+        acceptedFiles.map(async (file) => {
+          if (file.type && !file.type.startsWith('image/')) {
+            throw new Error('Please choose a photo file, such as a JPG or PNG.')
+          }
+
+          return {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            name: file.name || 'Photo',
+            dataUrl: await resizeReferencePhoto(file),
+          }
+        }),
+      )
+
+      setReferencePhotos((current) => [...current, ...nextPhotos].slice(0, maxReferencePhotos))
+    } catch (caughtError) {
+      setReferencePhotoNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to add that photo.',
+      )
+    }
+  }
+
+  const removeReferencePhoto = (photoId: string) => {
+    setReferencePhotos((current) => current.filter((photo) => photo.id !== photoId))
+    setReferencePhotoNotice('')
+  }
+
   const addCreditPack = () => {
     setCredits((current) => current + creditPackAmount)
     setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
@@ -693,7 +796,10 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(details),
+        body: JSON.stringify({
+          ...details,
+          referenceImages: referenceImagePayload,
+        }),
       })
 
       const data = await getApiJson(response, 'Unable to generate the card.')
@@ -819,6 +925,7 @@ function App() {
           refinement: imageRefinement,
           imageMode: coverRefinementMode,
           currentImageUrl: coverRefinementMode === 'revise' ? card.imageUrl : undefined,
+          referenceImages: referenceImagePayload,
         }),
       })
 
@@ -865,6 +972,7 @@ function App() {
           refinement: copyRefinement,
           currentMessage: cardMessage,
           currentClosing: messageParts.closing,
+          referenceImages: referenceImagePayload,
         }),
       })
 
@@ -1161,6 +1269,47 @@ function App() {
               }
             />
           </label>
+
+          <div className="reference-photos-field">
+            <span className="field-title">Reference photos (optional)</span>
+            <p className="field-help" id="reference-photos-help">
+              These photos are optional. Add a picture of the recipient, family, or a meaningful place so Card
+              Genie can match faces, ages, and details more closely. They will not appear on the card.
+            </p>
+            {referencePhotos.length > 0 && (
+              <ul className="reference-photo-list">
+                {referencePhotos.map((photo) => (
+                  <li key={photo.id}>
+                    <img src={photo.dataUrl} alt="" />
+                    <button
+                      type="button"
+                      onClick={() => removeReferencePhoto(photo.id)}
+                      aria-label={`Remove ${photo.name}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {referencePhotos.length < maxReferencePhotos && (
+              <>
+                <input
+                  id="reference-photos"
+                  className="reference-photo-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
+                  aria-describedby="reference-photos-help"
+                  onChange={(event) => void addReferencePhotos(event)}
+                />
+                <label className="reference-photo-add" htmlFor="reference-photos">
+                  Add a photo
+                </label>
+              </>
+            )}
+            {referencePhotoNotice && <div className="field-notice">{referencePhotoNotice}</div>}
+          </div>
 
           {error && <div className="error-message">{error}</div>}
 

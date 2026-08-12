@@ -28,6 +28,46 @@ Do not include a salutation like "Dear..." and do not include the sender name, p
 Make the body warm, specific, natural, and suitable to appear inside a digital greeting card. Keep it concise enough to fit inside a 5x7 card with generous margins. Use natural paragraph breaks based on grammar and meaning.
 `
 
+const buildReferenceImageGuidance = (hasReferenceImages) => {
+  if (!hasReferenceImages) {
+    return ''
+  }
+
+  return `
+The attached images are likeness references of the actual people and animals for this card.
+Create original greeting-card artwork in the requested visual style that clearly resembles them.
+Match their ages, faces, hair, body types, clothing cues, and any pet's size and coat color from the photos.
+Relationship words such as daughter, son, kids, mom, or dad must not change their ages if the photos show something different. If the photos show adults, draw adults, not children.
+The people and animals from the photos should appear on the cover unless the user asked for a symbolic scene instead.
+Do not copy the photographs onto the card as printed pictures, Polaroids, frames, phone screens, or collages.
+`
+}
+
+const buildLikenessBriefSection = (likenessBrief) => {
+  if (!likenessBrief) {
+    return ''
+  }
+
+  return `
+LIKENESS BRIEF FROM THE SENDER'S REFERENCE PHOTOS (highest priority, overrides guesses from names or words like daughter, son, or kids):
+${likenessBrief}
+
+Follow this brief exactly for ages, faces, hair, complexion, distinctive features, and any pet coloring. Recreate them in the requested art style as original greeting-card artwork. Do not paste the original photographs onto the card.
+`
+}
+
+const maxReferenceImages = 3
+
+const normalizeReferenceImages = (value) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item) => typeof item === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(item))
+    .slice(0, maxReferenceImages)
+}
+
 const buildImagePrompt = (details, refinement = '', imageMode = 'new') => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
@@ -182,6 +222,42 @@ const getMessageText = (response) => {
     .join('\n')
 
   return text?.trim() || ''
+}
+
+const describeReferenceImages = async (openai, env, referenceImages) => {
+  if (!referenceImages.length) {
+    return ''
+  }
+
+  const response = await openai.responses.create({
+    model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+    input: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `These are private reference photos for a greeting card. Write a concise likeness brief an illustrator must follow.
+
+For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, complexion, distinctive features, and clothing.
+If several people appear together, describe them left to right.
+For animals, include species, size, coat color, and distinctive markings.
+Mention setting only if it should inspire the card.
+
+Be specific about age. If people look like adults, say they are adults, not children.
+Return plain text only. Do not mention that these came from photos.`,
+          },
+          ...referenceImages.map((imageUrl) => ({
+            type: 'input_image',
+            image_url: imageUrl,
+            detail: 'high',
+          })),
+        ],
+      },
+    ],
+  })
+
+  return getMessageText(response)
 }
 
 const stripCodeFence = (value = '') =>
@@ -554,10 +630,29 @@ ${copy.message}
   }
 }
 
-const generateCopy = async (openai, env, details, refinement = '') => {
+const generateCopy = async (openai, env, details, refinement = '', referenceImages = [], likenessBrief = '') => {
+  const prompt = `${buildCopyPrompt(details, refinement)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}
+If a likeness brief is provided, keep the message consistent with those people and details. Do not mention photos or that you saw pictures.`
+  const input =
+    referenceImages.length > 0
+      ? [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: prompt },
+              ...referenceImages.map((imageUrl) => ({
+                type: 'input_image',
+                image_url: imageUrl,
+                detail: 'high',
+              })),
+            ],
+          },
+        ]
+      : prompt
+
   const copyResponse = await openai.responses.create({
     model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
-    input: buildCopyPrompt(details, refinement),
+    input,
   })
 
   return fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
@@ -576,10 +671,24 @@ const getImageUrl = (imageResponse, fallbackMessage) => {
   return imageUrl
 }
 
-const generateImage = async (openai, env, details, refinement = '', imageMode = 'new') => {
+const generateImage = async (
+  openai,
+  env,
+  details,
+  refinement = '',
+  imageMode = 'new',
+  referenceImages = [],
+  likenessBrief = '',
+) => {
+  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}`
+
+  if (referenceImages.length > 0) {
+    return editImageWithFiles(openai, env, prompt, await referenceImagesToFiles(referenceImages))
+  }
+
   const imageResponse = await openai.images.generate({
     model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-    prompt: buildImagePrompt(details, refinement, imageMode),
+    prompt,
     size: '1024x1536',
     quality: 'medium',
   })
@@ -598,12 +707,12 @@ const base64ToUint8Array = (imageBase64) => {
   return bytes
 }
 
-const imageUrlToFile = async (imageUrl) => {
+const imageUrlToFile = async (imageUrl, fileName = 'current-cover.png') => {
   const dataUrlMatch = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(imageUrl || '')
 
   if (dataUrlMatch) {
     const [, mimeType, imageBase64] = dataUrlMatch
-    return new File([base64ToUint8Array(imageBase64)], 'current-cover.png', { type: mimeType })
+    return new File([base64ToUint8Array(imageBase64)], fileName, { type: mimeType })
   }
 
   if (/^https?:\/\//.test(imageUrl || '')) {
@@ -614,23 +723,47 @@ const imageUrlToFile = async (imageUrl) => {
     }
 
     const contentType = response.headers.get('content-type') || 'image/png'
-    return new File([await response.arrayBuffer()], 'current-cover.png', { type: contentType })
+    return new File([await response.arrayBuffer()], fileName, { type: contentType })
   }
 
   throw new Error('Unable to edit the cover because the current image is missing or invalid.')
 }
 
-const editImage = async (openai, env, details, refinement, currentImageUrl) => {
-  const currentImage = await imageUrlToFile(currentImageUrl)
+const referenceImagesToFiles = (referenceImages) =>
+  Promise.all(referenceImages.map((imageUrl, index) => imageUrlToFile(imageUrl, `reference-${index + 1}.jpg`)))
+
+const editImageWithFiles = async (openai, env, prompt, imageFiles) => {
   const imageResponse = await openai.images.edit({
     model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-    image: currentImage,
-    prompt: buildImageEditPrompt(details, refinement),
+    image: imageFiles,
+    prompt,
     size: '1024x1536',
     quality: 'medium',
   })
 
   return getImageUrl(imageResponse, 'OpenAI did not return an edited image.')
+}
+
+const editImage = async (
+  openai,
+  env,
+  details,
+  refinement,
+  currentImageUrl,
+  referenceImages = [],
+  likenessBrief = '',
+) => {
+  const currentImage = await imageUrlToFile(currentImageUrl)
+  const referenceFiles = await referenceImagesToFiles(referenceImages)
+  const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0)}${buildLikenessBriefSection(likenessBrief)}
+If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
+
+  return editImageWithFiles(
+    openai,
+    env,
+    prompt,
+    referenceFiles.length > 0 ? [currentImage, ...referenceFiles] : [currentImage],
+  )
 }
 
 const requireOpenAIKey = (request, env) => {
@@ -737,7 +870,9 @@ const handleGenerateCard = async (request, env) => {
     return missingKeyResponse
   }
 
-  const details = await readJson(request)
+  const payload = await readJson(request)
+  const { referenceImages: rawReferenceImages, ...details } = payload || {}
+  const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
 
   if (missingFields.length > 0) {
@@ -746,9 +881,10 @@ const handleGenerateCard = async (request, env) => {
 
   try {
     const openai = getOpenAI(env)
+    const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
     const [copy, imageUrl] = await Promise.all([
-      generateCopy(openai, env, details),
-      generateImage(openai, env, details),
+      generateCopy(openai, env, details, '', referenceImages, likenessBrief),
+      generateImage(openai, env, details, '', 'new', referenceImages, likenessBrief),
     ])
 
     if (!copy.message || !imageUrl) {
@@ -772,7 +908,9 @@ const handleRefineImage = async (request, env) => {
     return missingKeyResponse
   }
 
-  const { details, refinement, imageMode, currentImageUrl } = (await readJson(request)) || {}
+  const { details, refinement, imageMode, currentImageUrl, referenceImages: rawReferenceImages } =
+    (await readJson(request)) || {}
+  const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
 
   if (missingFields.length > 0) {
@@ -785,10 +923,11 @@ const handleRefineImage = async (request, env) => {
 
   try {
     const openai = getOpenAI(env)
+    const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
     const imageUrl =
       imageMode === 'new'
-        ? await generateImage(openai, env, details, refinement, 'new')
-        : await editImage(openai, env, details, refinement, currentImageUrl)
+        ? await generateImage(openai, env, details, refinement, 'new', referenceImages, likenessBrief)
+        : await editImage(openai, env, details, refinement, currentImageUrl, referenceImages, likenessBrief)
 
     return jsonResponse(request, env, { imageUrl })
   } catch (error) {
@@ -803,7 +942,9 @@ const handleRefineCopy = async (request, env) => {
     return missingKeyResponse
   }
 
-  const { details, refinement, currentMessage, currentClosing } = (await readJson(request)) || {}
+  const { details, refinement, currentMessage, currentClosing, referenceImages: rawReferenceImages } =
+    (await readJson(request)) || {}
+  const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
 
   if (missingFields.length > 0) {
@@ -815,14 +956,18 @@ const handleRefineCopy = async (request, env) => {
   }
 
   try {
+    const openai = getOpenAI(env)
+    const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
     const copy = await generateCopy(
-      getOpenAI(env),
+      openai,
       env,
       {
         ...details,
         keyDetails: `${details.keyDetails}\n\nCurrent inside message: ${currentMessage || ''}\nCurrent closing: ${currentClosing || ''}`,
       },
       refinement,
+      referenceImages,
+      likenessBrief,
     )
 
     return jsonResponse(request, env, copy)
