@@ -412,44 +412,16 @@ ${copy.message}
   }
 }
 
-const generateCopy = async (openai, details, refinement = '', referenceImages = [], likenessBrief = '') => {
-  const prompt = `${buildCopyPrompt(details, refinement)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}
+const generateCopy = async (openai, details, refinement = '', _referenceImages = [], likenessBrief = '') => {
+  const prompt = `${buildCopyPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief)}
 If a likeness brief is provided, keep the message consistent with those people and details. Do not mention photos or that you saw pictures.`
-  const requestCopy = async (images) => {
-    const input =
-      images.length > 0
-        ? [
-            {
-              role: 'user',
-              content: [
-                { type: 'input_text', text: prompt },
-                ...images.map((imageUrl) => ({
-                  type: 'input_image',
-                  image_url: imageUrl,
-                  detail: 'high',
-                })),
-              ],
-            },
-          ]
-        : prompt
 
-    const copyResponse = await openai.responses.create({
-      model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
-      input,
-    })
+  const copyResponse = await openai.responses.create({
+    model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+    input: prompt,
+  })
 
-    return fitCopyToLength(openai, details, parseCopyResponse(copyResponse))
-  }
-
-  try {
-    return await requestCopy(referenceImages)
-  } catch (error) {
-    if (!isSafetyRejection(error) || referenceImages.length === 0) {
-      throw error
-    }
-
-    return requestCopy([])
-  }
+  return fitCopyToLength(openai, details, parseCopyResponse(copyResponse))
 }
 
 const generateImageFromPrompt = async (openai, prompt) => {
@@ -468,25 +440,11 @@ const generateImage = async (
   details,
   refinement = '',
   imageMode = 'new',
-  referenceImages = [],
+  _referenceImages = [],
   likenessBrief = '',
 ) => {
-  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}`
-
-  if (referenceImages.length > 0) {
-    try {
-      return await editImageWithFiles(openai, prompt, await referenceImagesToFiles(referenceImages))
-    } catch (error) {
-      if (!isSafetyRejection(error)) {
-        throw error
-      }
-    }
-  }
-
-  return generateImageFromPrompt(
-    openai,
-    `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief)}`,
-  )
+  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief)}`
+  return generateImageFromPrompt(openai, prompt)
 }
 
 const getGeneratedImageUrl = (imageResponse, fallbackMessage) => {

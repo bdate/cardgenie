@@ -83,8 +83,9 @@ const creditPackAmount = 50
 const cardGenerationCost = 10
 const revisionCost = 2
 const maxReferencePhotos = 3
-const referencePhotoMaxEdge = 1280
-const referencePhotoJpegQuality = 0.82
+const referencePhotoMaxEdge = 1024
+const referencePhotoJpegQuality = 0.72
+const maxReferencePhotoDataUrlLength = 350000
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
@@ -127,6 +128,30 @@ const getApiJson = async (response: Response, fallbackMessage: string) => {
   }
 
   throw new Error(fallbackMessage)
+}
+
+const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
+  const message = error instanceof Error ? error.message.trim() : ''
+  const name = error instanceof Error ? error.name : ''
+
+  if (name === 'AbortError') {
+    return 'The request was interrupted. Please try generating the card again.'
+  }
+
+  if (
+    name === 'TypeError' ||
+    /^(load failed|failed to fetch|networkerror when attempting to fetch resource|network request failed)$/i.test(
+      message,
+    )
+  ) {
+    return 'The card request did not go through. Check your connection and try again. If you added a photo, try a smaller picture or generate without it.'
+  }
+
+  if (/timeout|timed out|504|524/i.test(message)) {
+    return 'Card Genie took too long to finish this card. Please try again in a moment.'
+  }
+
+  return message || fallbackMessage
 }
 
 const getLengthRange = (length: string) => {
@@ -279,8 +304,14 @@ const imageUrlToFile = async (imageUrl: string, fileName: string) => {
   return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
 }
 
-const bitmapToJpegDataUrl = (source: CanvasImageSource, width: number, height: number) => {
-  const scale = Math.min(1, referencePhotoMaxEdge / Math.max(width, height))
+const bitmapToJpegDataUrl = (
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  maxEdge = referencePhotoMaxEdge,
+  quality = referencePhotoJpegQuality,
+) => {
+  const scale = Math.min(1, maxEdge / Math.max(width, height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(width * scale))
   canvas.height = Math.max(1, Math.round(height * scale))
@@ -291,14 +322,36 @@ const bitmapToJpegDataUrl = (source: CanvasImageSource, width: number, height: n
   }
 
   context.drawImage(source, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL('image/jpeg', referencePhotoJpegQuality)
+  return canvas.toDataURL('image/jpeg', quality)
+}
+
+const compressReferencePhoto = (
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+) => {
+  let maxEdge = referencePhotoMaxEdge
+  let quality = referencePhotoJpegQuality
+  let dataUrl = bitmapToJpegDataUrl(source, width, height, maxEdge, quality)
+
+  while (dataUrl.length > maxReferencePhotoDataUrlLength && (maxEdge > 640 || quality > 0.5)) {
+    if (dataUrl.length > maxReferencePhotoDataUrlLength * 1.6 && maxEdge > 640) {
+      maxEdge = Math.max(640, Math.round(maxEdge * 0.8))
+    } else {
+      quality = Math.max(0.5, quality - 0.08)
+    }
+
+    dataUrl = bitmapToJpegDataUrl(source, width, height, maxEdge, quality)
+  }
+
+  return dataUrl
 }
 
 const resizeReferencePhoto = async (file: File) => {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-      const dataUrl = bitmapToJpegDataUrl(bitmap, bitmap.width, bitmap.height)
+      const dataUrl = compressReferencePhoto(bitmap, bitmap.width, bitmap.height)
       bitmap.close()
       return dataUrl
     } catch {
@@ -320,7 +373,7 @@ const resizeReferencePhoto = async (file: File) => {
     element.src = dataUrl
   })
 
-  return bitmapToJpegDataUrl(image, image.naturalWidth, image.naturalHeight)
+  return compressReferencePhoto(image, image.naturalWidth, image.naturalHeight)
 }
 
 const downloadImageFallback = (imageUrl: string, fileName: string) => {
@@ -722,7 +775,7 @@ function App() {
         setShowCompletionNote(false)
         setStep('envelope')
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : 'Unable to load the shared card.')
+        setError(getFriendlyErrorMessage(caughtError, 'Unable to load the shared card.'))
       } finally {
         setIsLoadingSharedCard(false)
       }
@@ -841,7 +894,7 @@ function App() {
       setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
       window.setTimeout(() => setShowCompletionNote(false), 6000)
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to generate the card.')
+      setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
     } finally {
       setIsGenerating(false)
     }
@@ -962,7 +1015,7 @@ function App() {
       setCredits((current) => current - revisionCost)
       setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to refine the cover image.')
+      setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
     } finally {
       setIsRefiningImage(false)
     }
@@ -1018,7 +1071,7 @@ function App() {
       setCredits((current) => current - revisionCost)
       setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to refine the inside message.')
+      setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
     } finally {
       setIsRefiningCopy(false)
     }
