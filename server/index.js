@@ -97,7 +97,7 @@ app.post('/api/deliver-card', async (req, res) => {
 
     const deliveredTo =
       method === 'email'
-        ? await sendEmailDelivery({ to: cleanDestination, copy })
+        ? await sendEmailDelivery({ to: normalizeEmailAddress(cleanDestination), copy })
         : await sendTextDelivery({ to: cleanDestination, copy })
 
     res.json({
@@ -107,8 +107,13 @@ app.post('/api/deliver-card', async (req, res) => {
       message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
     })
   } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to deliver the card.',
+    const message = error instanceof Error ? error.message : 'Unable to deliver the card.'
+    const isValidationError =
+      /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(message) &&
+      !/SendGrid|Postmark|Twilio|configured/i.test(message)
+
+    res.status(isValidationError ? 400 : 500).json({
+      error: message,
     })
   }
 })
@@ -602,7 +607,57 @@ const normalizePhoneNumber = (phoneNumber) => {
     return `+${digits}`
   }
 
-  throw new Error('Enter the recipient cellphone number in US format, like +19259637453.')
+  if (digits.length < 10) {
+    throw new Error('Cellphone number looks incomplete. Use 10 digits, like (925) 555-1234.')
+  }
+
+  if (digits.length > 11) {
+    throw new Error('Cellphone number has too many digits. Use a US number like (925) 555-1234.')
+  }
+
+  throw new Error('Enter a valid US cellphone number. Example: (925) 555-1234.')
+}
+
+const normalizeEmailAddress = (email = '') => {
+  const formatted = email.trim().toLowerCase()
+
+  if (!formatted) {
+    throw new Error('Enter the recipient email address.')
+  }
+
+  if (/\s/.test(formatted)) {
+    throw new Error('Remove spaces from the email address.')
+  }
+
+  if (!formatted.includes('@')) {
+    throw new Error('Email is missing the @ symbol. Example: jamie@example.com')
+  }
+
+  const [localPart, domainPart, ...extraParts] = formatted.split('@')
+
+  if (!localPart || !domainPart || extraParts.length > 0) {
+    throw new Error('Enter a complete email address. Example: jamie@example.com')
+  }
+
+  if (!domainPart.includes('.')) {
+    throw new Error('Email domain is missing a period. Did you mean something like example.com?')
+  }
+
+  if (domainPart.startsWith('.') || domainPart.endsWith('.') || domainPart.includes('..')) {
+    throw new Error('Check the email domain. Example: jamie@example.com')
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formatted)) {
+    throw new Error('Enter a valid email address. Example: jamie@example.com')
+  }
+
+  const topLevelDomain = domainPart.split('.').at(-1) || ''
+
+  if (topLevelDomain.length < 2) {
+    throw new Error('Email ending looks incomplete. Did you mean .com, .net, or .org?')
+  }
+
+  return formatted
 }
 
 const sendTextDelivery = async ({ to, copy }) => {

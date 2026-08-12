@@ -435,7 +435,57 @@ const normalizePhoneNumber = (phoneNumber) => {
     return `+${digits}`
   }
 
-  throw new Error('Enter the recipient cellphone number in US format, like +19259637453.')
+  if (digits.length < 10) {
+    throw new Error('Cellphone number looks incomplete. Use 10 digits, like (925) 555-1234.')
+  }
+
+  if (digits.length > 11) {
+    throw new Error('Cellphone number has too many digits. Use a US number like (925) 555-1234.')
+  }
+
+  throw new Error('Enter a valid US cellphone number. Example: (925) 555-1234.')
+}
+
+const normalizeEmailAddress = (email = '') => {
+  const formatted = email.trim().toLowerCase()
+
+  if (!formatted) {
+    throw new Error('Enter the recipient email address.')
+  }
+
+  if (/\s/.test(formatted)) {
+    throw new Error('Remove spaces from the email address.')
+  }
+
+  if (!formatted.includes('@')) {
+    throw new Error('Email is missing the @ symbol. Example: jamie@example.com')
+  }
+
+  const [localPart, domainPart, ...extraParts] = formatted.split('@')
+
+  if (!localPart || !domainPart || extraParts.length > 0) {
+    throw new Error('Enter a complete email address. Example: jamie@example.com')
+  }
+
+  if (!domainPart.includes('.')) {
+    throw new Error('Email domain is missing a period. Did you mean something like example.com?')
+  }
+
+  if (domainPart.startsWith('.') || domainPart.endsWith('.') || domainPart.includes('..')) {
+    throw new Error('Check the email domain. Example: jamie@example.com')
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formatted)) {
+    throw new Error('Enter a valid email address. Example: jamie@example.com')
+  }
+
+  const topLevelDomain = domainPart.split('.').at(-1) || ''
+
+  if (topLevelDomain.length < 2) {
+    throw new Error('Email ending looks incomplete. Did you mean .com, .net, or .org?')
+  }
+
+  return formatted
 }
 
 const sendTextDelivery = async ({ env, to, copy }) => {
@@ -659,7 +709,7 @@ const handleDeliverCard = async (request, env) => {
 
     const deliveredTo =
       method === 'email'
-        ? await sendEmailDelivery({ env, to: cleanDestination, copy })
+        ? await sendEmailDelivery({ env, to: normalizeEmailAddress(cleanDestination), copy })
         : await sendTextDelivery({ env, to: cleanDestination, copy })
 
     return jsonResponse(request, env, {
@@ -669,12 +719,12 @@ const handleDeliverCard = async (request, env) => {
       message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
     })
   } catch (error) {
-    return jsonResponse(
-      request,
-      env,
-      { error: error instanceof Error ? error.message : 'Unable to deliver the card.' },
-      500,
-    )
+    const message = error instanceof Error ? error.message : 'Unable to deliver the card.'
+    const isValidationError =
+      /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(message) &&
+      !/SendGrid|Postmark|Twilio|configured/i.test(message)
+
+    return jsonResponse(request, env, { error: message }, isValidationError ? 400 : 500)
   }
 }
 

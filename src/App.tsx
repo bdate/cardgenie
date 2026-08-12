@@ -273,6 +273,138 @@ const isMobileDevice = () =>
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
+const formatEmailAddress = (email: string) => email.trim().toLowerCase()
+
+const validateEmailAddress = (email: string) => {
+  const formatted = formatEmailAddress(email)
+
+  if (!formatted) {
+    return { ok: false as const, message: 'Enter the recipient email address.' }
+  }
+
+  if (/\s/.test(formatted)) {
+    return { ok: false as const, message: 'Remove spaces from the email address.' }
+  }
+
+  if (!formatted.includes('@')) {
+    return { ok: false as const, message: 'Email is missing the @ symbol. Example: jamie@example.com' }
+  }
+
+  const [localPart, domainPart, ...extraParts] = formatted.split('@')
+
+  if (!localPart || !domainPart || extraParts.length > 0) {
+    return { ok: false as const, message: 'Enter a complete email address. Example: jamie@example.com' }
+  }
+
+  if (!domainPart.includes('.')) {
+    return {
+      ok: false as const,
+      message: 'Email domain is missing a period. Did you mean something like example.com?',
+    }
+  }
+
+  if (domainPart.startsWith('.') || domainPart.endsWith('.') || domainPart.includes('..')) {
+    return { ok: false as const, message: 'Check the email domain. Example: jamie@example.com' }
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formatted)) {
+    return { ok: false as const, message: 'Enter a valid email address. Example: jamie@example.com' }
+  }
+
+  const topLevelDomain = domainPart.split('.').at(-1) || ''
+
+  if (topLevelDomain.length < 2) {
+    return {
+      ok: false as const,
+      message: 'Email ending looks incomplete. Did you mean .com, .net, or .org?',
+    }
+  }
+
+  return { ok: true as const, value: formatted }
+}
+
+const getPhoneDigits = (phoneNumber: string) => phoneNumber.replace(/\D/g, '')
+
+const formatPhoneNumberDisplay = (phoneNumber: string) => {
+  const digits = getPhoneDigits(phoneNumber)
+  const national =
+    digits.length === 11 && digits.startsWith('1')
+      ? digits.slice(1)
+      : digits.length === 10
+        ? digits
+        : ''
+
+  if (!national) {
+    return phoneNumber.trim()
+  }
+
+  return `+1 (${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}`
+}
+
+const formatPhoneNumberE164 = (phoneNumber: string) => {
+  const digits = getPhoneDigits(phoneNumber)
+
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+
+  if (/^\+[1-9]\d{7,14}$/.test(phoneNumber.trim())) {
+    return phoneNumber.trim()
+  }
+
+  return ''
+}
+
+const validatePhoneNumber = (phoneNumber: string) => {
+  const trimmed = phoneNumber.trim()
+
+  if (!trimmed) {
+    return { ok: false as const, message: 'Enter the recipient cellphone number.' }
+  }
+
+  const digits = getPhoneDigits(trimmed)
+
+  if (digits.length < 10) {
+    return {
+      ok: false as const,
+      message: 'Cellphone number looks incomplete. Use 10 digits, like (925) 555-1234.',
+    }
+  }
+
+  if (digits.length === 11 && !digits.startsWith('1')) {
+    return {
+      ok: false as const,
+      message: 'US cellphone numbers should start with 1 or use 10 digits. Example: (925) 555-1234.',
+    }
+  }
+
+  if (digits.length > 11) {
+    return {
+      ok: false as const,
+      message: 'Cellphone number has too many digits. Use a US number like (925) 555-1234.',
+    }
+  }
+
+  const e164 = formatPhoneNumberE164(trimmed)
+
+  if (!e164) {
+    return {
+      ok: false as const,
+      message: 'Enter a valid US cellphone number. Example: (925) 555-1234.',
+    }
+  }
+
+  return {
+    ok: true as const,
+    value: e164,
+    display: formatPhoneNumberDisplay(e164),
+  }
+}
+
 const wrapCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const words = text.split(/\s+/).filter(Boolean)
   const lines: string[] = []
@@ -822,12 +954,32 @@ function App() {
     setError('')
     setDeliveryNotice('')
 
-    if (!deliveryDestination.trim()) {
-      setDeliveryNotice(
-        deliveryMethod === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.',
-      )
-      return
+    let destinationValue = ''
+    let destinationDisplay = ''
+
+    if (deliveryMethod === 'email') {
+      const validated = validateEmailAddress(deliveryDestination)
+
+      if (!validated.ok) {
+        setDeliveryNotice(validated.message)
+        return
+      }
+
+      destinationValue = validated.value
+      destinationDisplay = validated.value
+    } else {
+      const validated = validatePhoneNumber(deliveryDestination)
+
+      if (!validated.ok) {
+        setDeliveryNotice(validated.message)
+        return
+      }
+
+      destinationValue = validated.value
+      destinationDisplay = validated.display
     }
+
+    setDeliveryDestination(destinationDisplay)
 
     if (deliveryMethod === 'text' && !smsConsentConfirmed) {
       setDeliveryNotice('Confirm the recipient agreed to receive this one-time card delivery text.')
@@ -846,7 +998,7 @@ function App() {
         body: JSON.stringify({
           cardId: shared.id,
           method: deliveryMethod,
-          destination: deliveryDestination,
+          destination: destinationValue,
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
         }),
       })
@@ -856,10 +1008,15 @@ function App() {
         throw new Error(data.error || 'Unable to deliver the card.')
       }
 
+      const deliveredDisplay =
+        deliveryMethod === 'email'
+          ? formatEmailAddress(String(data.deliveredTo || destinationValue))
+          : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
+
       setDeliveryNotice(data.message || 'Card sent.')
       addDeliveryLog({
         method: deliveryMethod,
-        destination: data.deliveredTo || deliveryDestination,
+        destination: deliveredDisplay,
         status: 'Sent',
         message: data.message || 'Card sent.',
       })
@@ -868,7 +1025,7 @@ function App() {
       setDeliveryNotice(message)
       addDeliveryLog({
         method: deliveryMethod,
-        destination: deliveryDestination,
+        destination: destinationDisplay,
         status: 'Failed',
         message,
       })
@@ -1284,9 +1441,41 @@ function App() {
                   {deliveryMethod === 'email' ? 'Recipient email' : 'Recipient cellphone'}
                   <input
                     type={deliveryMethod === 'email' ? 'email' : 'tel'}
+                    inputMode={deliveryMethod === 'email' ? 'email' : 'tel'}
+                    autoComplete={deliveryMethod === 'email' ? 'email' : 'tel'}
                     value={deliveryDestination}
-                    onChange={(event) => setDeliveryDestination(event.target.value)}
-                    placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '+1 555 123 4567'}
+                    onChange={(event) => {
+                      setDeliveryDestination(event.target.value)
+                      setDeliveryNotice('')
+                    }}
+                    onBlur={() => {
+                      if (!deliveryDestination.trim()) {
+                        return
+                      }
+
+                      if (deliveryMethod === 'email') {
+                        const validated = validateEmailAddress(deliveryDestination)
+
+                        if (validated.ok) {
+                          setDeliveryDestination(validated.value)
+                          setDeliveryNotice('')
+                        } else {
+                          setDeliveryNotice(validated.message)
+                        }
+
+                        return
+                      }
+
+                      const validated = validatePhoneNumber(deliveryDestination)
+
+                      if (validated.ok) {
+                        setDeliveryDestination(validated.display)
+                        setDeliveryNotice('')
+                      } else {
+                        setDeliveryNotice(validated.message)
+                      }
+                    }}
+                    placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
                   />
                 </label>
                 {deliveryMethod === 'text' && (
