@@ -286,17 +286,20 @@ const getCardSummary = (record, request, env) => ({
 })
 
 const buildDeliveryCopy = (record, shareUrl) => {
-  const recipient = record.details.recipientName || record.details.recipientType || 'you'
+  const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
   const sender = record.signature || record.details.senderName || 'Someone special'
   const occasion = record.details.occasion || 'card'
+  const openLine = recipientFirstName
+    ? `${recipientFirstName}, open your personalized ${occasion} card from ${sender}.`
+    : `Open your personalized ${occasion} card from ${sender}.`
 
   return {
     subject: `${sender} sent you a ${occasion} card`,
-    text: `${sender} made a card for ${recipient}. Open it here: ${shareUrl}`,
+    text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
         <h1 style="margin: 0 0 12px;">${sender} sent you a card</h1>
-        <p>Open your personalized ${occasion} card from ${sender}.</p>
+        <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
       </div>
