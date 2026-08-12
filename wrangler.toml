@@ -3,9 +3,6 @@ main = "worker/index.js"
 compatibility_date = "2026-05-20"
 workers_dev = true
 
-[limits]
-cpu_ms = 300000
-
 [vars]
 OPENAI_TEXT_MODEL = "gpt-4o-mini"
 OPENAI_IMAGE_MODEL = "gpt-image-2"
