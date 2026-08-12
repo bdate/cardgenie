@@ -1409,6 +1409,15 @@ function App() {
                   Open envelope again
                 </button>
               </div>
+              {isRecipientView && (
+                <aside className="recipient-invite" aria-label="Create your own card">
+                  <h3>Loved this card?</h3>
+                  <p>Create one just as personal for someone you care about.</p>
+                  <a className="primary-button" href="/">
+                    Create your own card
+                  </a>
+                </aside>
+              )}
               {!isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send?</span>
