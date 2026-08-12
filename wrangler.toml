@@ -7,6 +7,15 @@ OPENAI_TEXT_MODEL = "gpt-4o-mini"
 OPENAI_IMAGE_MODEL = "gpt-image-2"
 ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com"
 PUBLIC_APP_URL = "https://www.card-genie.com"
+SHARE_BASE_URL = "https://www.card-genie.com"
+
+[[routes]]
+pattern = "www.card-genie.com/c/*"
+zone_name = "card-genie.com"
+
+[[routes]]
+pattern = "card-genie.com/c/*"
+zone_name = "card-genie.com"
 
 [[kv_namespaces]]
 binding = "CARD_STORE"

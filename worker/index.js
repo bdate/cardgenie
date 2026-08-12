@@ -40,6 +40,7 @@ Match their ages, faces, hair, body types, clothing cues, and any pet's size and
 Relationship words such as daughter, son, kids, mom, or dad must not change their ages if the photos show something different. If the photos show adults, draw adults, not children.
 The people and animals from the photos should appear on the cover unless the user asked for a symbolic scene instead.
 Do not copy the photographs onto the card as printed pictures, Polaroids, frames, phone screens, or collages.
+If children appear, depict them fully and modestly clothed as they would on a family greeting card. Never depict nudity.
 `
 }
 
@@ -53,7 +54,51 @@ LIKENESS BRIEF FROM THE SENDER'S REFERENCE PHOTOS (highest priority, overrides g
 ${likenessBrief}
 
 Follow this brief exactly for ages, faces, hair, complexion, distinctive features, and any pet coloring. Recreate them in the requested art style as original greeting-card artwork. Do not paste the original photographs onto the card.
+If children are included, they must be fully and modestly clothed.
 `
+}
+
+const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise likeness brief an illustrator must follow.
+
+For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, complexion, distinctive features, and the clothing they should wear on a greeting card.
+If several people appear together, describe them left to right.
+For animals, include species, size, coat color, and distinctive markings.
+Mention setting only if it should inspire the card.
+
+Be specific about age. If people look like adults, say they are adults, not children.
+If a child appears in a bath or is not fully clothed, describe them as a clothed child of that age. Do not mention nudity, baths, or unclothed states.
+Return plain text only. Do not mention that these came from photos.`
+
+const getErrorText = (error) => {
+  if (!error) {
+    return ''
+  }
+
+  if (typeof error === 'string') {
+    return error
+  }
+
+  return [
+    error.message,
+    error.code,
+    error.error?.message,
+    error.error?.code,
+    error.error?.type,
+    Array.isArray(error.error?.safety_violations) ? error.error.safety_violations.join(' ') : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+const isSafetyRejection = (error) =>
+  /safety|moderation|safety_violations|rejected by the safety system/i.test(getErrorText(error))
+
+const publicGenerationError = (error, fallbackMessage) => {
+  if (isSafetyRejection(error)) {
+    return 'One of the photos could not be used to create the cover. Try another photo, or generate without that image.'
+  }
+
+  return error instanceof Error ? error.message : fallbackMessage
 }
 
 const maxReferenceImages = 3
@@ -229,35 +274,55 @@ const describeReferenceImages = async (openai, env, referenceImages) => {
     return ''
   }
 
-  const response = await openai.responses.create({
-    model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
-    input: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'input_text',
-            text: `These are private reference photos for a greeting card. Write a concise likeness brief an illustrator must follow.
+  const describe = async (images) => {
+    const response = await openai.responses.create({
+      model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: referenceImageDescriptionPrompt,
+            },
+            ...images.map((imageUrl) => ({
+              type: 'input_image',
+              image_url: imageUrl,
+              detail: 'high',
+            })),
+          ],
+        },
+      ],
+    })
 
-For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, complexion, distinctive features, and clothing.
-If several people appear together, describe them left to right.
-For animals, include species, size, coat color, and distinctive markings.
-Mention setting only if it should inspire the card.
+    return getMessageText(response)
+  }
 
-Be specific about age. If people look like adults, say they are adults, not children.
-Return plain text only. Do not mention that these came from photos.`,
-          },
-          ...referenceImages.map((imageUrl) => ({
-            type: 'input_image',
-            image_url: imageUrl,
-            detail: 'high',
-          })),
-        ],
-      },
-    ],
-  })
+  try {
+    return await describe(referenceImages)
+  } catch (error) {
+    if (!isSafetyRejection(error)) {
+      throw error
+    }
+  }
 
-  return getMessageText(response)
+  const briefs = []
+
+  for (const imageUrl of referenceImages) {
+    try {
+      const brief = await describe([imageUrl])
+
+      if (brief) {
+        briefs.push(brief)
+      }
+    } catch (error) {
+      if (!isSafetyRejection(error)) {
+        throw error
+      }
+    }
+  }
+
+  return briefs.join('\n\n')
 }
 
 const stripCodeFence = (value = '') =>
@@ -307,7 +372,100 @@ const getPublicAppUrl = (request, env) => {
   return (env.PUBLIC_APP_URL || request.headers.get('Origin') || requestUrl.origin).replace(/\/$/, '')
 }
 
-const getShareUrl = (request, env, cardId) => `${getPublicAppUrl(request, env)}/?card=${encodeURIComponent(cardId)}`
+const getShareBaseUrl = (request, env) =>
+  (env.SHARE_BASE_URL || env.PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, '')
+
+const getShareUrl = (request, env, cardId) => `${getShareBaseUrl(request, env)}/c/${encodeURIComponent(cardId)}`
+
+const getSharePathParts = (pathname) => {
+  const match = pathname.match(/^\/c\/([^/]+)(?:\/(cover))?\/?$/)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    cardId: decodeURIComponent(match[1]),
+    isCover: match[2] === 'cover',
+  }
+}
+
+const escapeHtml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+const buildSharePreviewCopy = (record) => {
+  const recipientName = (record.details.recipientName || '').trim()
+  const recipientFirstName = recipientName.split(/\s+/).filter(Boolean)[0] || ''
+  const sender = record.signature || record.details.senderName || 'Someone special'
+  const occasion = record.details.occasion || 'greeting'
+  const title = recipientFirstName
+    ? `${recipientFirstName}, ${sender} sent you a ${occasion} card`
+    : `${sender} sent you a ${occasion} card`
+  const description = recipientFirstName
+    ? `${recipientFirstName}, open your personalized ${occasion} card from ${sender}.`
+    : `Open your personalized ${occasion} card from ${sender}.`
+
+  return { title, description, sender, occasion }
+}
+
+const parseDataImage = (imageUrl) => {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(imageUrl || '')
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    mimeType: match[1],
+    bytes: base64ToUint8Array(match[2]),
+  }
+}
+
+const buildSharePreviewHtml = (record, request, env) => {
+  const { title, description } = buildSharePreviewCopy(record)
+  const appUrl = `${getPublicAppUrl(request, env)}/?card=${encodeURIComponent(record.id)}`
+  const imageUrl = `${getShareBaseUrl(request, env)}/c/${encodeURIComponent(record.id)}/cover`
+  const safeTitle = escapeHtml(title)
+  const safeDescription = escapeHtml(description)
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeTitle}</title>
+    <meta name="description" content="${safeDescription}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Card Genie" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDescription}" />
+    <meta property="og:url" content="${escapeHtml(appUrl)}" />
+    <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDescription}" />
+    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
+    <link rel="canonical" href="${escapeHtml(appUrl)}" />
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, system-ui, sans-serif; color: #315f5b; background: linear-gradient(135deg, #fff8ef, #eef3ff); }
+      a { color: #fff; background: #f59e33; text-decoration: none; font-weight: 800; border-radius: 16px; padding: 14px 20px; }
+      p { margin: 0 0 16px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>${safeDescription}</p>
+      <a href="${escapeHtml(appUrl)}">Open your card</a>
+    </main>
+    <script>location.replace(${JSON.stringify(appUrl)})</script>
+  </body>
+</html>`
+}
 
 const buildCardRecord = (payload) => {
   const card = payload?.card || {}
@@ -633,29 +791,41 @@ ${copy.message}
 const generateCopy = async (openai, env, details, refinement = '', referenceImages = [], likenessBrief = '') => {
   const prompt = `${buildCopyPrompt(details, refinement)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}
 If a likeness brief is provided, keep the message consistent with those people and details. Do not mention photos or that you saw pictures.`
-  const input =
-    referenceImages.length > 0
-      ? [
-          {
-            role: 'user',
-            content: [
-              { type: 'input_text', text: prompt },
-              ...referenceImages.map((imageUrl) => ({
-                type: 'input_image',
-                image_url: imageUrl,
-                detail: 'high',
-              })),
-            ],
-          },
-        ]
-      : prompt
+  const requestCopy = async (images) => {
+    const input =
+      images.length > 0
+        ? [
+            {
+              role: 'user',
+              content: [
+                { type: 'input_text', text: prompt },
+                ...images.map((imageUrl) => ({
+                  type: 'input_image',
+                  image_url: imageUrl,
+                  detail: 'high',
+                })),
+              ],
+            },
+          ]
+        : prompt
 
-  const copyResponse = await openai.responses.create({
-    model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
-    input,
-  })
+    const copyResponse = await openai.responses.create({
+      model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      input,
+    })
 
-  return fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
+    return fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
+  }
+
+  try {
+    return await requestCopy(referenceImages)
+  } catch (error) {
+    if (!isSafetyRejection(error) || referenceImages.length === 0) {
+      throw error
+    }
+
+    return requestCopy([])
+  }
 }
 
 const getImageUrl = (imageResponse, fallbackMessage) => {
@@ -683,12 +853,18 @@ const generateImage = async (
   const prompt = `${buildImagePrompt(details, refinement, imageMode)}${buildReferenceImageGuidance(referenceImages.length > 0)}${buildLikenessBriefSection(likenessBrief)}`
 
   if (referenceImages.length > 0) {
-    return editImageWithFiles(openai, env, prompt, await referenceImagesToFiles(referenceImages))
+    try {
+      return await editImageWithFiles(openai, env, prompt, await referenceImagesToFiles(referenceImages))
+    } catch (error) {
+      if (!isSafetyRejection(error)) {
+        throw error
+      }
+    }
   }
 
   const imageResponse = await openai.images.generate({
     model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-    prompt,
+    prompt: `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief)}`,
     size: '1024x1536',
     quality: 'medium',
   })
@@ -758,12 +934,25 @@ const editImage = async (
   const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0)}${buildLikenessBriefSection(likenessBrief)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
 
-  return editImageWithFiles(
-    openai,
-    env,
-    prompt,
-    referenceFiles.length > 0 ? [currentImage, ...referenceFiles] : [currentImage],
-  )
+  try {
+    return await editImageWithFiles(
+      openai,
+      env,
+      prompt,
+      referenceFiles.length > 0 ? [currentImage, ...referenceFiles] : [currentImage],
+    )
+  } catch (error) {
+    if (!isSafetyRejection(error) || referenceFiles.length === 0) {
+      throw error
+    }
+
+    return editImageWithFiles(
+      openai,
+      env,
+      `${buildImageEditPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief)}`,
+      [currentImage],
+    )
+  }
 }
 
 const requireOpenAIKey = (request, env) => {
@@ -806,6 +995,50 @@ const handleGetCard = async (request, env, cardId) => {
   }
 
   return jsonResponse(request, env, getCardSummary(record, request, env))
+}
+
+const handleSharePreview = async (request, env, cardId) => {
+  const record = await getCardRecord(env, cardId)
+
+  if (!record) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+
+  return new Response(buildSharePreviewHtml(record, request, env), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=300',
+      ...getCorsHeaders(request, env),
+    },
+  })
+}
+
+const handleShareCover = async (request, env, cardId) => {
+  const record = await getCardRecord(env, cardId)
+  const imageUrl = record?.card?.imageUrl
+
+  if (!imageUrl) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+
+  const parsed = parseDataImage(imageUrl)
+
+  if (parsed) {
+    return new Response(parsed.bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': parsed.mimeType,
+        'Cache-Control': 'public, max-age=86400',
+      },
+    })
+  }
+
+  if (/^https?:\/\//.test(imageUrl)) {
+    return Response.redirect(imageUrl, 302)
+  }
+
+  return jsonResponse(request, env, { error: 'Card cover is unavailable.' }, 404)
 }
 
 const handleDeliverCard = async (request, env) => {
@@ -898,7 +1131,12 @@ const handleGenerateCard = async (request, env) => {
     })
   } catch (error) {
     console.error(error)
-    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to generate the card.' }, 500)
+    return jsonResponse(
+      request,
+      env,
+      { error: publicGenerationError(error, 'Unable to generate the card.') },
+      isSafetyRejection(error) ? 400 : 500,
+    )
   }
 }
 
@@ -932,7 +1170,12 @@ const handleRefineImage = async (request, env) => {
     return jsonResponse(request, env, { imageUrl })
   } catch (error) {
     console.error(error)
-    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to refine the image.' }, 500)
+    return jsonResponse(
+      request,
+      env,
+      { error: publicGenerationError(error, 'Unable to refine the image.') },
+      isSafetyRejection(error) ? 400 : 500,
+    )
   }
 }
 
@@ -976,8 +1219,8 @@ const handleRefineCopy = async (request, env) => {
     return jsonResponse(
       request,
       env,
-      { error: error instanceof Error ? error.message : 'Unable to refine the inside message.' },
-      500,
+      { error: publicGenerationError(error, 'Unable to refine the inside message.') },
+      isSafetyRejection(error) ? 400 : 500,
     )
   }
 }
@@ -994,6 +1237,16 @@ const handleRequest = async (request, env) => {
 
   if (request.method === 'GET' && url.pathname === '/api/health') {
     return jsonResponse(request, env, { ok: true })
+  }
+
+  const sharePath = request.method === 'GET' ? getSharePathParts(url.pathname) : null
+
+  if (sharePath?.isCover) {
+    return handleShareCover(request, env, sharePath.cardId)
+  }
+
+  if (sharePath) {
+    return handleSharePreview(request, env, sharePath.cardId)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/cards') {

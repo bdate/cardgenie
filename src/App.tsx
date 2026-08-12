@@ -90,6 +90,16 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
 const hostedApiMessage =
   'This online demo needs a deployed API server before Card Genie can generate cards. Run it locally with the Express server, or connect VITE_API_BASE_URL to a hosted backend.'
+const getSharedCardId = () => {
+  const queryId = new URLSearchParams(window.location.search).get('card')
+
+  if (queryId) {
+    return queryId
+  }
+
+  const pathMatch = window.location.pathname.match(/^\/c\/([^/]+)\/?$/)
+  return pathMatch ? decodeURIComponent(pathMatch[1]) : null
+}
 const staticPageRedirects: Record<string, string> = {
   '/privacy': '/privacy/index.html',
   '/privacy/': '/privacy/index.html',
@@ -568,7 +578,7 @@ const createInsideImageUrl = ({
 }
 
 function App() {
-  const sharedCardId = useMemo(() => new URLSearchParams(window.location.search).get('card'), [])
+  const sharedCardId = useMemo(() => getSharedCardId(), [])
   const isRecipientView = Boolean(sharedCardId)
   const [details, setDetails] = useState<CardDetails>(initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
