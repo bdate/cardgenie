@@ -894,8 +894,12 @@ textarea:focus {
   font-weight: 900;
 }
 
-.front-reveal {
-  padding: 48px 28px;
+.front-reveal,
+.card-open-scene.is-static-inside {
+  min-height: auto;
+  padding: 28px;
+  place-items: center;
+  align-content: center;
 }
 
 .card-cover-frame {
@@ -2058,7 +2062,10 @@ textarea:focus {
     padding: 56px 14px 20px;
   }
 
-  .card-reveal {
+  .card-reveal,
+  .front-reveal,
+  .card-open-scene.is-static-inside {
+    min-height: auto;
     padding: 32px 14px 20px;
   }
 
@@ -2089,8 +2096,12 @@ textarea:focus {
   }
 
   .card-open-scene {
-    min-height: 440px;
     padding: 32px 12px;
+  }
+
+  .card-open-scene.is-static-inside {
+    min-height: auto;
+    padding: 32px 14px 20px;
   }
 
   .open-card-message {
@@ -2201,8 +2212,11 @@ textarea:focus {
     padding-top: 44px;
   }
 
-  .card-reveal {
-    padding-top: 28px;
+  .card-reveal,
+  .front-reveal,
+  .card-open-scene.is-static-inside {
+    min-height: auto;
+    padding: 28px 14px 20px;
   }
 
   .envelope {
