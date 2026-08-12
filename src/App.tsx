@@ -269,6 +269,10 @@ const downloadImageFallback = (imageUrl: string, fileName: string) => {
   link.remove()
 }
 
+const isMobileDevice = () =>
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
 const wrapCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const words = text.split(/\s+/).filter(Boolean)
   const lines: string[] = []
@@ -440,6 +444,9 @@ function App() {
   )
   const coverDownloadName = card ? `${fileNameBase}-cover.${getImageExtension(card.imageUrl)}` : 'card-cover.png'
   const insideDownloadName = `${fileNameBase}-inside.png`
+  const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
+  const coverSaveLabel = prefersPhotoSave ? 'Save cover to photos' : 'Save cover image'
+  const insideSaveLabel = prefersPhotoSave ? 'Save inside to photos' : 'Save inside image'
   const insideDownloadUrl = useMemo(
     () =>
       card && isRecipientView
@@ -630,30 +637,36 @@ function App() {
 
     setSaveNotice('')
 
-    try {
-      const imageFile = await imageUrlToFile(imageUrl, fileName)
+    if (prefersPhotoSave) {
+      try {
+        const imageFile = await imageUrlToFile(imageUrl, fileName)
 
-      if (
-        typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [imageFile] })
-      ) {
-        await navigator.share({
-          files: [imageFile],
-          title: `Card Genie ${label}`,
-          text: `Save this ${label.toLowerCase()} from Card Genie.`,
-        })
-        setSaveNotice('Choose Save Image or Save to Photos from your phone share sheet.')
-        return
+        if (
+          typeof navigator.share === 'function' &&
+          typeof navigator.canShare === 'function' &&
+          navigator.canShare({ files: [imageFile] })
+        ) {
+          await navigator.share({
+            files: [imageFile],
+            title: `Card Genie ${label}`,
+            text: `Save this ${label.toLowerCase()} from Card Genie.`,
+          })
+          setSaveNotice('Choose Save Image or Save to Photos from your phone share sheet.')
+          return
+        }
+      } catch (caughtError) {
+        if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+          return
+        }
       }
-    } catch (caughtError) {
-      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
-        return
-      }
+
+      downloadImageFallback(imageUrl, fileName)
+      setSaveNotice('If your phone downloads the image, open it and use the share menu to save it to Photos.')
+      return
     }
 
     downloadImageFallback(imageUrl, fileName)
-    setSaveNotice('If your phone downloads the image, open it and use the share menu to save it to Photos.')
+    setSaveNotice('The image was saved to your downloads folder.')
   }
 
   const refineImage = async () => {
@@ -1216,14 +1229,14 @@ function App() {
                       type="button"
                       onClick={() => void saveImageToDevice(card.imageUrl, coverDownloadName, 'Cover image')}
                     >
-                      Save cover to photos
+                      {coverSaveLabel}
                     </button>
                     <span aria-hidden="true">|</span>
                     <button
                       type="button"
                       onClick={() => void saveImageToDevice(insideDownloadUrl, insideDownloadName, 'Inside image')}
                     >
-                      Save inside to photos
+                      {insideSaveLabel}
                     </button>
                   </div>
                   {saveNotice && <p className="recipient-save-note">{saveNotice}</p>}
