@@ -657,6 +657,7 @@ function App() {
   )
   const hasEnoughCreditsForCard = credits >= cardGenerationCost
   const hasEnoughCreditsForRevision = credits >= revisionCost
+  const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
 
   useEffect(() => {
     if (!isGenerating) {
@@ -1164,7 +1165,7 @@ function App() {
         </div>}
       </section>
 
-      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''}`}>
+      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'}`.trim()}>
         {!isRecipientView && <form className="card-panel form-panel" onSubmit={generateCard}>
           <div className="panel-heading">
             <span>01</span>
@@ -1322,7 +1323,7 @@ function App() {
           </button>
         </form>}
 
-        <section className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
+        {showProofPanel && <section className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           <div className="panel-heading proof-heading">
             {!isRecipientView && <span>02</span>}
             <div>
@@ -1882,7 +1883,7 @@ function App() {
               )}
             </>
           )}
-        </section>
+        </section>}
       </section>
     </main>
   )

@@ -124,6 +124,12 @@
   max-width: 820px;
 }
 
+.workspace.is-form-only {
+  grid-template-columns: minmax(340px, 720px);
+  justify-content: center;
+  max-width: 820px;
+}
+
 .recipient-preview-panel {
   min-height: auto;
 }
