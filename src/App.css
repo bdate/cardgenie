@@ -894,6 +894,10 @@ textarea:focus {
   font-weight: 900;
 }
 
+.front-reveal {
+  padding: 48px 28px;
+}
+
 .card-cover-frame {
   position: relative;
   overflow: hidden;
@@ -924,15 +928,15 @@ textarea:focus {
   gap: 0;
   align-items: stretch;
   overflow: hidden;
-  width: min(420px, 82%);
+  width: min(450px, 92%);
   aspect-ratio: 5 / 7;
   margin: 0 auto;
   border: 1px solid rgba(63, 155, 145, 0.2);
   border-radius: 0;
   background: #fff;
   box-shadow:
-    0 30px 70px rgba(63, 155, 145, 0.16),
-    0 0 0 10px rgba(255, 255, 255, 0.72);
+    0 44px 96px rgba(63, 155, 145, 0.3),
+    0 0 0 1px rgba(63, 155, 145, 0.12);
   transform-origin: left center;
   animation: openBook 720ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
@@ -950,7 +954,7 @@ textarea:focus {
 
 .card-open-stage {
   position: relative;
-  width: min(420px, 82%);
+  width: min(450px, 92%);
   aspect-ratio: 5 / 7;
   transform-style: preserve-3d;
   animation: openStageSettle 1.8s ease forwards;
@@ -961,8 +965,8 @@ textarea:focus {
   inset: 0;
   border: 1px solid rgba(63, 155, 145, 0.2);
   box-shadow:
-    0 30px 70px rgba(63, 155, 145, 0.16),
-    0 0 0 10px rgba(255, 255, 255, 0.72);
+    0 44px 96px rgba(63, 155, 145, 0.3),
+    0 0 0 1px rgba(63, 155, 145, 0.12);
 }
 
 .card-open-scene.is-static-inside .open-card {
