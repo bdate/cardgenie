@@ -866,10 +866,6 @@ textarea:focus {
   transform: none;
 }
 
-.front-reveal .card-cover-frame {
-  animation: none;
-}
-
 .envelope-card-rise {
   position: absolute;
   left: 50%;
@@ -893,7 +889,7 @@ textarea:focus {
 }
 
 .card-reveal {
-  gap: 18px;
+  gap: 0;
   color: var(--gcu-dark-grey);
   font-weight: 900;
 }
@@ -901,11 +897,11 @@ textarea:focus {
 .card-cover-frame {
   position: relative;
   overflow: hidden;
-  width: min(360px, 74%);
+  width: min(450px, 92%);
   aspect-ratio: 5 / 7;
   border-radius: 0;
   box-shadow:
-    0 30px 70px rgba(63, 155, 145, 0.22),
+    0 44px 96px rgba(63, 155, 145, 0.3),
     0 0 0 1px rgba(63, 155, 145, 0.12);
   animation: slideFromEnvelope 620ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
@@ -919,16 +915,7 @@ textarea:focus {
 }
 
 .front-reveal .card-cover-frame {
-  transition:
-    box-shadow 220ms ease,
-    transform 220ms ease;
-}
-
-.front-reveal:hover .card-cover-frame {
-  transform: scale(1.25);
-  box-shadow:
-    0 44px 96px rgba(63, 155, 145, 0.3),
-    0 0 0 1px rgba(63, 155, 145, 0.12);
+  animation: none;
 }
 
 .open-card {
@@ -2056,11 +2043,14 @@ textarea:focus {
     min-height: 440px;
   }
 
-  .envelope-scene,
-  .card-reveal {
+  .envelope-scene {
     grid-template-rows: 224px auto;
     row-gap: 16px;
     padding: 56px 14px 20px;
+  }
+
+  .card-reveal {
+    padding: 32px 14px 20px;
   }
 
   .envelope {
@@ -2086,7 +2076,7 @@ textarea:focus {
   .card-cover-frame,
   .card-open-stage,
   .open-card {
-    width: min(300px, 82vw);
+    width: min(340px, 88vw);
   }
 
   .card-open-scene {
@@ -2197,10 +2187,13 @@ textarea:focus {
     padding: 14px;
   }
 
-  .envelope-scene,
-  .card-reveal {
+  .envelope-scene {
     grid-template-rows: 196px auto;
     padding-top: 44px;
+  }
+
+  .card-reveal {
+    padding-top: 28px;
   }
 
   .envelope {
@@ -2216,7 +2209,7 @@ textarea:focus {
   .card-cover-frame,
   .card-open-stage,
   .open-card {
-    width: min(270px, 82vw);
+    width: min(300px, 88vw);
   }
 
   .open-card-message {
@@ -2228,8 +2221,3 @@ textarea:focus {
   }
 }
 
-@media (hover: none) {
-  .front-reveal:hover .card-cover-frame {
-    transform: none;
-  }
-}

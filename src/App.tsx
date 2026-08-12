@@ -1315,11 +1315,15 @@ function App() {
               )}
 
               {step === 'front' && (
-                <button className="proof-stage card-reveal front-reveal" type="button" onClick={openInside}>
+                <button
+                  className="proof-stage card-reveal front-reveal"
+                  type="button"
+                  onClick={openInside}
+                  aria-label={`Open inside of card for ${recipientLabel}`}
+                >
                   <div className="card-cover-frame">
                     <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
                   </div>
-                  <span>Click to open</span>
                 </button>
               )}
 
@@ -1402,7 +1406,7 @@ function App() {
 
               <div className="proof-actions">
                 <button className="secondary-button" type="button" onClick={replayAnimation}>
-                  Replay animation
+                  Open envelope again
                 </button>
               </div>
               {!isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
