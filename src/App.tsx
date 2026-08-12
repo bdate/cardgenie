@@ -1030,7 +1030,9 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero-section">
-        <div className="eyebrow">Card Genie</div>
+        <a className="eyebrow" href="/" aria-label="Card Genie home">
+          Card Genie
+        </a>
         <h1>
           {isRecipientView ? 'You received a card' : 'Any Card Imaginable'}
           {!isRecipientView && <span className="trademark-mark">™</span>}
