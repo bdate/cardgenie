@@ -1409,7 +1409,7 @@ function App() {
                   Open envelope again
                 </button>
               </div>
-              {isRecipientView && (
+              {isRecipientView && (step === 'front' || step === 'inside') && (
                 <aside className="recipient-invite" aria-label="Create your own card">
                   <h3>Loved this card?</h3>
                   <p>Create one just as personal for someone you care about.</p>
