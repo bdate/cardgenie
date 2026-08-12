@@ -944,11 +944,16 @@ textarea:focus {
 .card-open-scene {
   display: grid;
   place-items: center;
+  width: 100%;
+  border: 0;
   padding: 48px 28px;
   border-radius: 30px;
+  color: inherit;
   background:
     radial-gradient(circle at top, rgba(245, 158, 51, 0.22), transparent 35%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(143, 208, 201, 0.2));
+  cursor: pointer;
+  font: inherit;
   perspective: 1600px;
 }
 

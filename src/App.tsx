@@ -721,13 +721,6 @@ function App() {
     }
   }
 
-  const openInside = () => {
-    setStep('cardOpening')
-    window.setTimeout(() => {
-      setStep('inside')
-    }, 1800)
-  }
-
   const openEnvelope = () => {
     setStep('opening')
     window.setTimeout(() => setStep('front'), 6200)
@@ -1318,8 +1311,8 @@ function App() {
                 <button
                   className="proof-stage card-reveal front-reveal"
                   type="button"
-                  onClick={openInside}
-                  aria-label={`Open inside of card for ${recipientLabel}`}
+                  onClick={() => setStep('inside')}
+                  aria-label={`Show inside of card for ${recipientLabel}`}
                 >
                   <div className="card-cover-frame">
                     <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
@@ -1348,7 +1341,12 @@ function App() {
               )}
 
               {step === 'inside' && (
-                <div className="proof-stage card-open-scene is-static-inside">
+                <button
+                  className="proof-stage card-open-scene is-static-inside"
+                  type="button"
+                  onClick={() => setStep('front')}
+                  aria-label={`Show cover of card for ${recipientLabel}`}
+                >
                   <div className="open-card">
                     <div className={`open-card-message ${messageDensity}`}>
                       {insideGreeting && <span>{insideGreeting}</span>}
@@ -1361,7 +1359,7 @@ function App() {
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                   </div>
-                </div>
+                </button>
               )}
 
               {(step === 'front' || step === 'inside') && (
