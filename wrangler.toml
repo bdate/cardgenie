@@ -1,6 +1,7 @@
 name = "cardgenie-api"
 main = "worker/index.js"
 compatibility_date = "2026-05-20"
+workers_dev = true
 
 [vars]
 OPENAI_TEXT_MODEL = "gpt-4o-mini"
