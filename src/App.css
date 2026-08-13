@@ -518,6 +518,10 @@ textarea:focus {
   letter-spacing: 0;
 }
 
+.generate-scroll-hint {
+  display: none;
+}
+
 .preview-panel {
   min-height: 650px;
 }
@@ -2217,6 +2221,17 @@ textarea:focus {
   .preview-panel {
     order: 2;
     min-height: auto;
+    scroll-margin-top: 16px;
+  }
+
+  .generate-scroll-hint {
+    display: block;
+    margin: 12px 0 0;
+    color: var(--gcu-dark-grey);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
   }
 
   .proof-with-thumbs.has-thumbnails,

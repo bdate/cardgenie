@@ -816,6 +816,7 @@ function App() {
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
+  const previewPanelRef = useRef<HTMLElement | null>(null)
   const followGenerationJobRef = useRef<(jobId: string, signatureName: string) => Promise<void>>(
     async () => undefined,
   )
@@ -947,6 +948,18 @@ function App() {
 
     return () => window.clearInterval(timer)
   }, [generationLines.length, isGenerating])
+
+  useEffect(() => {
+    if (!isGenerating || !window.matchMedia('(max-width: 980px)').matches) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isGenerating])
 
   useEffect(() => {
     if (!sharedCardId) {
@@ -1743,9 +1756,10 @@ function App() {
                 ? `Regenerate card - ${cardGenerationCost} credits`
                 : `Generate card - ${cardGenerationCost} credits`}
           </button>
+          <p className="generate-scroll-hint">Your card appears just below. We’ll scroll you there when you generate.</p>
         </form>}
 
-        {showProofPanel && <section className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
+        {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           <div className="panel-heading proof-heading">
             {!isRecipientView && <span>02</span>}
             <div>
