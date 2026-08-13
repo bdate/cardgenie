@@ -622,6 +622,194 @@ const getCardRecord = async (env, cardId) => {
   return fallbackCardStore.get(cardId) || null
 }
 
+const jobStoreKey = (jobId) => `job:${jobId}`
+const generateJobTimeoutMs = 3 * 60 * 1000
+const generateJobMaxAttempts = 3
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const isTransientGenerationError = (error) => {
+  if (!error || isSafetyRejection(error) || error.publicMessage) {
+    return false
+  }
+
+  return /timeout|timed out|429|500|502|503|504|524|rate.?limit|overloaded|econnreset|network|fetch failed|temporar|try again/i.test(
+    getErrorText(error),
+  )
+}
+
+const saveGenerateJob = async (env, job) => {
+  const record = { ...job, updatedAt: Date.now() }
+
+  if (env.CARD_STORE) {
+    await env.CARD_STORE.put(jobStoreKey(record.id), JSON.stringify(record), {
+      expirationTtl: 60 * 60 * 24,
+    })
+    return record
+  }
+
+  fallbackCardStore.set(jobStoreKey(record.id), record)
+  return record
+}
+
+const getGenerateJob = async (env, jobId) => {
+  if (!jobId) {
+    return null
+  }
+
+  if (env.CARD_STORE) {
+    return (await env.CARD_STORE.get(jobStoreKey(jobId), 'json')) || null
+  }
+
+  return fallbackCardStore.get(jobStoreKey(jobId)) || null
+}
+
+const publicGenerateJob = (job) => {
+  if (!job) {
+    return null
+  }
+
+  return {
+    jobId: job.id,
+    status: job.status,
+    error: job.error || undefined,
+    message: job.result?.message,
+    closing: job.result?.closing,
+    imageUrl: job.result?.imageUrl,
+  }
+}
+
+const failGenerateJob = async (env, job, error, details, photoCount) => {
+  const message = publicGenerationError(error, 'Unable to generate the card. Please try again.', {
+    hasPhotos: photoCount > 0,
+    photoCount,
+    details,
+  })
+
+  const failed = {
+    ...job,
+    status: 'failed',
+    error: message,
+    referenceImages: [],
+    result: null,
+  }
+
+  try {
+    return await saveGenerateJob(env, failed)
+  } catch (saveError) {
+    console.error(saveError)
+    return { ...failed, updatedAt: Date.now() }
+  }
+}
+
+const expireStuckGenerateJob = async (env, job) => {
+  if (!job || job.status === 'complete' || job.status === 'failed') {
+    return job
+  }
+
+  if (Date.now() - (job.updatedAt || job.createdAt || 0) < generateJobTimeoutMs) {
+    return job
+  }
+
+  try {
+    return await saveGenerateJob(env, {
+      ...job,
+      status: 'failed',
+      error:
+        'Card Genie took too long to finish this card. Please try generating again. No credits were used.',
+      referenceImages: [],
+      result: null,
+    })
+  } catch (error) {
+    console.error(error)
+    return {
+      ...job,
+      status: 'failed',
+      error:
+        'Card Genie took too long to finish this card. Please try generating again. No credits were used.',
+      referenceImages: [],
+      result: null,
+      updatedAt: Date.now(),
+    }
+  }
+}
+
+const processGenerateJob = async (env, jobInput) => {
+  const jobId = typeof jobInput === 'string' ? jobInput : jobInput?.id
+  let job = typeof jobInput === 'object' && jobInput ? jobInput : null
+
+  try {
+    job = (await getGenerateJob(env, jobId)) || job
+  } catch (error) {
+    if (!job) {
+      throw error
+    }
+
+    console.error(error)
+  }
+
+  if (!job || job.status === 'complete' || job.status === 'failed') {
+    return
+  }
+
+  job = await saveGenerateJob(env, { ...job, status: 'processing' })
+  const details = job.details || {}
+  const referenceImages = normalizeReferenceImages(job.referenceImages)
+  let lastError
+
+  for (let attempt = 1; attempt <= generateJobMaxAttempts; attempt += 1) {
+    try {
+      const openai = getOpenAI(env)
+      const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
+      const [copy, imageUrl] = await Promise.all([
+        generateCopy(openai, env, details, '', referenceImages, likenessBrief),
+        generateImage(openai, env, details, '', 'new', referenceImages, likenessBrief),
+      ])
+
+      if (!copy.message || !imageUrl) {
+        throw new Error('OpenAI did not return both a message and an image.')
+      }
+
+      try {
+        await saveGenerateJob(env, {
+          ...job,
+          status: 'complete',
+          error: '',
+          referenceImages: [],
+          result: {
+            message: copy.message,
+            closing: copy.closing,
+            imageUrl,
+          },
+        })
+        return
+      } catch (saveError) {
+        console.error(saveError)
+        const persistError = new Error(
+          'The card was created, but we could not save it. Please try generating again.',
+        )
+        persistError.publicMessage = persistError.message
+        throw persistError
+      }
+    } catch (error) {
+      lastError = error
+      console.error(error)
+
+      if (!isTransientGenerationError(error) || attempt === generateJobMaxAttempts) {
+        await failGenerateJob(env, job, error, details, referenceImages.length)
+        return
+      }
+
+      await saveGenerateJob(env, { ...job, status: 'processing', attempt })
+      await sleep(1500 * attempt)
+    }
+  }
+
+  if (lastError) {
+    await failGenerateJob(env, job, lastError, details, referenceImages.length)
+  }
+}
+
 const getCardSummary = (record, request, env) => ({
   ...record,
   shareUrl: getShareUrl(request, env, record.id),
@@ -1204,13 +1392,25 @@ const handleDeliverCard = async (request, env) => {
   }
 }
 
-const handleGenerateCard = async (request, env) => {
+const handleGenerateCard = async (request, env, ctx) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
   if (missingKeyResponse) {
     return missingKeyResponse
   }
 
-  const payload = await readJson(request)
+  let payload
+
+  try {
+    payload = await readJson(request)
+  } catch {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'The card request was incomplete. Please try generating again.' },
+      400,
+    )
+  }
+
   const { referenceImages: rawReferenceImages, ...details } = payload || {}
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
@@ -1219,36 +1419,73 @@ const handleGenerateCard = async (request, env) => {
     return jsonResponse(request, env, { error: `Missing required fields: ${missingFields.join(', ')}` }, 400)
   }
 
+  let job
+
   try {
-    const openai = getOpenAI(env)
-    const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
-    const [copy, imageUrl] = await Promise.all([
-      generateCopy(openai, env, details, '', referenceImages, likenessBrief),
-      generateImage(openai, env, details, '', 'new', referenceImages, likenessBrief),
-    ])
-
-    if (!copy.message || !imageUrl) {
-      throw new Error('OpenAI did not return both a message and an image.')
-    }
-
-    return jsonResponse(request, env, {
-      message: copy.message,
-      closing: copy.closing,
-      imageUrl,
+    job = await saveGenerateJob(env, {
+      id: createCardId(),
+      status: 'queued',
+      details,
+      referenceImages,
+      createdAt: Date.now(),
+      attempt: 0,
+      error: '',
+      result: null,
     })
   } catch (error) {
     console.error(error)
     return jsonResponse(
       request,
       env,
-      {
-        error: publicGenerationError(error, 'Unable to generate the card.', {
-          hasPhotos: referenceImages.length > 0,
-          photoCount: referenceImages.length,
-          details,
-        }),
-      },
-      isSafetyRejection(error) ? 400 : 500,
+      { error: 'Unable to start creating the card. Please try again.' },
+      500,
+    )
+  }
+
+  const work = processGenerateJob(env, job).catch(async (error) => {
+    console.error(error)
+    try {
+      await failGenerateJob(env, job, error, details, referenceImages.length)
+    } catch (failError) {
+      console.error(failError)
+    }
+  })
+
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(work)
+  } else {
+    void work
+  }
+
+  return jsonResponse(request, env, { jobId: job.id, status: 'queued' }, 202)
+}
+
+const handleGetGenerateJob = async (request, env, jobId) => {
+  if (!jobId) {
+    return jsonResponse(request, env, { error: 'Missing card job.' }, 400)
+  }
+
+  try {
+    let job = await getGenerateJob(env, jobId)
+
+    if (!job) {
+      return jsonResponse(
+        request,
+        env,
+        { error: 'We could not find that card job. It may have expired. Please generate again.' },
+        404,
+      )
+    }
+
+    job = await expireStuckGenerateJob(env, job)
+    return jsonResponse(request, env, publicGenerateJob(job))
+  } catch (error) {
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Unable to check on your card. Please try again.' },
+      500,
     )
   }
 }
@@ -1350,7 +1587,7 @@ const handleRefineCopy = async (request, env) => {
   }
 }
 
-const handleRequest = async (request, env) => {
+const handleRequest = async (request, env, ctx) => {
   const url = new URL(request.url)
 
   if (request.method === 'OPTIONS') {
@@ -1387,7 +1624,15 @@ const handleRequest = async (request, env) => {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/generate-card') {
-    return handleGenerateCard(request, env)
+    return handleGenerateCard(request, env, ctx)
+  }
+
+  if (request.method === 'GET' && url.pathname.startsWith('/api/generate-jobs/')) {
+    return handleGetGenerateJob(
+      request,
+      env,
+      decodeURIComponent(url.pathname.replace('/api/generate-jobs/', '')),
+    )
   }
 
   if (request.method === 'POST' && url.pathname === '/api/refine-image') {
@@ -1402,9 +1647,9 @@ const handleRequest = async (request, env) => {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
-      return await handleRequest(request, env)
+      return await handleRequest(request, env, ctx)
     } catch (error) {
       console.error(error)
       return jsonResponse(

@@ -659,6 +659,14 @@ textarea:focus {
   margin: 0 auto 24px;
 }
 
+.creative-loader .loader-note {
+  margin: 16px auto 0;
+  color: var(--gcu-dark-grey);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .creative-loader ul {
   display: grid;
   gap: 10px;

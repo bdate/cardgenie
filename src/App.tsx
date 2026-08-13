@@ -138,7 +138,7 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   const name = error instanceof Error ? error.name : ''
 
   if (name === 'AbortError') {
-    return 'The request was interrupted. Please try generating the card again.'
+    return 'The request was interrupted. If you left Card Genie, come back to this page and we will check for your card.'
   }
 
   if (
@@ -151,10 +151,154 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   }
 
   if (/timeout|timed out|504|524/i.test(message)) {
-    return 'Card Genie took too long to finish this card. Please try again in a moment.'
+    return 'Card Genie took too long to finish this card. Please try again in a moment. No credits were used.'
   }
 
   return message || fallbackMessage
+}
+
+const generationJobStorageKey = 'cardgenie.generationJob'
+const generateJobPollMs = 2000
+const generateJobClientTimeoutMs = 4 * 60 * 1000
+const generateJobMaxPollFailures = 15
+const generationLostConnectionMessage =
+  'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No credits are used until the card is ready.'
+
+const readStoredGenerationJob = () => {
+  try {
+    const raw =
+      window.localStorage.getItem(generationJobStorageKey) ||
+      window.sessionStorage.getItem(generationJobStorageKey)
+    const parsed = raw
+      ? (JSON.parse(raw) as { jobId?: string; startedAt?: number; details?: CardDetails })
+      : null
+
+    if (parsed?.jobId) {
+      return {
+        jobId: parsed.jobId,
+        startedAt: parsed.startedAt || Date.now(),
+        details: parsed.details,
+      }
+    }
+  } catch {
+    // Ignore unreadable storage.
+  }
+
+  return null
+}
+
+const writeStoredGenerationJob = (jobId: string, cardDetails?: CardDetails) => {
+  const payload = JSON.stringify({
+    jobId,
+    startedAt: Date.now(),
+    details: cardDetails || null,
+  })
+
+  try {
+    window.localStorage.setItem(generationJobStorageKey, payload)
+  } catch {
+    // Private browsing or full storage should not stop this session's poll.
+  }
+
+  try {
+    window.sessionStorage.setItem(generationJobStorageKey, payload)
+  } catch {
+    // Ignore session storage failures; localStorage or in-memory polling can still work.
+  }
+}
+
+const clearStoredGenerationJob = () => {
+  try {
+    window.localStorage.removeItem(generationJobStorageKey)
+  } catch {
+    // Ignore storage failures while clearing a finished or failed job.
+  }
+
+  try {
+    window.sessionStorage.removeItem(generationJobStorageKey)
+  } catch {
+    // Ignore storage failures while clearing a finished or failed job.
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+type RetryableError = Error & { retryable?: boolean }
+
+const waitForGenerationJob = async (jobId: string, isCurrent: () => boolean) => {
+  const startedAt = Date.now()
+  let failures = 0
+
+  while (isCurrent()) {
+    if (Date.now() - startedAt > generateJobClientTimeoutMs) {
+      throw new Error(
+        'Card Genie took too long to finish this card. Please try generating again. No credits were used.',
+      )
+    }
+
+    try {
+      const response = await fetch(apiUrl(`/api/generate-jobs/${encodeURIComponent(jobId)}`))
+      const data = await getApiJson(response, 'Unable to check on your card.')
+
+      if (!data || typeof data !== 'object') {
+        const error = new Error('Unable to check on your card.') as RetryableError
+        error.retryable = true
+        throw error
+      }
+
+      if (response.status === 404) {
+        throw new Error(
+          data.error && data.error !== 'Not found'
+            ? data.error
+            : 'We could not find that card job. It may have expired. Please generate again.',
+        )
+      }
+
+      if (!response.ok) {
+        const error = new Error(data.error || 'Unable to check on your card.') as RetryableError
+        error.retryable = true
+        throw error
+      }
+
+      failures = 0
+
+      if (data.status === 'failed') {
+        throw new Error(data.error || 'Unable to generate the card. Please try again.')
+      }
+
+      if (data.status === 'complete') {
+        if (!data.imageUrl || !data.message) {
+          throw new Error(
+            'The card finished, but the cover or inside message was missing. Please try generating again.',
+          )
+        }
+
+        return data as { message: string; closing?: string; imageUrl: string }
+      }
+    } catch (error) {
+      const retryable =
+        Boolean((error as RetryableError).retryable) ||
+        error instanceof TypeError ||
+        (error instanceof Error &&
+          /^(load failed|failed to fetch|networkerror when attempting to fetch resource|network request failed|unable to check on your card)/i.test(
+            error.message,
+          ))
+
+      if (!retryable) {
+        throw error
+      }
+
+      failures += 1
+
+      if (failures >= generateJobMaxPollFailures) {
+        throw new Error(generationLostConnectionMessage)
+      }
+    }
+
+    await sleep(generateJobPollMs)
+  }
+
+  throw new Error('The card request was interrupted. Please try generating the card again.')
 }
 
 const stripCodeFence = (value: string) =>
@@ -671,6 +815,10 @@ function App() {
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
+  const generationPollIdRef = useRef(0)
+  const followGenerationJobRef = useRef<(jobId: string, signatureName: string) => Promise<void>>(
+    async () => undefined,
+  )
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -715,7 +863,7 @@ function App() {
       `Coming up with a creative ${details.occasion || 'card'} image for ${envelopeLabel}.`,
       `Writing a ${details.tone.toLowerCase()} note that sounds personal, not canned.`,
       `Blending the ${details.imageStyle.toLowerCase()} look with the story you shared.`,
-      'Getting the envelope, cover, and inside message ready for a first look.',
+      'You can switch apps. We will keep working and the card will be waiting when you come back.',
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
@@ -851,6 +999,33 @@ function App() {
     void loadSharedCard()
   }, [sharedCardId])
 
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const stored = readStoredGenerationJob()
+    if (!stored?.jobId) {
+      return
+    }
+
+    if (Date.now() - stored.startedAt > generateJobClientTimeoutMs) {
+      clearStoredGenerationJob()
+      setError('A previous card took too long to finish. Please generate again. No credits were used.')
+      return
+    }
+
+    if (stored.details) {
+      setDetails((current) => ({
+        ...current,
+        ...stored.details,
+      }))
+    }
+
+    const signatureName = stored.details?.senderName?.trim() || 'Your Name'
+    void followGenerationJobRef.current(stored.jobId, signatureName)
+  }, [isRecipientView])
+
   const updateDetails = (field: keyof CardDetails, value: string) => {
     setDetails((current) => ({
       ...current,
@@ -922,6 +1097,66 @@ function App() {
     setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
   }
 
+  const finishGeneratedCard = (data: { message: string; closing?: string; imageUrl: string }, signatureName: string) => {
+    const copy = normalizeCardCopy(data.message, data.closing, signatureName)
+    setCard({
+      imageUrl: data.imageUrl,
+      message: copy.message,
+      closing: copy.closing,
+    })
+    setCardGreeting('')
+    setCardSignature(signatureName)
+    setStep('envelope')
+    setShowCompletionNote(true)
+    setCredits((current) => current - cardGenerationCost)
+    setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
+    window.setTimeout(() => setShowCompletionNote(false), 6000)
+    clearStoredGenerationJob()
+  }
+
+  const followGenerationJob = async (jobId: string, signatureName: string) => {
+    const pollId = generationPollIdRef.current + 1
+    generationPollIdRef.current = pollId
+    const isCurrent = () => generationPollIdRef.current === pollId
+
+    setIsGenerating(true)
+    setError('')
+    setShowEditor(false)
+    setShowPolishDialog(false)
+    setHasViewedInside(false)
+    setStep('envelope')
+
+    try {
+      const data = await waitForGenerationJob(jobId, isCurrent)
+      if (!isCurrent()) {
+        return
+      }
+      finishGeneratedCard(data, signatureName)
+    } catch (caughtError) {
+      if (!isCurrent()) {
+        return
+      }
+
+      const message = getFriendlyErrorMessage(caughtError, 'Unable to generate the card.')
+      const keepStoredJob =
+        message === generationLostConnectionMessage ||
+        (caughtError instanceof Error && caughtError.name === 'AbortError')
+
+      if (!keepStoredJob) {
+        clearStoredGenerationJob()
+      }
+
+      setError(message)
+      setCreditNotice('No credits were used because the card was not created.')
+    } finally {
+      if (isCurrent()) {
+        setIsGenerating(false)
+      }
+    }
+  }
+
+  followGenerationJobRef.current = followGenerationJob
+
   const generateCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -950,6 +1185,8 @@ function App() {
         // Unsupported, denied, or battery saver — card generation can still continue.
       })
 
+    let startedBackgroundJob = false
+
     try {
       const response = await fetch(apiUrl('/api/generate-card'), {
         method: 'POST',
@@ -962,34 +1199,35 @@ function App() {
         }),
       })
 
-      const data = await getApiJson(response, 'Unable to generate the card.')
+      const data = await getApiJson(response, 'Unable to start creating the card.')
 
       if (!response.ok) {
-        throw new Error(data.error || 'Unable to generate the card.')
+        throw new Error(data.error || 'Unable to start creating the card. Please try again.')
+      }
+
+      if (data.jobId) {
+        startedBackgroundJob = true
+        writeStoredGenerationJob(data.jobId, details)
+        await followGenerationJob(data.jobId, senderLabel)
+        return
       }
 
       if (!data.imageUrl || !data.message) {
-        throw new Error('Unable to generate the card.')
+        throw new Error('Unable to start creating the card. Please try again.')
       }
 
-      const copy = normalizeCardCopy(data.message, data.closing, senderLabel)
-      setCard({
-        imageUrl: data.imageUrl,
-        message: copy.message,
-        closing: copy.closing,
-      })
-      setCardGreeting('')
-      setCardSignature(senderLabel)
-      setStep('envelope')
-      setShowCompletionNote(true)
-      setCredits((current) => current - cardGenerationCost)
-      setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
-      window.setTimeout(() => setShowCompletionNote(false), 6000)
+      finishGeneratedCard(data, senderLabel)
     } catch (caughtError) {
+      if (startedBackgroundJob) {
+        return
+      }
+
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
       setCreditNotice('No credits were used because the card was not created.')
     } finally {
-      setIsGenerating(false)
+      if (!startedBackgroundJob) {
+        setIsGenerating(false)
+      }
     }
   }
 
@@ -1500,7 +1738,7 @@ function App() {
 
           <button className="primary-button" disabled={isGenerating} aria-busy={isGenerating}>
             {isGenerating
-              ? 'Generating your card...'
+              ? 'Creating your card...'
               : card
                 ? `Regenerate card - ${cardGenerationCost} credits`
                 : `Generate card - ${cardGenerationCost} credits`}
@@ -1548,6 +1786,7 @@ function App() {
               </div>
               <span className="loader-kicker">Card Genie is creating</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
+              <p className="loader-note">You can switch apps. We will keep working, and the card will be waiting when you come back.</p>
             </div>
           )}
 
@@ -1559,7 +1798,7 @@ function App() {
             </div>
           )}
 
-          {isRecipientView && error && <div className="error-message">{error}</div>}
+          {error && !isGenerating && !isLoadingSharedCard && <div className="error-message">{error}</div>}
 
           {!isGenerating && !isLoadingSharedCard && !card && (
             <div className="empty-state">
