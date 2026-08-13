@@ -537,8 +537,9 @@ textarea:focus {
 
 .photo-add-clock {
   position: relative;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
   border: 2px solid var(--gcu-dark-teal);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
