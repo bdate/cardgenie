@@ -1340,7 +1340,7 @@ function App() {
             <div className="style-field-header">
               <label htmlFor="image-style">Image style</label>
               <a className="style-lookbook-link" href="/styles/" target="_blank" rel="noreferrer">
-                See the lookbook
+                See samples
               </a>
             </div>
             <select
