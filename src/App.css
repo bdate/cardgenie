@@ -238,6 +238,37 @@ label {
   letter-spacing: 0.02em;
 }
 
+.style-field {
+  display: grid;
+  gap: 7px;
+}
+
+.style-field-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.style-field-header label {
+  margin: 0;
+}
+
+.style-lookbook-link {
+  color: var(--gcu-dark-teal);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.style-lookbook-link:hover,
+.style-lookbook-link:focus-visible {
+  color: var(--gcu-ink);
+  text-decoration: underline;
+  outline: none;
+}
+
 input,
 select,
 textarea {
@@ -1567,10 +1598,6 @@ textarea:focus {
   align-items: stretch;
 }
 
-.editor-layout.is-inside-editor {
-  grid-template-columns: 1fr;
-}
-
 .editor-preview {
   position: relative;
   display: grid;
@@ -1645,6 +1672,10 @@ textarea:focus {
   animation: none;
 }
 
+.editor-inside-preview .open-card-message {
+  padding: 28px 22px 24px;
+}
+
 .refinement-panel {
   display: grid;
   grid-template-columns: 1fr;
@@ -1713,10 +1744,47 @@ textarea:focus {
 
 .refinement-card textarea {
   min-height: 160px;
+  caret-color: var(--gcu-ink);
+  color: var(--gcu-ink);
 }
 
 .refinement-card label textarea {
   min-height: 210px;
+}
+
+.ai-copy-link {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  color: var(--gcu-dark-teal);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ai-copy-link:hover,
+.ai-copy-link:focus-visible {
+  color: var(--gcu-ink);
+  outline: none;
+}
+
+.ai-copy-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  border: 1px solid rgba(143, 208, 201, 0.34);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ai-copy-panel textarea {
+  min-height: 110px;
 }
 
 .inside-refinement-card {
@@ -1769,7 +1837,7 @@ textarea:focus {
 }
 
 .inside-refinement-card label textarea {
-  min-height: 380px;
+  min-height: 180px;
 }
 
 .polish-dialog-backdrop {
@@ -2137,8 +2205,7 @@ textarea:focus {
     min-height: 300px;
   }
 
-  .refinement-panel,
-  .editor-layout.is-inside-editor {
+  .refinement-panel {
     grid-template-columns: 1fr;
   }
 
@@ -2336,7 +2403,7 @@ textarea:focus {
   }
 
   .inside-refinement-card label textarea {
-    min-height: 300px;
+    min-height: 160px;
   }
 
   .polish-dialog-backdrop {

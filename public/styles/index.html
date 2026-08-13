@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Genie Style Lookbook</title>
+    <meta name="description" content="See how each Card Genie image style looks on the same greeting-card scene." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Playfair+Display:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #315f5b;
+        --dark-teal: #3f9b91;
+        --orange: #f59e33;
+        --cream: #fff8ef;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 15% 10%, rgba(245, 158, 51, 0.28), transparent 34%),
+          radial-gradient(circle at 85% 4%, rgba(143, 208, 201, 0.36), transparent 30%),
+          linear-gradient(135deg, #fff8ef 0%, #f3fbfa 48%, #eef3ff 100%);
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 36px 20px 80px;
+      }
+
+      .top-link {
+        color: var(--dark-teal);
+        font-weight: 800;
+        font-size: 0.78rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-decoration: none;
+      }
+
+      h1 {
+        margin: 18px 0 10px;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: clamp(2.2rem, 5vw, 4rem);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+
+      .intro {
+        max-width: 640px;
+        margin: 0 0 32px;
+        color: #666;
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 18px;
+      }
+
+      figure {
+        margin: 0;
+        overflow: hidden;
+        border: 1px solid rgba(63, 155, 145, 0.2);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 18px 44px rgba(63, 155, 145, 0.12);
+      }
+
+      figure img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 3 / 4;
+        object-fit: cover;
+        background: #efe7db;
+      }
+
+      figcaption {
+        display: grid;
+        gap: 6px;
+        padding: 12px 14px 14px;
+      }
+
+      figcaption strong {
+        font-size: 0.92rem;
+        line-height: 1.25;
+      }
+
+      .tag {
+        width: fit-content;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .tag-photo {
+        color: #7a4a12;
+        background: rgba(245, 158, 51, 0.18);
+      }
+
+      .tag-likeness {
+        color: var(--dark-teal);
+        background: rgba(143, 208, 201, 0.28);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="top-link" href="/">Back to Card Genie</a>
+      <h1>Style lookbook</h1>
+      <p class="intro">
+        Same garden scene, fifteen treatments. Photorealistic is the photo-like look. Every other style keeps a
+        resemblance in its own medium, not a replica of the photo.
+      </p>
+      <div class="gallery">
+        <figure>
+          <img src="./style-photorealistic.jpg" alt="Photorealistic warm portrait photography sample" loading="eager" />
+          <figcaption>
+            <span class="tag tag-photo">Photo-like</span>
+            <strong>Photorealistic warm portrait photography</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-editorial.jpg" alt="Premium editorial illustration sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Premium editorial illustration</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-watercolor.jpg" alt="Watercolor greeting card illustration sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Watercolor greeting card illustration</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-comic.jpg" alt="Comic book art sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Comic book art</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-storybook.jpg" alt="Whimsical storybook illustration sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Whimsical storybook illustration</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-3d-film.jpg" alt="Animated 3D family-film style sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Animated 3D family-film style</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-vector.jpg" alt="Minimal modern flat vector art sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Minimal modern flat vector art</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-papercut.jpg" alt="Elegant botanical paper-cut style sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Elegant botanical paper-cut style</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-pencil.jpg" alt="Cozy hand-drawn colored pencil sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Cozy hand-drawn colored pencil</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-poster.jpg" alt="Retro travel poster style sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Retro travel poster style</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-claymation.jpg" alt="Claymation-inspired 3D scene sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Claymation-inspired 3D scene</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-collage.jpg" alt="Luxury foil and paper collage sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Luxury foil and paper collage</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-nursery.jpg" alt="Soft pastel nursery-book illustration sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Soft pastel nursery-book illustration</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-graphic.jpg" alt="Bold graphic poster art sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Bold graphic poster art</strong>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="./style-vintage.jpg" alt="Vintage greeting card illustration sample" loading="lazy" />
+          <figcaption>
+            <span class="tag tag-likeness">Likeness</span>
+            <strong>Vintage greeting card illustration</strong>
+          </figcaption>
+        </figure>
+      </div>
+    </main>
+  </body>
+</html>

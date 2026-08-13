@@ -107,6 +107,8 @@ const staticPageRedirects: Record<string, string> = {
   '/privacy/': '/privacy/index.html',
   '/sms-opt-in': '/sms-opt-in/index.html',
   '/sms-opt-in/': '/sms-opt-in/index.html',
+  '/styles': '/styles/index.html',
+  '/styles/': '/styles/index.html',
   '/terms': '/terms/index.html',
   '/terms/': '/terms/index.html',
 }
@@ -153,45 +155,6 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   }
 
   return message || fallbackMessage
-}
-
-const getLengthRange = (length: string) => {
-  const match = length.match(/(\d+)\s*-\s*(\d+)\s*words/i)
-  return match ? { min: Number(match[1]), max: Number(match[2]) } : null
-}
-
-const trimToWordLimit = (message: string, length: string) => {
-  const range = getLengthRange(length)
-
-  if (!range) {
-    return message.trim()
-  }
-
-  const cleanMessage = message.trim().replace(/\s+/g, ' ')
-  const words = cleanMessage.split(/\s+/).filter(Boolean)
-
-  if (words.length <= range.max) {
-    return cleanMessage
-  }
-
-  const sentences = cleanMessage.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []
-  let fitted = ''
-
-  for (const sentence of sentences) {
-    const candidate = `${fitted} ${sentence.trim()}`.trim()
-
-    if (candidate.split(/\s+/).filter(Boolean).length > range.max) {
-      break
-    }
-
-    fitted = candidate
-  }
-
-  if (fitted) {
-    return /[.!?]$/.test(fitted) ? fitted : `${fitted}.`
-  }
-
-  return `${words.slice(0, range.max).join(' ').replace(/[,\s]+$/, '')}.`
 }
 
 const stripCodeFence = (value: string) =>
@@ -251,7 +214,7 @@ const splitMessageParts = (message: string, senderName: string) => {
 
 const splitIntoParagraphs = (message: string) => {
   const explicitParagraphs = message
-    .split(/\n{2,}/)
+    .split(/\n+/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
 
@@ -275,6 +238,14 @@ const splitIntoParagraphs = (message: string) => {
   }
 
   return paragraphs
+}
+
+const normalizeCardCopy = (message: string, closing: string | undefined, senderName: string) => {
+  const parts = splitMessageParts(message, senderName)
+  return {
+    message: parts.body,
+    closing: (closing || '').trim() || parts.closing,
+  }
 }
 
 const sanitizeFilePart = (value: string) =>
@@ -687,15 +658,8 @@ function App() {
   const defaultGreeting = ''
   const insideGreeting = cardGreeting ?? defaultGreeting
   const cardSignatureLabel = cardSignature ?? senderLabel
-  const rawMessage = card?.message ?? ''
-  const messageParts = useMemo(() => {
-    const parts = splitMessageParts(rawMessage, senderLabel)
-    return {
-      body: parts.body,
-      closing: card?.closing ?? parts.closing,
-    }
-  }, [card?.closing, rawMessage, senderLabel])
-  const cardMessage = useMemo(() => trimToWordLimit(messageParts.body, details.length), [details.length, messageParts.body])
+  const cardMessage = card?.message ?? ''
+  const cardClosing = card?.closing || 'With love,'
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
   const messageDensity = cardMessage.length > 620 ? 'is-long' : cardMessage.length > 420 ? 'is-medium' : 'is-short'
   const fileNameBase = useMemo(
@@ -713,11 +677,11 @@ function App() {
         ? createInsideImageUrl({
             greeting: insideGreeting,
             paragraphs: messageParagraphs,
-            closing: messageParts.closing,
+            closing: cardClosing,
             signature: cardSignatureLabel,
           })
         : '',
-    [card, cardSignatureLabel, insideGreeting, isRecipientView, messageParagraphs, messageParts.closing],
+    [card, cardSignatureLabel, cardClosing, insideGreeting, isRecipientView, messageParagraphs],
   )
   const generationLines = useMemo(
     () => [
@@ -777,7 +741,16 @@ function App() {
           senderName: shared.details.senderName || current.senderName,
           occasion: shared.details.occasion || current.occasion,
         }))
-        setCard(shared.card)
+        const copy = normalizeCardCopy(
+          shared.card.message,
+          shared.card.closing,
+          shared.details.senderName || senderLabel,
+        )
+        setCard({
+          ...shared.card,
+          message: copy.message,
+          closing: copy.closing,
+        })
         setCardGreeting(shared.greeting || null)
         setCardSignature(shared.signature || null)
         setShowEditor(false)
@@ -894,10 +867,11 @@ function App() {
         throw new Error('Unable to generate the card.')
       }
 
+      const copy = normalizeCardCopy(data.message, data.closing, senderLabel)
       setCard({
         imageUrl: data.imageUrl,
-        message: data.message,
-        closing: data.closing,
+        message: copy.message,
+        closing: copy.closing,
       })
       setCardGreeting('')
       setCardSignature(senderLabel)
@@ -1064,7 +1038,7 @@ function App() {
           details,
           refinement: copyRefinement,
           currentMessage: cardMessage,
-          currentClosing: messageParts.closing,
+          currentClosing: cardClosing,
           referenceImages: referenceImagePayload,
         }),
       })
@@ -1079,12 +1053,13 @@ function App() {
         throw new Error('Unable to refine the inside message.')
       }
 
+      const copy = normalizeCardCopy(data.message, data.closing, senderLabel)
       setCard((current) =>
         current
           ? {
               ...current,
-              message: data.message,
-              closing: data.closing,
+              message: copy.message,
+              closing: copy.closing,
             }
           : current,
       )
@@ -1111,7 +1086,7 @@ function App() {
       card: {
         imageUrl: card.imageUrl,
         message: cardMessage,
-        closing: messageParts.closing,
+        closing: cardClosing,
       },
       greeting: insideGreeting,
       signature: cardSignatureLabel,
@@ -1343,9 +1318,15 @@ function App() {
             </label>
           </div>
 
-          <label>
-            Image style
+          <div className="style-field">
+            <div className="style-field-header">
+              <label htmlFor="image-style">Image style</label>
+              <a className="style-lookbook-link" href="/styles/" target="_blank" rel="noreferrer">
+                See the lookbook
+              </a>
+            </div>
             <select
+              id="image-style"
               value={details.imageStyle}
               onChange={(event) => updateDetails('imageStyle', event.target.value)}
             >
@@ -1353,7 +1334,7 @@ function App() {
                 <option key={style}>{style}</option>
               ))}
             </select>
-          </label>
+          </div>
 
           <label>
             Personal details
@@ -1579,7 +1560,7 @@ function App() {
                           <p key={paragraph}>{paragraph}</p>
                         ))}
                       </div>
-                      <div className="card-closing">{messageParts.closing}</div>
+                      <div className="card-closing">{cardClosing}</div>
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                     <div className="card-opening-cover">
@@ -1604,7 +1585,7 @@ function App() {
                           <p key={paragraph}>{paragraph}</p>
                         ))}
                       </div>
-                      <div className="card-closing">{messageParts.closing}</div>
+                      <div className="card-closing">{cardClosing}</div>
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                   </div>
@@ -1826,20 +1807,38 @@ function App() {
                     </button>
                   </nav>
 
-                  <div className={`editor-layout ${editorTab === 'inside' ? 'is-inside-editor' : ''}`}>
-                    {editorTab === 'front' && (
-                      <div className="editor-preview">
-                        <div className="image-zoom" tabIndex={0} aria-label="Cover preview. Hover or focus to enlarge.">
-                          <div className="card-cover-frame editor-cover-frame">
-                            <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
+                  <div className="editor-layout">
+                    <div className="editor-preview">
+                      {editorTab === 'front' ? (
+                        <>
+                          <div className="image-zoom" tabIndex={0} aria-label="Cover preview. Hover or focus to enlarge.">
+                            <div className="card-cover-frame editor-cover-frame">
+                              <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
+                            </div>
+                            <div className="image-zoom-popover" aria-hidden="true">
+                              <img src={card.imageUrl} alt="" />
+                            </div>
                           </div>
-                          <div className="image-zoom-popover" aria-hidden="true">
-                            <img src={card.imageUrl} alt="" />
+                          <span className="zoom-hint">Hover over the cover to enlarge</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="open-card editor-inside-preview" aria-label={`Inside preview for ${recipientLabel}`}>
+                            <div className={`open-card-message ${messageDensity}`}>
+                              {insideGreeting && <span>{insideGreeting}</span>}
+                              <div className="message-paragraphs">
+                                {messageParagraphs.map((paragraph, index) => (
+                                  <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+                                ))}
+                              </div>
+                              <div className="card-closing">{cardClosing}</div>
+                              <div className="card-signature">{cardSignatureLabel}</div>
+                            </div>
                           </div>
-                        </div>
-                        <span className="zoom-hint">Hover over the cover to enlarge</span>
-                      </div>
-                    )}
+                          <span className="zoom-hint">Your edits appear on the inside as you type</span>
+                        </>
+                      )}
+                    </div>
 
                     <div className="refinement-panel">
                       {editorTab === 'front' ? (
@@ -1896,15 +1895,10 @@ function App() {
                       ) : (
                         <div className="refinement-card inside-refinement-card">
                           <div className="inside-editor-header">
-                            <h3>Edit Inside</h3>
-                            <button
-                              className="primary-button cost-button"
-                              type="button"
-                              onClick={() => setShowPolishDialog(true)}
-                            >
-                              <span>Revise Card Inside</span>
-                              <span className="button-points">{revisionCost} points</span>
-                            </button>
+                            <div>
+                              <h3>Edit the inside</h3>
+                              <p>Change the wording directly. The card on the left updates as you type.</p>
+                            </div>
                           </div>
                           <label>
                             Greeting
@@ -1921,7 +1915,7 @@ function App() {
                           <label>
                             Closing
                             <input
-                              value={messageParts.closing}
+                              value={cardClosing}
                               onChange={(event) => updateCardClosing(event.target.value)}
                             />
                           </label>
@@ -1932,50 +1926,46 @@ function App() {
                               onChange={(event) => setCardSignature(event.target.value)}
                             />
                           </label>
+                          <button
+                            className="ai-copy-link"
+                            type="button"
+                            onClick={() => setShowPolishDialog((current) => !current)}
+                          >
+                            {showPolishDialog
+                              ? 'Hide AI rewrite'
+                              : 'Want AI to create or modify this text?'}
+                          </button>
+                          {showPolishDialog && (
+                            <div className="ai-copy-panel">
+                              <label>
+                                Tell Card Genie what to change
+                                <textarea
+                                  rows={4}
+                                  value={copyRefinement}
+                                  onChange={(event) => setCopyRefinement(event.target.value)}
+                                  placeholder="Example: make it shorter, warmer, and mention pickleball."
+                                />
+                              </label>
+                              <button
+                                className="primary-button cost-button"
+                                type="button"
+                                disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
+                                aria-busy={isRefiningCopy}
+                                onClick={refineCopy}
+                              >
+                                {isRefiningCopy ? (
+                                  'Rewriting inside...'
+                                ) : (
+                                  <>
+                                    <span>Rewrite with AI</span>
+                                    <span className="button-points">{revisionCost} credits</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {showPolishDialog && (
-                <div className="polish-dialog-backdrop">
-                  <div className="polish-dialog" role="dialog" aria-modal="true" aria-labelledby="polish-title">
-                    <div className="polish-dialog-heading">
-                      <span className="polish-icon" aria-hidden="true">
-                        CG
-                      </span>
-                      <div>
-                        <h3 id="polish-title">Revise Card Inside</h3>
-                        <p>Tell Card Genie how to revise the message while keeping it personal.</p>
-                      </div>
-                    </div>
-                    <textarea
-                      rows={5}
-                      value={copyRefinement}
-                      onChange={(event) => setCopyRefinement(event.target.value)}
-                      placeholder="Example: make it shorter, warmer, funnier, or more specific about a favorite memory."
-                    />
-                    <div className="polish-dialog-actions">
-                      <button className="secondary-button" type="button" onClick={() => setShowPolishDialog(false)}>
-                        Cancel
-                      </button>
-                      <button
-                        className="primary-button cost-button"
-                        type="button"
-                        disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
-                        aria-busy={isRefiningCopy}
-                        onClick={refineCopy}
-                      >
-                        {isRefiningCopy ? (
-                          'Revising inside...'
-                        ) : (
-                          <>
-                            <span>Revise Card Inside</span>
-                            <span className="button-points">{revisionCost} points</span>
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 </div>
