@@ -814,6 +814,8 @@ function App() {
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
+  const [isAddingPhotos, setIsAddingPhotos] = useState(false)
+  const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
   const previewPanelRef = useRef<HTMLElement | null>(null)
@@ -962,6 +964,20 @@ function App() {
   }, [isGenerating])
 
   useEffect(() => {
+    if (!isAddingPhotos) {
+      setPhotoAddElapsed(0)
+      return
+    }
+
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      setPhotoAddElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    }, 250)
+
+    return () => window.clearInterval(timer)
+  }, [isAddingPhotos])
+
+  useEffect(() => {
     if (!sharedCardId) {
       return
     }
@@ -1066,6 +1082,7 @@ function App() {
     const acceptedFiles = files.slice(0, remainingSlots)
     const limitNotice = files.length > remainingSlots ? 'You can add up to 3 photos.' : ''
     setReferencePhotoNotice(limitNotice)
+    setIsAddingPhotos(true)
 
     try {
       const preparedPhotos = await Promise.all(
@@ -1097,6 +1114,8 @@ function App() {
       setReferencePhotoNotice(
         caughtError instanceof Error ? caughtError.message : 'Unable to add that photo.',
       )
+    } finally {
+      setIsAddingPhotos(false)
     }
   }
 
@@ -1729,20 +1748,31 @@ function App() {
               </ul>
             )}
             {referencePhotos.length < maxReferencePhotos && (
-              <>
+              <div className="reference-photo-actions">
                 <input
                   id="reference-photos"
                   className="reference-photo-file"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   multiple
+                  disabled={isAddingPhotos}
                   aria-describedby="reference-photos-help"
                   onChange={(event) => void addReferencePhotos(event)}
                 />
-                <label className="reference-photo-add" htmlFor="reference-photos">
-                  Add a photo
+                <label
+                  className={`reference-photo-add${isAddingPhotos ? ' is-busy' : ''}`}
+                  htmlFor="reference-photos"
+                  aria-busy={isAddingPhotos}
+                >
+                  {isAddingPhotos ? 'Adding photo...' : 'Add a photo'}
                 </label>
-              </>
+                {isAddingPhotos && (
+                  <span className="photo-add-timer" role="status" aria-live="polite">
+                    <span className="photo-add-clock" aria-hidden="true" />
+                    {`${Math.floor(photoAddElapsed / 60)}:${String(photoAddElapsed % 60).padStart(2, '0')}`}
+                  </span>
+                )}
+              </div>
             )}
             {referencePhotoNotice && <div className="field-notice">{referencePhotoNotice}</div>}
           </div>
@@ -1756,7 +1786,7 @@ function App() {
                 ? `Regenerate card - ${cardGenerationCost} credits`
                 : `Generate card - ${cardGenerationCost} credits`}
           </button>
-          <p className="generate-scroll-hint">Your card appears just below. We’ll scroll you there when you generate.</p>
+          <p className="generate-scroll-hint">Your card is being created below.</p>
         </form>}
 
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>

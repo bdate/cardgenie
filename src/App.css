@@ -511,6 +511,82 @@ textarea:focus {
   box-shadow: 0 0 0 5px rgba(245, 158, 51, 0.16);
 }
 
+.reference-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.reference-photo-add.is-busy {
+  border-color: rgba(245, 158, 51, 0.86);
+  background: #fff;
+  cursor: progress;
+}
+
+.photo-add-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gcu-dark-teal);
+  font-size: 0.92rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.photo-add-clock {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--gcu-dark-teal);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(245, 158, 51, 0.12);
+}
+
+.photo-add-clock::before,
+.photo-add-clock::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--gcu-orange);
+  transform-origin: center bottom;
+}
+
+.photo-add-clock::before {
+  height: 5px;
+  animation: photoAddMinute 1.2s linear infinite;
+}
+
+.photo-add-clock::after {
+  height: 7px;
+  animation: photoAddSecond 1s linear infinite;
+}
+
+@keyframes photoAddMinute {
+  from {
+    transform: translateX(-50%) rotate(0deg);
+  }
+
+  to {
+    transform: translateX(-50%) rotate(360deg);
+  }
+}
+
+@keyframes photoAddSecond {
+  from {
+    transform: translateX(-50%) rotate(0deg);
+  }
+
+  to {
+    transform: translateX(-50%) rotate(360deg);
+  }
+}
+
 .field-notice {
   color: #8a5a12;
   font-size: 0.86rem;
