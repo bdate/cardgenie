@@ -623,8 +623,9 @@ const getCardRecord = async (env, cardId) => {
 }
 
 const jobStoreKey = (jobId) => `job:${jobId}`
-const generateJobTimeoutMs = 3 * 60 * 1000
+const generateJobTimeoutMs = 12 * 60 * 1000
 const generateJobMaxAttempts = 3
+const generateQueueMaxDeliveryAttempts = 3
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -748,7 +749,22 @@ const processGenerateJob = async (env, jobInput) => {
     console.error(error)
   }
 
+  if (!job && jobId) {
+    for (let wait = 1; wait <= 4 && !job; wait += 1) {
+      await sleep(400 * wait)
+      job = await getGenerateJob(env, jobId)
+    }
+  }
+
   if (!job || job.status === 'complete' || job.status === 'failed') {
+    if (!job) {
+      const missing = new Error(
+        'We could not find that card job. It may have expired. Please generate again.',
+      )
+      missing.publicMessage = missing.message
+      throw missing
+    }
+
     return
   }
 
@@ -1442,19 +1458,32 @@ const handleGenerateCard = async (request, env, ctx) => {
     )
   }
 
-  const work = processGenerateJob(env, job).catch(async (error) => {
+  try {
+    if (!env.GENERATE_QUEUE || typeof env.GENERATE_QUEUE.send !== 'function') {
+      throw new Error('Generate queue is not configured.')
+    }
+
+    await env.GENERATE_QUEUE.send({ jobId: job.id })
+  } catch (error) {
     console.error(error)
     try {
-      await failGenerateJob(env, job, error, details, referenceImages.length)
+      await failGenerateJob(
+        env,
+        job,
+        new Error('Unable to start creating the card. Please try again.'),
+        details,
+        referenceImages.length,
+      )
     } catch (failError) {
       console.error(failError)
     }
-  })
 
-  if (ctx && typeof ctx.waitUntil === 'function') {
-    ctx.waitUntil(work)
-  } else {
-    void work
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Unable to start creating the card. Please try again.' },
+      500,
+    )
   }
 
   return jsonResponse(request, env, { jobId: job.id, status: 'queued' }, 202)
@@ -1646,6 +1675,60 @@ const handleRequest = async (request, env, ctx) => {
   return jsonResponse(request, env, { error: 'Not found' }, 404)
 }
 
+const handleGenerateQueue = async (batch, env) => {
+  for (const message of batch.messages) {
+    const jobId = message.body?.jobId
+
+    if (!jobId) {
+      console.error('Generate queue message was missing a job id.')
+      message.ack()
+      continue
+    }
+
+    try {
+      await processGenerateJob(env, jobId)
+      message.ack()
+    } catch (error) {
+      console.error(error)
+
+      let job = null
+      try {
+        job = await getGenerateJob(env, jobId)
+      } catch (lookupError) {
+        console.error(lookupError)
+      }
+
+      if (job?.status === 'complete' || job?.status === 'failed') {
+        message.ack()
+        continue
+      }
+
+      const attempts = Number(message.attempts) || 1
+
+      if (attempts >= generateQueueMaxDeliveryAttempts) {
+        if (job) {
+          try {
+            await failGenerateJob(
+              env,
+              job,
+              error,
+              job.details || {},
+              Array.isArray(job.referenceImages) ? job.referenceImages.length : 0,
+            )
+          } catch (failError) {
+            console.error(failError)
+          }
+        }
+
+        message.ack()
+        continue
+      }
+
+      message.retry()
+    }
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -1659,5 +1742,8 @@ export default {
         isSafetyRejection(error) ? 400 : 500,
       )
     }
+  },
+  async queue(batch, env) {
+    await handleGenerateQueue(batch, env)
   },
 }

@@ -1155,7 +1155,7 @@ const sendTextDelivery = async ({ to, copy }) => {
   return normalizedTo
 }
 
-const generateJobTimeoutMs = 3 * 60 * 1000
+const generateJobTimeoutMs = 12 * 60 * 1000
 const generateJobMaxAttempts = 3
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 

@@ -159,7 +159,7 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
 
 const generationJobStorageKey = 'cardgenie.generationJob'
 const generateJobPollMs = 2000
-const generateJobClientTimeoutMs = 4 * 60 * 1000
+const generateJobClientTimeoutMs = 12 * 60 * 1000
 const generateJobMaxPollFailures = 15
 const generationLostConnectionMessage =
   'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No credits are used until the card is ready.'

@@ -21,3 +21,14 @@ zone_name = "card-genie.com"
 [[kv_namespaces]]
 binding = "CARD_STORE"
 id = "e599b5d8c31b4d5296a7d4c8e7a8aef0"
+
+[[queues.producers]]
+queue = "cardgenie-generate"
+binding = "GENERATE_QUEUE"
+
+[[queues.consumers]]
+queue = "cardgenie-generate"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 2
+retry_delay = 15
