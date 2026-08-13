@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import './App.css'
 
@@ -376,6 +376,25 @@ const isMobileDevice = () =>
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
+type ScreenWakeLock = {
+  released: boolean
+  release: () => Promise<void>
+}
+
+const requestScreenWakeLock = async () => {
+  const nav = navigator as Navigator & {
+    wakeLock?: {
+      request: (type: 'screen') => Promise<ScreenWakeLock>
+    }
+  }
+
+  if (!nav.wakeLock) {
+    return null
+  }
+
+  return nav.wakeLock.request('screen')
+}
+
 const formatEmailAddress = (email: string) => email.trim().toLowerCase()
 
 const validateEmailAddress = (email: string) => {
@@ -651,6 +670,7 @@ function App() {
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
+  const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -703,12 +723,70 @@ function App() {
   const hasEnoughCreditsForRevision = credits >= revisionCost
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
+  const keepScreenAwake = isGenerating || isRefiningImage || isRefiningCopy || isDelivering
 
   useEffect(() => {
     if (step === 'inside') {
       setHasViewedInside(true)
     }
   }, [step])
+
+  useEffect(() => {
+    if (!keepScreenAwake) {
+      return
+    }
+
+    let cancelled = false
+
+    const acquire = async () => {
+      if (cancelled || document.visibilityState !== 'visible') {
+        return
+      }
+
+      try {
+        if (screenWakeLockRef.current && !screenWakeLockRef.current.released) {
+          return
+        }
+
+        const wakeLock = await requestScreenWakeLock()
+
+        if (cancelled) {
+          await wakeLock?.release()
+          return
+        }
+
+        screenWakeLockRef.current = wakeLock
+      } catch {
+        // Unsupported, denied, or battery saver — card generation can still continue.
+      }
+    }
+
+    const release = async () => {
+      try {
+        await screenWakeLockRef.current?.release()
+      } catch {
+        // Already released by the browser.
+      }
+
+      screenWakeLockRef.current = null
+    }
+
+    void acquire()
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void acquire()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibility)
+      void release()
+    }
+  }, [keepScreenAwake])
 
   useEffect(() => {
     if (!isGenerating) {
@@ -862,6 +940,15 @@ function App() {
     setDeliveryNotice('')
     setHasViewedInside(false)
     setStep('envelope')
+    void requestScreenWakeLock()
+      .then((wakeLock) => {
+        if (wakeLock) {
+          screenWakeLockRef.current = wakeLock
+        }
+      })
+      .catch(() => {
+        // Unsupported, denied, or battery saver — card generation can still continue.
+      })
 
     try {
       const response = await fetch(apiUrl('/api/generate-card'), {
