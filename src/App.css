@@ -1629,6 +1629,7 @@ textarea:focus {
   top: 50%;
   left: calc(100% + 18px);
   z-index: 12;
+  display: none;
   width: min(430px, 54vw);
   aspect-ratio: 5 / 7;
   overflow: hidden;
@@ -1644,11 +1645,15 @@ textarea:focus {
     transform 180ms ease;
 }
 
-.image-zoom:hover .image-zoom-popover,
-.image-zoom:focus-visible .image-zoom-popover,
-.image-zoom:focus-within .image-zoom-popover {
-  opacity: 1;
-  transform: translateY(-50%) scale(1);
+@media (hover: hover) and (pointer: fine) {
+  .image-zoom-popover {
+    display: block;
+  }
+
+  .image-zoom:hover .image-zoom-popover {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
 }
 
 .image-zoom-popover img {
@@ -1662,6 +1667,16 @@ textarea:focus {
   color: var(--gcu-grey);
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .zoom-hint {
+    display: none;
+  }
+
+  .editor-preview {
+    overflow: hidden;
+  }
 }
 
 .editor-inside-preview {

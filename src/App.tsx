@@ -1811,7 +1811,7 @@ function App() {
                     <div className="editor-preview">
                       {editorTab === 'front' ? (
                         <>
-                          <div className="image-zoom" tabIndex={0} aria-label="Cover preview. Hover or focus to enlarge.">
+                          <div className="image-zoom">
                             <div className="card-cover-frame editor-cover-frame">
                               <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
                             </div>
