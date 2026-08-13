@@ -183,15 +183,31 @@ Do not include a salutation like "Dear..." and do not include the sender name, p
 Make the body warm, specific, natural, and suitable to appear inside a digital greeting card. Keep it concise enough to fit inside a 5x7 card with generous margins. Use natural paragraph breaks based on grammar and meaning.
 `
 
-const buildReferenceImageGuidance = (hasReferenceImages) => {
+const buildStyleResemblanceDirection = (imageStyle = '') => {
+  if (/comic/i.test(imageStyle)) {
+    return 'Draw them as original comic-book characters with a clear stylized resemblance: bold ink, color holds, and comic anatomy. They should look like the people described, as comic art, never as a photograph.'
+  }
+
+  if (/photoreal/i.test(imageStyle)) {
+    return 'Keep a recognizable resemblance in a natural greeting-card photograph style. Do not paste the original photographs onto the card.'
+  }
+
+  if (imageStyle) {
+    return `Draw them as original characters in "${imageStyle}" with a clear stylized resemblance in that medium, never as a photograph.`
+  }
+
+  return 'Draw them as original greeting-card characters with a clear resemblance in the selected art style, never as a photograph.'
+}
+
+const buildReferenceImageGuidance = (hasReferenceImages, imageStyle = '') => {
   if (!hasReferenceImages) {
     return ''
   }
 
   return `
-The attached images are likeness references of the actual people and animals for this card.
-Create original greeting-card artwork in the requested visual style that clearly resembles them.
-Match their ages, faces, hair, body types, clothing cues, and any pet's size and coat color from the photos.
+The attached images are references for original greeting-card characters, not photos to paste onto the card.
+${buildStyleResemblanceDirection(imageStyle)}
+Match their ages, hair, glasses, clothing, distinctive features, and any pets.
 Relationship words such as daughter, son, kids, mom, or dad must not change their ages if the photos show something different. If the photos show adults, draw adults, not children.
 The people and animals from the photos should appear on the cover unless the user asked for a symbolic scene instead.
 Do not copy the photographs onto the card as printed pictures, Polaroids, frames, phone screens, or collages.
@@ -199,29 +215,39 @@ If children appear, depict them fully and modestly clothed as they would on a fa
 `
 }
 
-const buildLikenessBriefSection = (likenessBrief) => {
+const buildLikenessBriefSection = (likenessBrief, imageStyle = '') => {
   if (!likenessBrief) {
     return ''
   }
 
+  if (!imageStyle) {
+    return `
+PEOPLE AND DETAILS FROM THE SENDER'S REFERENCE PHOTOS:
+${likenessBrief}
+`
+  }
+
   return `
-LIKENESS BRIEF FROM THE SENDER'S REFERENCE PHOTOS (highest priority, overrides guesses from names or words like daughter, son, or kids):
+CHARACTER RESEMBLANCE FROM THE SENDER'S REFERENCE PHOTOS:
 ${likenessBrief}
 
-Follow this brief exactly for ages, faces, hair, complexion, distinctive features, and any pet coloring. Recreate them in the requested art style as original greeting-card artwork. Do not paste the original photographs onto the card.
+The selected visual style is "${imageStyle}". ${buildStyleResemblanceDirection(imageStyle)}
+Match age, hair, glasses, clothing, distinctive features, and any pets. If the photos show adults, draw adults.
+Do not paste the original photographs onto the card.
 If children are included, they must be fully and modestly clothed.
 `
 }
 
-const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise likeness brief an illustrator must follow.
+const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise visual-inspiration brief for an illustrator.
 
-For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, complexion, distinctive features, and the clothing they should wear on a greeting card.
+For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, glasses, clothing, and general build.
 If several people appear together, describe them left to right.
 For animals, include species, size, coat color, and distinctive markings.
 Mention setting only if it should inspire the card.
 
 Be specific about age. If people look like adults, say they are adults, not children.
 If a child appears in a bath or is not fully clothed, describe them as a clothed child of that age. Do not mention nudity, baths, or unclothed states.
+Do not identify anyone as a real named person, and do not give instructions to clone or photorealistically reproduce a specific individual.
 Return plain text only. Do not mention that these came from photos.`
 
 const getErrorText = (error) => {
@@ -240,20 +266,74 @@ const getErrorText = (error) => {
     error.error?.code,
     error.error?.type,
     Array.isArray(error.error?.safety_violations) ? error.error.safety_violations.join(' ') : '',
+    error.cause ? getErrorText(error.cause) : '',
   ]
     .filter(Boolean)
     .join(' ')
 }
 
+const getSafetyViolations = (error) => {
+  const raw = error?.error?.safety_violations || error?.safety_violations || error?.cause?.error?.safety_violations || []
+  return Array.isArray(raw) ? raw.map(String) : []
+}
+
 const isSafetyRejection = (error) =>
+  Boolean(error?.safety) ||
   /safety|moderation|safety_violations|rejected by the safety system/i.test(getErrorText(error))
 
-const publicGenerationError = (error, fallbackMessage) => {
-  if (isSafetyRejection(error)) {
-    return 'One of the photos could not be used to create the cover. Try another photo, or generate without that image.'
+const mentionsCopyrightedProperty = (details = {}) =>
+  /iron\s*man|spider-?man|batman|superman|wonder\s*woman|mickey|minnie mouse|disney|pokemon|pikachu|harry\s*potter|hogwarts|star\s*wars|darth\s*vader|marvel|dc comics|elsa\b|frozen\b|mario\b|hello kitty|captain america|black panther|\bhulk\b|\bthor\b|barbie|transformers|spongebob|minion/i.test(
+    `${details.keyDetails || ''} ${details.occasion || ''} ${details.refinement || ''}`,
+  )
+
+const createPublicError = (message, { safety = true } = {}) => {
+  const error = new Error(message)
+  error.publicMessage = message
+  error.safety = safety
+  return error
+}
+
+const photoRejectionMessage = (error, photoCount = 1) => {
+  const text = `${getErrorText(error)} ${getSafetyViolations(error).join(' ')}`
+  const prefix = photoCount > 1 ? 'One of the photos could not be used. ' : 'This photo could not be used. '
+
+  if (/sexual/i.test(text)) {
+    return `${prefix}Please choose a photo where everyone is fully clothed, with faces clearly visible, or generate without a photo.`
   }
 
-  return error instanceof Error ? error.message : fallbackMessage
+  if (/violence|self-harm|hate/i.test(text)) {
+    return `${prefix}Please try a different photo of the person, or generate without a photo.`
+  }
+
+  return `${prefix}Try a closer, well-lit photo of the person's face, with one person clearly visible. You can also generate without a photo.`
+}
+
+const publicGenerationError = (error, fallbackMessage, context = {}) => {
+  if (error?.publicMessage) {
+    return error.publicMessage
+  }
+
+  if (!isSafetyRejection(error)) {
+    return error instanceof Error ? error.message : fallbackMessage
+  }
+
+  const hasPhotos = Boolean(context.hasPhotos)
+  const details = context.details || {}
+  const text = `${getErrorText(error)} ${getSafetyViolations(error).join(' ')}`
+
+  if (hasPhotos && /sexual/i.test(text)) {
+    return photoRejectionMessage(error, context.photoCount || 1)
+  }
+
+  if (mentionsCopyrightedProperty(details)) {
+    return 'Card Genie cannot put trademarked characters or brands on the cover. Try describing the hobby without naming a superhero or brand, then generate again.'
+  }
+
+  if (hasPhotos) {
+    return photoRejectionMessage(error, context.photoCount || 1)
+  }
+
+  return 'Card Genie could not create that cover. Try a different image style, or simplify the personal details.'
 }
 
 const maxReferenceImages = 3
@@ -303,13 +383,19 @@ Cover text direction:
 - Use judgment based on the occasion, tone, recipient, and personal context.
 - Use the selected visual style as the primary art direction. If the style is "AI chooses the best style for this card", choose the medium that best fits the occasion and tone.
 - For photorealistic styles, make it look like a natural, real photographed greeting-card cover scene with believable lighting, skin texture, fabric, and imperfections.
-- For comic, vector, storybook, watercolor, paper-cut, poster, collage, or 3D styles, make the medium unmistakable and consistent across the whole image.
+- For "Comic book art", the entire cover must read as printed comic-book illustration: inked linework, color holds, screentone or halftone, and comic anatomy. If people are described from reference photos, they must appear as comic characters with a recognizable stylized likeness, never as photographed people.
+- For other illustrated styles such as vector, storybook, watercolor, paper-cut, poster, collage, or 3D, make the medium unmistakable and consistent across the whole image.
 - Include a small amount of tasteful cover text only if it improves the greeting card.
 - If cover text is used, keep it short, legible, correctly spelled, and emotionally appropriate.
 - Choose font style based on the card: elegant serif or script for heartfelt/elegant cards, playful lettering for funny/playful cards, clean modern type for simple or contemporary cards.
 - Text should be large enough to read but never oversized, never crowded, and never close to an image edge.
 - Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
 - Names and ages are allowed only when they fit naturally and remain well inside the central safe area.
+
+Copyright and identity:
+- Do not depict trademarked superheroes, movie characters, logos, brands, or celebrity likenesses even if they are mentioned in the personal context.
+- If the sender mentions a copyrighted character or brand, translate it into original greeting-card imagery with the same feeling. For example, a heroic inventor in original red-and-gold armor rather than a trademarked superhero.
+- Stay in the selected art style. Never output a photograph unless the selected style is photorealistic.
 
 Negative requirements:
 - No text, letters, numbers, captions, signs, banners, labels, posters, plaques, handwriting, or decorative typography within the outer 20% safe margin.
@@ -435,6 +521,12 @@ const generateImageFromPrompt = async (openai, prompt) => {
   return getGeneratedImageUrl(imageResponse, 'OpenAI did not return an image.')
 }
 
+const detailsWithoutCopyrightRisk = (details) => ({
+  ...details,
+  keyDetails:
+    'Create a warm original scene for this occasion and relationship. Ignore any copyrighted characters, brands, logos, or celebrity names from the sender notes.',
+})
+
 const generateImage = async (
   openai,
   details,
@@ -443,8 +535,29 @@ const generateImage = async (
   _referenceImages = [],
   likenessBrief = '',
 ) => {
-  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief)}`
-  return generateImageFromPrompt(openai, prompt)
+  const prompts = [
+    `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}`,
+  ]
+
+  if (likenessBrief || details.keyDetails) {
+    prompts.push(buildImagePrompt(detailsWithoutCopyrightRisk(details), refinement, imageMode))
+  }
+
+  let lastError
+
+  for (const prompt of prompts) {
+    try {
+      return await generateImageFromPrompt(openai, prompt)
+    } catch (error) {
+      lastError = error
+
+      if (!isSafetyRejection(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError
 }
 
 const getGeneratedImageUrl = (imageResponse, fallbackMessage) => {
@@ -501,7 +614,7 @@ const editImageWithFiles = async (openai, prompt, imageFiles) => {
 const editImage = async (openai, details, refinement, currentImageUrl, referenceImages = [], likenessBrief = '') => {
   const currentImage = await imageUrlToFile(currentImageUrl)
   const referenceFiles = await referenceImagesToFiles(referenceImages)
-  const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0)}${buildLikenessBriefSection(likenessBrief)}
+  const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details.imageStyle)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
 
   try {
@@ -517,7 +630,7 @@ If additional reference photos are attached after the current cover, use them on
 
     return editImageWithFiles(
       openai,
-      `${buildImageEditPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief)}`,
+      `${buildImageEditPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}`,
       [currentImage],
     )
   }
@@ -572,6 +685,10 @@ const describeReferenceImages = async (openai, referenceImages) => {
     if (!isSafetyRejection(error)) {
       throw error
     }
+
+    if (referenceImages.length === 1) {
+      throw createPublicError(photoRejectionMessage(error, 1))
+    }
   }
 
   const briefs = []
@@ -587,7 +704,13 @@ const describeReferenceImages = async (openai, referenceImages) => {
       if (!isSafetyRejection(error)) {
         throw error
       }
+
+      throw createPublicError(photoRejectionMessage(error, referenceImages.length))
     }
+  }
+
+  if (!briefs.length) {
+    throw createPublicError(photoRejectionMessage(undefined, referenceImages.length))
   }
 
   return briefs.join('\n\n')
@@ -1035,7 +1158,11 @@ app.post('/api/generate-card', async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(isSafetyRejection(error) ? 400 : 500).json({
-      error: publicGenerationError(error, 'Unable to generate the card.'),
+      error: publicGenerationError(error, 'Unable to generate the card.', {
+        hasPhotos: referenceImages.length > 0,
+        photoCount: referenceImages.length,
+        details,
+      }),
     })
   }
 })
@@ -1075,7 +1202,11 @@ app.post('/api/refine-image', async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(isSafetyRejection(error) ? 400 : 500).json({
-      error: publicGenerationError(error, 'Unable to refine the image.'),
+      error: publicGenerationError(error, 'Unable to refine the image.', {
+        hasPhotos: referenceImages.length > 0,
+        photoCount: referenceImages.length,
+        details: { ...details, refinement },
+      }),
     })
   }
 })
@@ -1120,7 +1251,11 @@ app.post('/api/refine-copy', async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(isSafetyRejection(error) ? 400 : 500).json({
-      error: publicGenerationError(error, 'Unable to refine the inside message.'),
+      error: publicGenerationError(error, 'Unable to refine the inside message.', {
+        hasPhotos: referenceImages.length > 0,
+        photoCount: referenceImages.length,
+        details: { ...details, refinement },
+      }),
     })
   }
 })

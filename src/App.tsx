@@ -84,6 +84,7 @@ const cardGenerationCost = 10
 const revisionCost = 2
 const maxReferencePhotos = 3
 const referencePhotoMaxEdge = 1024
+const referencePhotoMinEdge = 240
 const referencePhotoJpegQuality = 0.72
 const maxReferencePhotoDataUrlLength = 350000
 
@@ -304,6 +305,12 @@ const imageUrlToFile = async (imageUrl: string, fileName: string) => {
   return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
 }
 
+const assertUsableReferencePhoto = (width: number, height: number) => {
+  if (width < referencePhotoMinEdge || height < referencePhotoMinEdge) {
+    throw new Error('This photo is too small. Please use a closer, clearer photo of the person.')
+  }
+}
+
 const bitmapToJpegDataUrl = (
   source: CanvasImageSource,
   width: number,
@@ -351,6 +358,7 @@ const resizeReferencePhoto = async (file: File) => {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+      assertUsableReferencePhoto(bitmap.width, bitmap.height)
       const dataUrl = compressReferencePhoto(bitmap, bitmap.width, bitmap.height)
       bitmap.close()
       return dataUrl
@@ -373,6 +381,7 @@ const resizeReferencePhoto = async (file: File) => {
     element.src = dataUrl
   })
 
+  assertUsableReferencePhoto(image.naturalWidth, image.naturalHeight)
   return compressReferencePhoto(image, image.naturalWidth, image.naturalHeight)
 }
 
@@ -881,6 +890,10 @@ function App() {
         throw new Error(data.error || 'Unable to generate the card.')
       }
 
+      if (!data.imageUrl || !data.message) {
+        throw new Error('Unable to generate the card.')
+      }
+
       setCard({
         imageUrl: data.imageUrl,
         message: data.message,
@@ -895,6 +908,7 @@ function App() {
       window.setTimeout(() => setShowCompletionNote(false), 6000)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
+      setCreditNotice('No credits were used because the card was not created.')
     } finally {
       setIsGenerating(false)
     }
@@ -1009,6 +1023,10 @@ function App() {
         throw new Error(data.error || 'Unable to refine the cover image.')
       }
 
+      if (!data.imageUrl) {
+        throw new Error('Unable to refine the cover image.')
+      }
+
       setCard((current) => (current ? { ...current, imageUrl: data.imageUrl } : current))
       setImageRefinement('')
       setStep('front')
@@ -1016,6 +1034,7 @@ function App() {
       setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
+      setCreditNotice('No credits were used because that revision did not go through.')
     } finally {
       setIsRefiningImage(false)
     }
@@ -1056,6 +1075,10 @@ function App() {
         throw new Error(data.error || 'Unable to refine the inside message.')
       }
 
+      if (!data.message) {
+        throw new Error('Unable to refine the inside message.')
+      }
+
       setCard((current) =>
         current
           ? {
@@ -1072,6 +1095,7 @@ function App() {
       setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
+      setCreditNotice('No credits were used because that revision did not go through.')
     } finally {
       setIsRefiningCopy(false)
     }
@@ -1347,8 +1371,8 @@ function App() {
           <div className="reference-photos-field">
             <span className="field-title">Reference photos (optional)</span>
             <p className="field-help" id="reference-photos-help">
-              These photos are optional. Add a picture of the recipient, family, or a meaningful place so Card
-              Genie can match faces, ages, and details more closely. They will not appear on the card.
+              These photos are optional. Add a clear, well-lit photo of the person's face so Card Genie can
+              match them more closely. Distant group shots are harder to use. They will not appear on the card.
             </p>
             {referencePhotos.length > 0 && (
               <ul className="reference-photo-list">
