@@ -835,7 +835,7 @@ function App() {
   const insideGreeting = cardGreeting ?? defaultGreeting
   const cardSignatureLabel = cardSignature ?? senderLabel
   const cardMessage = card?.message ?? ''
-  const cardClosing = card?.closing || 'With love,'
+  const cardClosing = card?.closing ?? 'With love,'
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
   const messageDensity = cardMessage.length > 620 ? 'is-long' : cardMessage.length > 420 ? 'is-medium' : 'is-short'
   const fileNameBase = useMemo(
@@ -1919,7 +1919,7 @@ function App() {
                           <p key={paragraph}>{paragraph}</p>
                         ))}
                       </div>
-                      <div className="card-closing">{cardClosing}</div>
+                      {cardClosing ? <div className="card-closing">{cardClosing}</div> : null}
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                     <div className="card-opening-cover">
@@ -1944,7 +1944,7 @@ function App() {
                           <p key={paragraph}>{paragraph}</p>
                         ))}
                       </div>
-                      <div className="card-closing">{cardClosing}</div>
+                      {cardClosing ? <div className="card-closing">{cardClosing}</div> : null}
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
                   </div>
@@ -2190,7 +2190,7 @@ function App() {
                                   <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
                                 ))}
                               </div>
-                              <div className="card-closing">{cardClosing}</div>
+                              {cardClosing ? <div className="card-closing">{cardClosing}</div> : null}
                               <div className="card-signature">{cardSignatureLabel}</div>
                             </div>
                           </div>
@@ -2276,6 +2276,7 @@ function App() {
                             <input
                               value={cardClosing}
                               onChange={(event) => updateCardClosing(event.target.value)}
+                              placeholder="With love,"
                             />
                           </label>
                           <label>
