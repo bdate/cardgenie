@@ -1788,11 +1788,6 @@ function App() {
                   multiple
                   aria-describedby="reference-photos-help"
                   onClick={beginPhotoAdd}
-                  onCancel={() => {
-                    if (!isProcessingPhotosRef.current) {
-                      setIsAddingPhotos(false)
-                    }
-                  }}
                   onChange={(event) => void addReferencePhotos(event)}
                 />
                 <label
