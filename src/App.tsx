@@ -83,10 +83,10 @@ const creditPackAmount = 50
 const cardGenerationCost = 10
 const revisionCost = 2
 const maxReferencePhotos = 3
-const referencePhotoMaxEdge = 1024
+const referencePhotoMaxEdge = 1280
 const referencePhotoMinEdge = 240
-const referencePhotoJpegQuality = 0.72
-const maxReferencePhotoDataUrlLength = 350000
+const referencePhotoJpegQuality = 0.8
+const maxReferencePhotoDataUrlLength = 480000
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
@@ -331,10 +331,13 @@ const resizeReferencePhoto = async (file: File) => {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
       assertUsableReferencePhoto(bitmap.width, bitmap.height)
       const dataUrl = compressReferencePhoto(bitmap, bitmap.width, bitmap.height)
+      const prepared = { dataUrl, width: bitmap.width, height: bitmap.height }
       bitmap.close()
-      return dataUrl
-    } catch {
-      // Fall through to the image-element path below.
+      return prepared
+    } catch (error) {
+      if (error instanceof Error && /too small|Unable to prepare/i.test(error.message)) {
+        throw error
+      }
     }
   }
 
@@ -353,7 +356,11 @@ const resizeReferencePhoto = async (file: File) => {
   })
 
   assertUsableReferencePhoto(image.naturalWidth, image.naturalHeight)
-  return compressReferencePhoto(image, image.naturalWidth, image.naturalHeight)
+  return {
+    dataUrl: compressReferencePhoto(image, image.naturalWidth, image.naturalHeight),
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+  }
 }
 
 const downloadImageFallback = (imageUrl: string, fileName: string) => {
@@ -791,24 +798,35 @@ function App() {
     }
 
     const acceptedFiles = files.slice(0, remainingSlots)
-    setReferencePhotoNotice(files.length > remainingSlots ? 'You can add up to 3 photos.' : '')
+    const limitNotice = files.length > remainingSlots ? 'You can add up to 3 photos.' : ''
+    setReferencePhotoNotice(limitNotice)
 
     try {
-      const nextPhotos = await Promise.all(
+      const preparedPhotos = await Promise.all(
         acceptedFiles.map(async (file) => {
           if (file.type && !file.type.startsWith('image/')) {
             throw new Error('Please choose a photo file, such as a JPG or PNG.')
           }
 
+          const prepared = await resizeReferencePhoto(file)
+
           return {
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
             name: file.name || 'Photo',
-            dataUrl: await resizeReferencePhoto(file),
+            dataUrl: prepared.dataUrl,
+            isWide: prepared.width > prepared.height * 1.2,
           }
         }),
       )
+      const nextPhotos = preparedPhotos.map(({ id, name, dataUrl }) => ({ id, name, dataUrl }))
 
       setReferencePhotos((current) => [...current, ...nextPhotos].slice(0, maxReferencePhotos))
+
+      if (preparedPhotos.some((photo) => photo.isWide) && !limitNotice) {
+        setReferencePhotoNotice(
+          'Wide or group photos are harder to match. For a closer likeness, add a well-lit close-up of each person\'s face.',
+        )
+      }
     } catch (caughtError) {
       setReferencePhotoNotice(
         caughtError instanceof Error ? caughtError.message : 'Unable to add that photo.',
@@ -1352,8 +1370,9 @@ function App() {
           <div className="reference-photos-field">
             <span className="field-title">Reference photos (optional)</span>
             <p className="field-help" id="reference-photos-help">
-              These photos are optional. Add a clear, well-lit photo of the person's face so Card Genie can
-              match them more closely. Distant group shots are harder to use. They will not appear on the card.
+              These photos are optional. Use a clear, well-lit close-up of each person you want on the card.
+              Group shots can inspire the scene, but faces match more closely from close-up photos. They will
+              not be pasted onto the card.
             </p>
             {referencePhotos.length > 0 && (
               <ul className="reference-photo-list">

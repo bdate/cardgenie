@@ -30,18 +30,30 @@ Make the body warm, specific, natural, and suitable to appear inside a digital g
 
 const buildStyleResemblanceDirection = (imageStyle = '') => {
   if (/comic/i.test(imageStyle)) {
-    return 'Draw them as original comic-book characters with a clear stylized resemblance: bold ink, color holds, and comic anatomy. They should look like the people described, as comic art, never as a photograph.'
+    return 'The people must be clearly recognizable as the people in the photos, drawn as comic-book characters: bold ink, color holds, and comic anatomy. Keep faces, hair, glasses, and facial hair identifiable. This is a stylized likeness, never a photograph.'
   }
 
   if (/photoreal/i.test(imageStyle)) {
-    return 'Keep a recognizable resemblance in a natural greeting-card photograph style. Do not paste the original photographs onto the card.'
+    return 'The people must be clearly recognizable as the people in the photos in a natural greeting-card photograph. Keep faces, ages, hair, glasses, and facial hair. Do not paste the original photographs onto the card.'
   }
 
   if (imageStyle) {
-    return `Draw them as original characters in "${imageStyle}" with a clear stylized resemblance in that medium, never as a photograph.`
+    return `The people must be clearly recognizable as the people in the photos, drawn as original characters in "${imageStyle}". Keep faces, hair, glasses, and facial hair identifiable in that medium, never as a pasted photograph.`
   }
 
-  return 'Draw them as original greeting-card characters with a clear resemblance in the selected art style, never as a photograph.'
+  return 'The people must be clearly recognizable as the people in the photos, drawn as original greeting-card characters in the selected art style.'
+}
+
+const buildAttachedPhotoGuidance = (hasReferenceImages) => {
+  if (!hasReferenceImages) {
+    return ''
+  }
+
+  return `
+The attached photos are likeness references of the actual people and animals for this card.
+The people on the cover must clearly resemble them: faces, ages, hair, glasses, facial hair, clothing, and how many people are in the photo.
+Create original greeting-card artwork in the selected visual style. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.
+`
 }
 
 const buildReferenceImageGuidance = (hasReferenceImages, imageStyle = '') => {
@@ -77,22 +89,22 @@ CHARACTER RESEMBLANCE FROM THE SENDER'S REFERENCE PHOTOS:
 ${likenessBrief}
 
 The selected visual style is "${imageStyle}". ${buildStyleResemblanceDirection(imageStyle)}
-Match age, hair, glasses, clothing, distinctive features, and any pets. If the photos show adults, draw adults.
+Match faces, age, hair, glasses, facial hair, clothing, distinctive features, and any pets. If the photos show adults, draw adults.
 Do not paste the original photographs onto the card.
 If children are included, they must be fully and modestly clothed.
 `
 }
 
-const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise visual-inspiration brief for an illustrator.
+const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise likeness brief an illustrator can follow to keep a clear resemblance.
 
-For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair, glasses, clothing, and general build.
+Count the people. For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair color and style, facial hair, glasses, complexion, distinctive features, clothing color, and general build.
 If several people appear together, describe them left to right.
 For animals, include species, size, coat color, and distinctive markings.
 Mention setting only if it should inspire the card.
 
 Be specific about age. If people look like adults, say they are adults, not children.
 If a child appears in a bath or is not fully clothed, describe them as a clothed child of that age. Do not mention nudity, baths, or unclothed states.
-Do not identify anyone as a real named person, and do not give instructions to clone or photorealistically reproduce a specific individual.
+Do not use anyone's real name.
 Return plain text only. Do not mention that these came from photos.`
 
 const getErrorText = (error) => {
@@ -150,7 +162,7 @@ const photoRejectionMessage = (error, photoCount = 1) => {
     return `${prefix}Please try a different photo of the person, or generate without a photo.`
   }
 
-  return `${prefix}Try a closer, well-lit photo of the person's face, with one person clearly visible. You can also generate without a photo.`
+  return `${prefix}Try a closer, well-lit photo of the person's face. Group shots and distant photos are harder to match. You can also generate without a photo.`
 }
 
 const publicGenerationError = (error, fallbackMessage, context = {}) => {
@@ -921,21 +933,28 @@ const generateImage = async (
   details,
   refinement = '',
   imageMode = 'new',
-  _referenceImages = [],
+  referenceImages = [],
   likenessBrief = '',
 ) => {
-  const prompts = [
-    `${buildImagePrompt(details, refinement, imageMode)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}`,
-  ]
+  const photoGuidance = buildAttachedPhotoGuidance(referenceImages.length > 0)
+  const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
+  const prompts = [`${buildImagePrompt(details, refinement, imageMode)}${photoGuidance}${likenessSection}`]
 
   if (likenessBrief || details.keyDetails) {
-    prompts.push(buildImagePrompt(detailsWithoutCopyrightRisk(details), refinement, imageMode))
+    prompts.push(
+      `${buildImagePrompt(detailsWithoutCopyrightRisk(details), refinement, imageMode)}${photoGuidance}${likenessSection}`,
+    )
   }
 
+  const referenceFiles = referenceImages.length > 0 ? await referenceImagesToFiles(referenceImages) : []
   let lastError
 
   for (const prompt of prompts) {
     try {
+      if (referenceFiles.length > 0) {
+        return await editImageWithFiles(openai, env, prompt, referenceFiles)
+      }
+
       const imageResponse = await openai.images.generate({
         model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
         prompt,
@@ -951,6 +970,10 @@ const generateImage = async (
         throw error
       }
     }
+  }
+
+  if (referenceImages.length > 0) {
+    throw createPublicError(photoRejectionMessage(lastError, referenceImages.length))
   }
 
   throw lastError
