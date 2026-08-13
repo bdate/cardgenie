@@ -816,7 +816,6 @@ function App() {
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
   const [isAddingPhotos, setIsAddingPhotos] = useState(false)
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
-  const isProcessingPhotosRef = useRef(false)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
   const previewPanelRef = useRef<HTMLElement | null>(null)
@@ -979,26 +978,6 @@ function App() {
   }, [isAddingPhotos])
 
   useEffect(() => {
-    if (!isAddingPhotos) {
-      return
-    }
-
-    const stopIfPickerCancelled = () => {
-      window.setTimeout(() => {
-        if (!isProcessingPhotosRef.current) {
-          setIsAddingPhotos(false)
-        }
-      }, 800)
-    }
-
-    window.addEventListener('focus', stopIfPickerCancelled)
-
-    return () => {
-      window.removeEventListener('focus', stopIfPickerCancelled)
-    }
-  }, [isAddingPhotos])
-
-  useEffect(() => {
     if (!sharedCardId) {
       return
     }
@@ -1085,25 +1064,17 @@ function App() {
 
   const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
 
-  const beginPhotoAdd = () => {
-    setIsAddingPhotos(true)
-  }
-
   const addReferencePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
 
     if (files.length === 0) {
-      if (!isProcessingPhotosRef.current) {
-        setIsAddingPhotos(false)
-      }
       return
     }
 
     const remainingSlots = maxReferencePhotos - referencePhotos.length
 
     if (remainingSlots <= 0) {
-      setIsAddingPhotos(false)
       setReferencePhotoNotice('You can add up to 3 photos.')
       return
     }
@@ -1111,7 +1082,7 @@ function App() {
     const acceptedFiles = files.slice(0, remainingSlots)
     const limitNotice = files.length > remainingSlots ? 'You can add up to 3 photos.' : ''
     setReferencePhotoNotice(limitNotice)
-    isProcessingPhotosRef.current = true
+    const startedAt = Date.now()
     setIsAddingPhotos(true)
 
     try {
@@ -1145,7 +1116,10 @@ function App() {
         caughtError instanceof Error ? caughtError.message : 'Unable to add that photo.',
       )
     } finally {
-      isProcessingPhotosRef.current = false
+      const remainingVisibleMs = 1200 - (Date.now() - startedAt)
+      if (remainingVisibleMs > 0) {
+        await sleep(remainingVisibleMs)
+      }
       setIsAddingPhotos(false)
     }
   }
@@ -1787,14 +1761,12 @@ function App() {
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   multiple
                   aria-describedby="reference-photos-help"
-                  onClick={beginPhotoAdd}
                   onChange={(event) => void addReferencePhotos(event)}
                 />
                 <label
                   className={`reference-photo-add${isAddingPhotos ? ' is-busy' : ''}`}
                   htmlFor="reference-photos"
                   aria-busy={isAddingPhotos}
-                  onClick={beginPhotoAdd}
                 >
                   {isAddingPhotos ? 'Adding photo...' : 'Add a photo'}
                 </label>
