@@ -1,11 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#fff8ef"/>
-  <g fill="#3f9b91">
-    <circle cx="14.2" cy="8.6" r="1.5"/>
-    <path d="M9.4 12.2c0-1.7 2.15-2.7 4.8-2.7s4.8 1 4.8 2.7H9.4Z"/>
-    <ellipse cx="14.2" cy="18.4" rx="8.6" ry="5.6"/>
-    <ellipse cx="14.2" cy="25.3" rx="5.4" ry="1.55"/>
-  </g>
-  <path d="M6.4 16.2C1.6 16.4 1.5 24.4 7.4 24.7" fill="none" stroke="#3f9b91" stroke-width="2.3" stroke-linecap="round"/>
-  <path d="M21.6 16.2c5.2-.8 8.4-4.4 8-8.4" fill="none" stroke="#3f9b91" stroke-width="2.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#fff8ef"/>
+  <text
+    x="32"
+    y="45"
+    fill="#f59e33"
+    font-family="Dancing Script, Brush Script MT, cursive"
+    font-size="52"
+    font-weight="700"
+    text-anchor="middle"
+  >G</text>
 </svg>

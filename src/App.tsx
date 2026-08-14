@@ -1199,7 +1199,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForCard) {
-      setCreditNotice(`You need ${cardGenerationCost} wishes to create a card. Refill the lamp to keep going.`)
+      setCreditNotice(`You need ${cardGenerationCost} wishes to create a card. Buy more wishes to keep going.`)
       return
     }
 
@@ -1350,7 +1350,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} wishes to revise the cover. Refill the lamp to keep going.`)
+      setCreditNotice(`You need ${revisionCost} wishes to revise the cover. Buy more wishes to keep going.`)
       return
     }
 
@@ -1402,7 +1402,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} wishes to polish the message. Refill the lamp to keep going.`)
+      setCreditNotice(`You need ${revisionCost} wishes to polish the message. Buy more wishes to keep going.`)
       return
     }
 
@@ -1613,7 +1613,7 @@ function App() {
             </small>
           </div>
           <button className="secondary-button" type="button" onClick={addCreditPack}>
-            Refill the lamp - $10
+            Buy more wishes - $10
           </button>
         </div>}
       </section>
