@@ -1591,9 +1591,9 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero-section">
-        <a className="eyebrow" href="/" aria-label="Card Genie home">
-          <img className="eyebrow-mark" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
-          Card Genie
+        <a className="brand" href="/" aria-label="Card Genie home">
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
+          <span className="brand-wordmark">Card Genie</span>
         </a>
         <h1>
           {isRecipientView ? 'You received a card' : 'Any Card Imaginable'}
@@ -1635,21 +1635,21 @@ function App() {
 
           <div className="field-grid">
             <label>
-              Recipient name
+              From
               <input
-                value={details.recipientName}
-                onChange={(event) => updateDetails('recipientName', event.target.value)}
-                placeholder="Example: Jamie"
+                required
+                value={details.senderName}
+                onChange={(event) => updateDetails('senderName', event.target.value)}
+                placeholder="Example: your name"
               />
             </label>
 
             <label>
-              Recipient type or relation
+              To
               <input
-                required
-                value={details.recipientType}
-                onChange={(event) => updateDetails('recipientType', event.target.value)}
-                placeholder="Example: mom, spouse, friend, coworker"
+                value={details.recipientName}
+                onChange={(event) => updateDetails('recipientName', event.target.value)}
+                placeholder="Example: Jamie"
               />
             </label>
           </div>
@@ -1666,12 +1666,12 @@ function App() {
             </label>
 
             <label>
-              From / Signature
+              Relation
               <input
                 required
-                value={details.senderName}
-                onChange={(event) => updateDetails('senderName', event.target.value)}
-                placeholder="Example: your name"
+                value={details.recipientType}
+                onChange={(event) => updateDetails('recipientType', event.target.value)}
+                placeholder="Example: mom, spouse, friend, coworker"
               />
             </label>
           </div>
@@ -1733,9 +1733,8 @@ function App() {
           <div className="reference-photos-field">
             <span className="field-title">Reference photos (optional)</span>
             <p className="field-help" id="reference-photos-help">
-              These photos are optional. Use a clear, well-lit close-up of each person you want on the card.
-              Group shots can inspire the scene, but faces match more closely from close-up photos. They will
-              not be pasted onto the card.
+              Use a clear, well-lit close-up of each person you want on the card. Group shots can inspire the
+              scene, but faces match more closely from close-up photos.
             </p>
             {referencePhotos.length > 0 && (
               <ul className="reference-photo-list">
@@ -1791,7 +1790,9 @@ function App() {
                 ? `Create another card - ${cardGenerationCost} wishes`
                 : `Create this card - ${cardGenerationCost} wishes`}
           </button>
-          <p className="generate-scroll-hint">Your card is taking shape below.</p>
+          {isGenerating && (
+            <p className="generate-scroll-hint">Your card is taking shape below.</p>
+          )}
         </form>}
 
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
@@ -1842,7 +1843,7 @@ function App() {
           {isLoadingSharedCard && (
             <div className="empty-state" role="status" aria-live="polite">
               <div className="sparkle">
-                <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
+                <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
               </div>
               <h3>Loading your card</h3>
               <p>Opening the shared greeting card.</p>
@@ -1854,7 +1855,7 @@ function App() {
           {!isGenerating && !isLoadingSharedCard && !card && (
             <div className="empty-state">
               <div className="sparkle">
-                <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
+                <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
               </div>
               <h3>No card yet</h3>
               <p>Fill in the form, then create your card.</p>

@@ -17,6 +17,9 @@ desktop.ini
 vite.config.ts.timestamp-*.mjs
 /stamp.png
 /stamp.webp
+/public/logo-preview.html
+/public/logo-preview/
+/public/font-preview.html
 
 # Editor directories and files
 .vscode/*
