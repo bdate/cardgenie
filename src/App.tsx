@@ -151,7 +151,7 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   }
 
   if (/timeout|timed out|504|524/i.test(message)) {
-    return 'Card Genie took too long to finish this card. Please try again in a moment. No credits were used.'
+    return 'That wish took too long. Please try again in a moment. Your wish is still in the lamp.'
   }
 
   return message || fallbackMessage
@@ -162,7 +162,7 @@ const generateJobPollMs = 2000
 const generateJobClientTimeoutMs = 12 * 60 * 1000
 const generateJobMaxPollFailures = 15
 const generationLostConnectionMessage =
-  'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No credits are used until the card is ready.'
+  'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No wishes are used until the card is ready.'
 
 const readStoredGenerationJob = () => {
   try {
@@ -232,7 +232,7 @@ const waitForGenerationJob = async (jobId: string, isCurrent: () => boolean) => 
   while (isCurrent()) {
     if (Date.now() - startedAt > generateJobClientTimeoutMs) {
       throw new Error(
-        'Card Genie took too long to finish this card. Please try generating again. No credits were used.',
+        'That wish took too long. Please try generating again. Your wish is still in the lamp.',
       )
     }
 
@@ -801,7 +801,7 @@ function App() {
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
   const [cardSignature, setCardSignature] = useState<string | null>(null)
   const [credits, setCredits] = useState(initialCreditBalance)
-  const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
+  const [creditNotice, setCreditNotice] = useState('You have 50 starter wishes for this demo.')
   const [error, setError] = useState('')
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -863,10 +863,10 @@ function App() {
   )
   const generationLines = useMemo(
     () => [
-      `Coming up with a creative ${details.occasion || 'card'} image for ${envelopeLabel}.`,
+      `Crafting a ${details.occasion || 'card'} cover for ${envelopeLabel}.`,
       `Writing a ${details.tone.toLowerCase()} note that sounds personal, not canned.`,
       `Blending the ${details.imageStyle.toLowerCase()} look with the story you shared.`,
-      'You can switch apps. We will keep working and the card will be waiting when you come back.',
+      'Sealing it into an envelope.',
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
@@ -1040,7 +1040,7 @@ function App() {
 
     if (Date.now() - stored.startedAt > generateJobClientTimeoutMs) {
       clearStoredGenerationJob()
-      setError('A previous card took too long to finish. Please generate again. No credits were used.')
+      setError('A previous card took too long to finish. Please try again. Your wish is still in the lamp.')
       return
     }
 
@@ -1131,7 +1131,7 @@ function App() {
 
   const addCreditPack = () => {
     setCredits((current) => current + creditPackAmount)
-    setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
+    setCreditNotice(`Added ${creditPackAmount} demo wishes. In production this would happen after checkout.`)
   }
 
   const finishGeneratedCard = (data: { message: string; closing?: string; imageUrl: string }, signatureName: string) => {
@@ -1146,7 +1146,7 @@ function App() {
     setStep('envelope')
     setShowCompletionNote(true)
     setCredits((current) => current - cardGenerationCost)
-    setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
+    setCreditNotice(`${cardGenerationCost} wishes used to create this card.`)
     window.setTimeout(() => setShowCompletionNote(false), 6000)
     clearStoredGenerationJob()
   }
@@ -1184,7 +1184,7 @@ function App() {
       }
 
       setError(message)
-      setCreditNotice('No credits were used because the card was not created.')
+      setCreditNotice('Your wish is still in the lamp.')
     } finally {
       if (isCurrent()) {
         setIsGenerating(false)
@@ -1199,7 +1199,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForCard) {
-      setCreditNotice(`You need ${cardGenerationCost} credits to create a card. Add a credit pack to keep going.`)
+      setCreditNotice(`You need ${cardGenerationCost} wishes to create a card. Refill the lamp to keep going.`)
       return
     }
 
@@ -1260,7 +1260,7 @@ function App() {
       }
 
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
-      setCreditNotice('No credits were used because the card was not created.')
+      setCreditNotice('Your wish is still in the lamp.')
     } finally {
       if (!startedBackgroundJob) {
         setIsGenerating(false)
@@ -1350,7 +1350,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} credits to revise the cover. Add a credit pack to keep going.`)
+      setCreditNotice(`You need ${revisionCost} wishes to revise the cover. Refill the lamp to keep going.`)
       return
     }
 
@@ -1385,10 +1385,10 @@ function App() {
       setImageRefinement('')
       setStep('front')
       setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} credits used to revise the cover.`)
+      setCreditNotice(`${revisionCost} wishes used to revise the cover.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
-      setCreditNotice('No credits were used because that revision did not go through.')
+      setCreditNotice('Your wish is still in the lamp.')
     } finally {
       setIsRefiningImage(false)
     }
@@ -1402,7 +1402,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} credits to polish the message. Add a credit pack to keep going.`)
+      setCreditNotice(`You need ${revisionCost} wishes to polish the message. Refill the lamp to keep going.`)
       return
     }
 
@@ -1447,10 +1447,10 @@ function App() {
       setShowPolishDialog(false)
       setStep('inside')
       setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
+      setCreditNotice(`${revisionCost} wishes used to polish the inside message.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
-      setCreditNotice('No credits were used because that revision did not go through.')
+      setCreditNotice('Your wish is still in the lamp.')
     } finally {
       setIsRefiningCopy(false)
     }
@@ -1592,6 +1592,7 @@ function App() {
     <main className="app-shell">
       <section className="hero-section">
         <a className="eyebrow" href="/" aria-label="Card Genie home">
+          <img className="eyebrow-mark" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
           Card Genie
         </a>
         <h1>
@@ -1600,19 +1601,19 @@ function App() {
         </h1>
         <p>
           {isRecipientView
-            ? 'Click the envelope to open your personalized greeting card.'
+            ? 'Open the envelope to see your personalized greeting card.'
             : 'Powered by GreetingCardUniverse.com'}
         </p>
-        {!isRecipientView && <div className="credit-wallet" aria-label="Credit balance">
+        {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
-            <span className="wallet-kicker">Welcome back, {senderLabel}</span>
-            <strong>{credits} credits available</strong>
+            <span className="wallet-kicker">Welcome back, {senderLabel}. Ready for another wish?</span>
+            <strong>{credits} wishes in your lamp</strong>
             <small>
-              Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
+              Cards use {cardGenerationCost} wishes. Revisions use {revisionCost} wishes.
             </small>
           </div>
           <button className="secondary-button" type="button" onClick={addCreditPack}>
-            Buy 50 credits - $10
+            Refill the lamp - $10
           </button>
         </div>}
       </section>
@@ -1629,7 +1630,7 @@ function App() {
 
           <div className="credit-callout">
             <span>{creditNotice}</span>
-            <strong>{credits} credits</strong>
+            <strong>{credits} wishes</strong>
           </div>
 
           <div className="field-grid">
@@ -1702,7 +1703,7 @@ function App() {
             <div className="style-field-header">
               <label htmlFor="image-style">Image style</label>
               <a className="style-lookbook-link" href="/styles/" target="_blank" rel="noreferrer">
-                See samples
+                See what's possible
               </a>
             </div>
             <select
@@ -1785,12 +1786,12 @@ function App() {
 
           <button className="primary-button" disabled={isGenerating} aria-busy={isGenerating}>
             {isGenerating
-              ? 'Creating your card...'
+              ? 'Creating a little magic...'
               : card
-                ? `Regenerate card - ${cardGenerationCost} credits`
-                : `Generate card - ${cardGenerationCost} credits`}
+                ? `Create another card - ${cardGenerationCost} wishes`
+                : `Create this card - ${cardGenerationCost} wishes`}
           </button>
-          <p className="generate-scroll-hint">Your card is being created below.</p>
+          <p className="generate-scroll-hint">Your card is taking shape below.</p>
         </form>}
 
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
@@ -1798,7 +1799,7 @@ function App() {
             {!isRecipientView && <span>02</span>}
             <div>
               <h2>
-                {isRecipientView ? `Your card from ${senderLabel}` : showEditor ? 'Revise your card' : 'Your card proof'}
+                {isRecipientView ? `Your card from ${senderLabel}` : showEditor ? 'Revise your card' : 'Your card'}
               </h2>
             </div>
             {!isRecipientView &&
@@ -1832,7 +1833,7 @@ function App() {
                 </div>
                 <div className="writing-pen" />
               </div>
-              <span className="loader-kicker">Card Genie is creating</span>
+              <span className="loader-kicker">Creating a little magic</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
               <p className="loader-note">You can switch apps. We will keep working, and the card will be waiting when you come back.</p>
             </div>
@@ -1840,9 +1841,11 @@ function App() {
 
           {isLoadingSharedCard && (
             <div className="empty-state" role="status" aria-live="polite">
-              <div className="sparkle">CG</div>
+              <div className="sparkle">
+                <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
+              </div>
               <h3>Loading your card</h3>
-              <p>Opening the shared greeting card proof.</p>
+              <p>Opening the shared greeting card.</p>
             </div>
           )}
 
@@ -1850,9 +1853,11 @@ function App() {
 
           {!isGenerating && !isLoadingSharedCard && !card && (
             <div className="empty-state">
-              <div className="sparkle">✦</div>
-              <h3>No proof yet</h3>
-              <p>Fill in the form, then generate a complete digital greeting card.</p>
+              <div className="sparkle">
+                <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
+              </div>
+              <h3>No card yet</h3>
+              <p>Fill in the form, then create your card.</p>
             </div>
           )}
 
@@ -1862,7 +1867,7 @@ function App() {
                 <>
               {showCompletionNote && (
                 <div className="completion-note">
-                  All right, I think I got it. Let me know what you think of this.
+                  Your card is ready. Take a look.
                 </div>
               )}
 
@@ -1874,7 +1879,7 @@ function App() {
                       <span className="envelope-front-address">To {envelopeLabel}</span>
                     </div>
                   </div>
-                  <span className="envelope-prompt">Click to Open</span>
+                  <span className="envelope-prompt">Reveal your card</span>
                 </button>
               )}
 
@@ -1893,7 +1898,7 @@ function App() {
                     </div>
                   </div>
                   <span className="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">
-                    Click to Open
+                    Reveal your card
                   </span>
                 </div>
               )}
@@ -1919,7 +1924,7 @@ function App() {
                     )}
                   </div>
                   <span className="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">
-                    Click to Open
+                    Reveal your card
                   </span>
                 </div>
               )}
@@ -2022,12 +2027,12 @@ function App() {
               {showSendActions && (
                 <div className="proof-actions">
                   <button className="secondary-button" type="button" onClick={replayAnimation}>
-                    Open envelope again
+                    Watch the reveal again
                   </button>
                 </div>
               )}
               {isRecipientView && (step === 'front' || step === 'inside') && (
-                <aside className="recipient-invite" aria-label="Create your own card">
+                <aside className="recipient-invite" aria-label="Make a card of your own">
                   <h3>Loved this card?</h3>
                   <p>Create one just as personal for someone you care about.</p>
                   <a className="primary-button" href="/">
@@ -2038,8 +2043,8 @@ function App() {
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send?</span>
-                  <h3>Deliver this card</h3>
-                  <p>Send a secure card link by email or text after you approve the proof.</p>
+                  <h3>Send this wish</h3>
+                  <p>Send a secure card link by email or text after you approve the card.</p>
                 </div>
                 <div className="mode-toggle delivery-methods" aria-label="Delivery method">
                   <button
@@ -2137,7 +2142,7 @@ function App() {
                   disabled={isDelivering || (deliveryMethod === 'text' && !smsConsentConfirmed)}
                   aria-busy={isDelivering}
                 >
-                  {isDelivering ? 'Sending card...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
+                  {isDelivering ? 'Sending your wish...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
                 </button>
                 {sharedCard && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
@@ -2346,7 +2351,7 @@ function App() {
                                 ) : (
                                   <>
                                     <span>Rewrite with AI</span>
-                                    <span className="button-points">{revisionCost} credits</span>
+                                    <span className="button-points">{revisionCost} wishes</span>
                                   </>
                                 )}
                               </button>

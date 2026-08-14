@@ -12,9 +12,10 @@
 .eyebrow {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   border: 1px solid rgba(245, 158, 51, 0.34);
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 8px 14px 8px 10px;
   color: var(--gcu-dark-teal);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 10px 30px rgba(63, 155, 145, 0.1);
@@ -25,6 +26,12 @@
   text-decoration: none;
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.eyebrow-mark {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .eyebrow:hover,
@@ -846,9 +853,13 @@ textarea:focus {
   height: 70px;
   margin-bottom: 16px;
   border-radius: 24px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--gcu-orange), var(--gcu-dark-teal));
-  font-size: 2rem;
+  background: #fff8ef;
+  box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.16);
+}
+
+.sparkle img {
+  width: 42px;
+  height: 42px;
 }
 
 .empty-state h3 {
