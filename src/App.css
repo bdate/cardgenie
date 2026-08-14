@@ -899,11 +899,17 @@ textarea:focus {
 }
 
 .envelope {
+  --envelope-paper:
+    linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(-32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(145deg, #fff8ef, #eaf8f6);
+  --envelope-lining: linear-gradient(145deg, #e7ecea, #ccd4d1);
+  --envelope-inside: linear-gradient(145deg, #f4f6f5, #e6ebe9);
   position: relative;
   width: min(520px, 88vw);
   height: 320px;
   transform-style: preserve-3d;
-  filter: drop-shadow(0 26px 35px rgba(63, 155, 145, 0.22));
+  box-shadow: 0 26px 35px rgba(63, 155, 145, 0.22);
   animation: floatIn 700ms ease both;
 }
 
@@ -914,7 +920,8 @@ textarea:focus {
 .envelope-front-face,
 .envelope-back,
 .envelope-body,
-.envelope-flap {
+.envelope-flap,
+.envelope-liner {
   position: absolute;
   inset: 0;
   border-radius: 0;
@@ -990,7 +997,7 @@ textarea:focus {
 
 .envelope-back {
   z-index: 0;
-  background: linear-gradient(145deg, #fff8ef, #eaf8f6);
+  background: var(--envelope-paper);
   box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
 }
 
@@ -1002,17 +1009,16 @@ textarea:focus {
   place-items: center;
   border-radius: 0;
   color: var(--gcu-dark-teal);
-  background:
-    linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
-    linear-gradient(-32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
-    linear-gradient(145deg, #fff8ef, #eaf8f6);
+  background: var(--envelope-paper);
   box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
   transform: rotateY(180deg);
+  transform-style: preserve-3d;
   backface-visibility: hidden;
 }
 
 .envelope-back-face .envelope-back,
 .envelope-back-face .envelope-flap,
+.envelope-back-face .envelope-liner,
 .envelope-back-face .envelope-body {
   transform: none;
 }
@@ -1041,7 +1047,7 @@ textarea:focus {
   gap: 8px;
   z-index: 1;
   color: var(--gcu-ink);
-  background: linear-gradient(145deg, #fff8ef, #eaf8f6);
+  background: var(--envelope-paper);
   box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
 }
 
@@ -1067,13 +1073,20 @@ textarea:focus {
   transform: translateY(56px);
 }
 
+.envelope-liner {
+  z-index: 3;
+  clip-path: polygon(0 0, 50% 62%, 100% 0);
+  background: var(--envelope-inside);
+  pointer-events: none;
+}
+
 .envelope-flap {
   z-index: 4;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   clip-path: polygon(0 0, 50% 62%, 100% 0);
-  background: linear-gradient(145deg, #e7ecea, #ccd4d1);
+  background: var(--envelope-lining);
   transform-origin: top;
   animation: flapPeek 2.2s ease-in-out infinite;
 }
@@ -1084,7 +1097,7 @@ textarea:focus {
 
 .opening-scene {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   cursor: default;
 }
 
@@ -1101,13 +1114,14 @@ textarea:focus {
   display: none;
 }
 
-.envelope.is-opening .envelope-back,
-.envelope.is-opening .envelope-back-face {
+.envelope.is-opening .envelope-back-face,
+.envelope.is-opening .envelope-liner {
   animation: envelopeLayerFade 6.2s ease forwards;
 }
 
 .envelope.is-opening .envelope-back,
 .envelope.is-opening .envelope-back-face,
+.envelope.is-opening .envelope-liner,
 .envelope.is-opening .envelope-body {
   backface-visibility: hidden;
   transform: none;

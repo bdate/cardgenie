@@ -1887,6 +1887,7 @@ function App() {
                     </div>
                     <div className="envelope-back-face">
                       <div className="envelope-back" />
+                      <div className="envelope-liner" />
                       <div className="envelope-flap envelope-flap-static" />
                       <div className="envelope-body" />
                     </div>
@@ -1897,36 +1898,29 @@ function App() {
                 </div>
               )}
 
-              {step === 'envelopeBack' && (
-                <div className="proof-stage envelope-scene" aria-live="polite">
-                  <div className="envelope envelope-static">
+              {(step === 'envelopeBack' || step === 'opening') && (
+                <div
+                  className={`proof-stage envelope-scene${step === 'opening' ? ' opening-scene' : ''}`}
+                  aria-live="polite"
+                >
+                  <div className={`envelope envelope-static${step === 'opening' ? ' is-opening' : ''}`}>
                     <div className="envelope-back-face is-static">
                       <div className="envelope-back" />
-                      <div className="envelope-flap envelope-flap-static" />
-                      <div className="envelope-body" />
+                      <div className="envelope-body">
+                        {step === 'opening' ? <small aria-hidden="true"></small> : null}
+                      </div>
                     </div>
+                    <div className="envelope-liner" />
+                    <div className={`envelope-flap${step === 'opening' ? '' : ' envelope-flap-static'}`} />
+                    {step === 'opening' && (
+                      <div className="envelope-card-rise">
+                        <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
+                      </div>
+                    )}
                   </div>
                   <span className="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">
-                    Tap to Open
+                    Click to Open
                   </span>
-                </div>
-              )}
-
-              {step === 'opening' && (
-                <div className="proof-stage envelope-scene opening-scene" aria-live="polite">
-                  <div className="envelope is-opening">
-                    <div className="envelope-back-face">
-                      <small aria-hidden="true"></small>
-                    </div>
-                    <div className="envelope-back" />
-                    <div className="envelope-card-rise">
-                      <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
-                    </div>
-                    <div className="envelope-flap" />
-                    <div className="envelope-body">
-                      <small aria-hidden="true"></small>
-                    </div>
-                  </div>
                 </div>
               )}
 

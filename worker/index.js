@@ -123,6 +123,7 @@ const getErrorText = (error) => {
     error.error?.code,
     error.error?.type,
     Array.isArray(error.error?.safety_violations) ? error.error.safety_violations.join(' ') : '',
+    getModerationCategories(error).join(' '),
     error.cause ? getErrorText(error.cause) : '',
   ]
     .filter(Boolean)
@@ -134,14 +135,150 @@ const getSafetyViolations = (error) => {
   return Array.isArray(raw) ? raw.map(String) : []
 }
 
+const flattenModerationCategories = (value) => {
+  if (!value) {
+    return []
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      if (typeof item === 'string') {
+        return [item]
+      }
+
+      if (item && typeof item === 'object') {
+        return [item.category, item.type, item.code, ...(Array.isArray(item.categories) ? item.categories : [])].filter(
+          Boolean,
+        )
+      }
+
+      return []
+    })
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, flagged]) => Boolean(flagged))
+      .map(([name]) => name)
+  }
+
+  return [String(value)]
+}
+
+const getModerationCategories = (error) => {
+  const details =
+    error?.error?.moderation_details || error?.moderation_details || error?.cause?.error?.moderation_details || {}
+
+  return [...flattenModerationCategories(details.categories), ...getSafetyViolations(error)]
+}
+
 const isSafetyRejection = (error) =>
   Boolean(error?.safety) ||
   /safety|moderation|safety_violations|rejected by the safety system/i.test(getErrorText(error))
 
+const copyrightedPropertyPattern =
+  /iron\s*man|spider-?man|batman|superman|wonder\s*woman|mickey|minnie mouse|disney|pokemon|pikachu|harry\s*potter|hogwarts|star\s*wars|darth\s*vader|marvel|dc comics|elsa\b|frozen\b|mario\b|hello kitty|captain america|black panther|\bhulk\b|\bthor\b|barbie|transformers|spongebob|minion/i
+
+const blockedUserTextPattern =
+  /iron\s*man|spider-?man|batman|superman|wonder\s*woman|mickey|minnie mouse|disney|pokemon|pikachu|harry\s*potter|hogwarts|star\s*wars|darth\s*vader|marvel|dc comics|elsa\b|frozen\b|mario\b|hello kitty|captain america|black panther|\bhulk\b|\bthor\b|barbie|transformers|spongebob|minion|\bsuper\s*heros?|\bbreasts?\b|\bboobs?\b|\btits?\b|\bnipples?\b|\bnude\b|\bnaked\b|\bnsfw\b|\bporn\b|\bsexy\b|\bsexual\b|\bsex\b|\berotic\b|\blingerie\b|\bcleavage\b|\bkilling\b|\bmurder\b|\bgore\b/gi
+
 const mentionsCopyrightedProperty = (details = {}) =>
-  /iron\s*man|spider-?man|batman|superman|wonder\s*woman|mickey|minnie mouse|disney|pokemon|pikachu|harry\s*potter|hogwarts|star\s*wars|darth\s*vader|marvel|dc comics|elsa\b|frozen\b|mario\b|hello kitty|captain america|black panther|\bhulk\b|\bthor\b|barbie|transformers|spongebob|minion/i.test(
-    `${details.keyDetails || ''} ${details.occasion || ''} ${details.refinement || ''}`,
-  )
+  copyrightedPropertyPattern.test(`${details.keyDetails || ''} ${details.occasion || ''} ${details.refinement || ''}`)
+
+const userSubmittedText = (details = {}) =>
+  [details.keyDetails, details.occasion, details.refinement]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .join(' ')
+
+const sentenceContaining = (source, index) => {
+  let start = 0
+
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (/[.!?]/.test(source[i])) {
+      start = i + 1
+      break
+    }
+  }
+
+  let end = source.length
+
+  for (let i = index; i < source.length; i += 1) {
+    if (/[.!?]/.test(source[i])) {
+      end = i
+      break
+    }
+  }
+
+  return source.slice(start, end).trim().replace(/^[,;:\s]+/, '')
+}
+
+const findBlockedTextSnippets = (details = {}) => {
+  const source = userSubmittedText(details)
+
+  if (!source) {
+    return []
+  }
+
+  blockedUserTextPattern.lastIndex = 0
+  const snippets = []
+  const seen = new Set()
+
+  for (const match of source.matchAll(blockedUserTextPattern)) {
+    const snippet = sentenceContaining(source, match.index)
+    const key = snippet.toLowerCase()
+
+    if (snippet && !seen.has(key)) {
+      seen.add(key)
+      snippets.push(snippet)
+    }
+  }
+
+  return snippets
+}
+
+const friendlyModerationLabels = (error) => {
+  const labelsByKey = {
+    sexual: 'sexual content',
+    violence: 'violent content',
+    hate: 'hateful content',
+    'self-harm': 'self-harm content',
+    self_harm: 'self-harm content',
+  }
+  const labels = []
+  const seen = new Set()
+
+  for (const item of getModerationCategories(error)) {
+    const value = String(item).toLowerCase()
+    const key = Object.keys(labelsByKey).find((name) => value.includes(name.replace('_', '-')))
+
+    if (key && !seen.has(key)) {
+      seen.add(key)
+      labels.push(labelsByKey[key])
+    }
+  }
+
+  return labels
+}
+
+const formatBlockedTextNote = (details, error) => {
+  const snippets = findBlockedTextSnippets(details)
+  const categories = friendlyModerationLabels(error)
+  const parts = []
+
+  if (snippets.length === 1) {
+    parts.push(`This text was blocked: "${snippets[0]}".`)
+  } else if (snippets.length > 1) {
+    parts.push(`This text was blocked: ${snippets.map((item) => `"${item}"`).join('; ')}.`)
+  }
+
+  if (categories.length === 1) {
+    parts.push(`It was flagged for ${categories[0]}.`)
+  } else if (categories.length > 1) {
+    parts.push(`It was flagged for ${categories.slice(0, -1).join(', ')} and ${categories.at(-1)}.`)
+  }
+
+  return parts.join(' ')
+}
 
 const createPublicError = (message, { safety = true } = {}) => {
   const error = new Error(message)
@@ -150,19 +287,19 @@ const createPublicError = (message, { safety = true } = {}) => {
   return error
 }
 
-const photoRejectionMessage = (error, photoCount = 1) => {
-  const text = `${getErrorText(error)} ${getSafetyViolations(error).join(' ')}`
+const photoRejectionMessage = (error, photoCount = 1, details = {}) => {
+  const text = getErrorText(error)
   const prefix = photoCount > 1 ? 'One of the photos could not be used. ' : 'This photo could not be used. '
+  let message = `${prefix}Try a closer, well-lit photo of the person's face. Group shots and distant photos are harder to match. You can also generate without a photo.`
 
   if (/sexual/i.test(text)) {
-    return `${prefix}Please choose a photo where everyone is fully clothed, with faces clearly visible, or generate without a photo.`
+    message = `${prefix}Please choose a photo where everyone is fully clothed, with faces clearly visible, or generate without a photo.`
+  } else if (/violence|self-harm|hate/i.test(text)) {
+    message = `${prefix}Please try a different photo of the person, or generate without a photo.`
   }
 
-  if (/violence|self-harm|hate/i.test(text)) {
-    return `${prefix}Please try a different photo of the person, or generate without a photo.`
-  }
-
-  return `${prefix}Try a closer, well-lit photo of the person's face. Group shots and distant photos are harder to match. You can also generate without a photo.`
+  const blocked = formatBlockedTextNote(details, error)
+  return blocked ? `${message} ${blocked}` : message
 }
 
 const publicGenerationError = (error, fallbackMessage, context = {}) => {
@@ -176,21 +313,21 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
 
   const hasPhotos = Boolean(context.hasPhotos)
   const details = context.details || {}
-  const text = `${getErrorText(error)} ${getSafetyViolations(error).join(' ')}`
+  const blocked = formatBlockedTextNote(details, error)
 
-  if (hasPhotos && /sexual/i.test(text)) {
-    return photoRejectionMessage(error, context.photoCount || 1)
+  if (blocked) {
+    return `Card Genie could not create that cover. ${blocked} No card was created. Change that wording and try again.`
+  }
+
+  if (hasPhotos) {
+    return photoRejectionMessage(error, context.photoCount || 1, details)
   }
 
   if (mentionsCopyrightedProperty(details)) {
     return 'Card Genie cannot put trademarked characters or brands on the cover. Try describing the hobby without naming a superhero or brand, then generate again.'
   }
 
-  if (hasPhotos) {
-    return photoRejectionMessage(error, context.photoCount || 1)
-  }
-
-  return 'Card Genie could not create that cover. Try a different image style, or simplify the personal details.'
+  return 'Card Genie could not create that cover. Try a different image style, or simplify the personal details. No card was created.'
 }
 
 const maxReferenceImages = 3
@@ -1125,12 +1262,6 @@ const getImageUrl = (imageResponse, fallbackMessage) => {
   return imageUrl
 }
 
-const detailsWithoutCopyrightRisk = (details) => ({
-  ...details,
-  keyDetails:
-    'Create a warm original scene for this occasion and relationship. Ignore any copyrighted characters, brands, logos, or celebrity names from the sender notes.',
-})
-
 const generateImage = async (
   openai,
   env,
@@ -1142,45 +1273,21 @@ const generateImage = async (
 ) => {
   const photoGuidance = buildAttachedPhotoGuidance(referenceImages.length > 0)
   const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
-  const prompts = [`${buildImagePrompt(details, refinement, imageMode)}${photoGuidance}${likenessSection}`]
-
-  if (likenessBrief || details.keyDetails) {
-    prompts.push(
-      `${buildImagePrompt(detailsWithoutCopyrightRisk(details), refinement, imageMode)}${photoGuidance}${likenessSection}`,
-    )
-  }
-
+  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${photoGuidance}${likenessSection}`
   const referenceFiles = referenceImages.length > 0 ? await referenceImagesToFiles(referenceImages) : []
-  let lastError
 
-  for (const prompt of prompts) {
-    try {
-      if (referenceFiles.length > 0) {
-        return await editImageWithFiles(openai, env, prompt, referenceFiles)
-      }
-
-      const imageResponse = await openai.images.generate({
-        model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-        prompt,
-        size: '1024x1536',
-        quality: 'medium',
-      })
-
-      return getImageUrl(imageResponse, 'OpenAI did not return an image.')
-    } catch (error) {
-      lastError = error
-
-      if (!isSafetyRejection(error)) {
-        throw error
-      }
-    }
+  if (referenceFiles.length > 0) {
+    return editImageWithFiles(openai, env, prompt, referenceFiles)
   }
 
-  if (referenceImages.length > 0) {
-    throw createPublicError(photoRejectionMessage(lastError, referenceImages.length))
-  }
+  const imageResponse = await openai.images.generate({
+    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    prompt,
+    size: '1024x1536',
+    quality: 'medium',
+  })
 
-  throw lastError
+  return getImageUrl(imageResponse, 'OpenAI did not return an image.')
 }
 
 const base64ToUint8Array = (imageBase64) => {
