@@ -327,7 +327,7 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
     return 'Card Genie cannot put trademarked characters or brands on the cover. Try describing the hobby without naming a superhero or brand, then generate again.'
   }
 
-  return 'The genie couldn't grant that wish. Try a different image style, or simplify the personal details. No card was created.'
+  return "The genie couldn't grant that wish. Try a different image style, or simplify the personal details. No card was created."
 }
 
 const maxReferenceImages = 3
