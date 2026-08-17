@@ -394,6 +394,17 @@ textarea:focus {
   }
 }
 
+@keyframes kickerFlash {
+  0%,
+  100% {
+    color: var(--gcu-dark-teal);
+  }
+
+  50% {
+    color: rgba(63, 155, 145, 0.42);
+  }
+}
+
 .secondary-button {
   color: var(--gcu-dark-teal);
   background: #fff;
@@ -649,16 +660,119 @@ textarea:focus {
   font-weight: 900;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  animation: kickerFlash 900ms ease-in-out infinite;
 }
 
-.writing-loader {
+.wish-loader {
   position: relative;
   display: grid;
   place-items: center;
-  width: 174px;
-  height: 126px;
-  margin-bottom: 22px;
+  width: 250px;
+  height: 430px;
+  margin-bottom: 8px;
 }
+
+.wish-art {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: wishGlow 2.8s ease-in-out infinite;
+}
+
+.wish-halo {
+  position: absolute;
+  left: 16%;
+  bottom: 2%;
+  z-index: 0;
+  width: 68%;
+  height: 34%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 51, 0.5), rgba(245, 158, 51, 0.16) 42%, transparent 72%);
+  transform-origin: center;
+  animation: lampHalo 2.8s ease-in-out infinite;
+}
+
+.wish-sparks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.wisp {
+  fill: none;
+  stroke: #fde3b0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  mix-blend-mode: screen;
+}
+
+.wisp-1 {
+  stroke-width: 3.4;
+  opacity: 0.72;
+  stroke-dasharray: 78 42;
+  animation: wispFlow 3.2s linear infinite;
+}
+
+.wisp-2 {
+  stroke-width: 2.1;
+  opacity: 0.5;
+  stroke-dasharray: 56 50;
+  animation: wispFlow 4.4s linear infinite reverse;
+}
+
+.wisp-3 {
+  stroke-width: 1.6;
+  opacity: 0.42;
+  stroke-dasharray: 44 38;
+  animation: wispFlow 3.8s linear infinite;
+  animation-delay: -1.2s;
+}
+
+.wisp-4 {
+  stroke-width: 2.4;
+  opacity: 0.48;
+  stroke-dasharray: 64 36;
+  animation: wispFlow 2.8s linear infinite reverse;
+  animation-delay: -0.6s;
+}
+
+.wisp-5 {
+  stroke-width: 1.8;
+  opacity: 0.55;
+  stroke-dasharray: 28 22;
+  animation: wispFlow 2.4s linear infinite;
+  animation-delay: -0.3s;
+}
+
+.spark {
+  fill: #f59e33;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sparkTwinkle 1.9s ease-in-out infinite;
+}
+
+.spark-2 { animation-delay: -0.35s; }
+.spark-3 { animation-delay: -0.8s; }
+.spark-4 { animation-delay: -1.15s; }
+.spark-5 { animation-delay: -0.55s; }
+.spark-6 { animation-delay: -1.4s; }
+.spark-7 { animation-delay: -0.2s; }
+.spark-8 { animation-delay: -1s; }
+.spark-9 { animation-delay: -0.7s; }
+.spark-10 { animation-delay: -1.6s; }
+.spark-11 { animation-delay: -0.1s; }
+.spark-12 { animation-delay: -1.25s; }
+.spark-13 { animation-delay: -0.9s; }
+.spark-14 { animation-delay: -0.45s; }
+.spark-15 { animation-delay: -1.35s; }
+.spark-16 { animation-delay: -0.65s; }
+.spark-17 { animation-delay: -1.75s; }
 
 .writing-paper {
   position: absolute;
@@ -2150,6 +2264,63 @@ textarea:focus {
   100% {
     visibility: visible;
     opacity: 1;
+  }
+}
+
+@keyframes wispFlow {
+  to {
+    stroke-dashoffset: -260;
+  }
+}
+
+@keyframes wishGlow {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 8px rgba(245, 158, 51, 0.28))
+      drop-shadow(0 0 18px rgba(245, 158, 51, 0.12));
+  }
+
+  50% {
+    filter:
+      drop-shadow(0 0 16px rgba(245, 158, 51, 0.58))
+      drop-shadow(0 0 28px rgba(63, 155, 145, 0.22));
+  }
+}
+
+@keyframes lampHalo {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes sparkTwinkle {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.65);
+  }
+
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  55% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  72% {
+    opacity: 0.85;
+    transform: scale(1.05);
   }
 }
 

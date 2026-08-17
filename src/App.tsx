@@ -1826,13 +1826,49 @@ function App() {
 
           {isGenerating && (
             <div className="creative-loader" role="status" aria-live="polite">
-              <div className="writing-loader" aria-hidden="true">
-                <div className="writing-paper">
-                  <span className="writing-line writing-line-one" />
-                  <span className="writing-line writing-line-two" />
-                  <span className="writing-line writing-line-three" />
-                </div>
-                <div className="writing-pen" />
+              <div className="wish-loader" aria-hidden="true">
+                <div className="wish-halo" />
+                <img className="wish-art" src={`${import.meta.env.BASE_URL}loader-wish.png`} alt="" />
+                <svg className="wish-sparks" viewBox="0 0 500 862" fill="none">
+                  <defs>
+                    <filter id="spark-glow" x="-80%" y="-80%" width="260%" height="260%">
+                      <feGaussianBlur stdDeviation="1.4" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <filter id="wisp-blur" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="0.7" />
+                    </filter>
+                  </defs>
+                  <g className="wisps" filter="url(#wisp-blur)">
+                    <path className="wisp wisp-1" d="M70 620C110 580 145 555 125 525C90 495 75 475 100 450C170 415 310 405 400 355C445 320 430 295 350 268C240 238 125 225 132 185C140 145 230 115 285 78" />
+                    <path className="wisp wisp-2" d="M82 618C122 575 158 548 138 520C102 490 88 470 114 444C182 408 322 398 412 348C456 314 440 288 360 262C250 232 138 218 145 178C154 138 242 108 296 74" />
+                    <path className="wisp wisp-3" d="M58 622C96 586 132 562 112 532C78 502 64 482 88 456C158 422 298 412 388 362C434 328 418 302 338 274C228 244 114 232 120 192C128 154 218 122 274 84" />
+                    <path className="wisp wisp-4" d="M100 450C170 415 310 405 400 355C445 320 430 295 350 268C240 238 125 225 132 185" />
+                    <path className="wisp wisp-5" d="M68 628C88 600 120 575 118 548C110 528 88 518 78 505" />
+                  </g>
+                  <g className="sparks" filter="url(#spark-glow)">
+                    <path className="spark spark-1" d="M248 72 249.3 76.7 254 78 249.3 79.3 248 84 246.7 79.3 242 78 246.7 76.7Z" />
+                    <path className="spark spark-2" d="M286 148 287.5 153.5 293 155 287.5 156.5 286 162 284.5 156.5 279 155 284.5 153.5Z" />
+                    <path className="spark spark-3" d="M214 214 215.8 220.2 222 222 215.8 223.8 214 230 212.2 223.8 206 222 212.2 220.2Z" />
+                    <path className="spark spark-4" d="M304 292 305.5 297.5 311 299 305.5 300.5 304 306 302.5 300.5 297 299 302.5 297.5Z" />
+                    <path className="spark spark-5" d="M236 372 237.3 376.7 242 378 237.3 379.3 236 384 234.7 379.3 230 378 234.7 376.7Z" />
+                    <path className="spark spark-6" d="M318 448 319.8 454.2 326 456 319.8 457.8 318 464 316.2 457.8 310 456 316.2 454.2Z" />
+                    <path className="spark spark-7" d="M176 518 177.1 521.9 181 523 177.1 524.1 176 528 174.9 524.1 171 523 174.9 521.9Z" />
+                    <path className="spark spark-8" d="M252 718 253.3 722.7 258 724 253.3 725.3 252 730 250.7 725.3 246 724 250.7 722.7Z" />
+                    <path className="spark spark-9" d="M348 752 349.1 755.9 353 757 349.1 758.1 348 762 346.9 758.1 343 757 346.9 755.9Z" />
+                    <path className="spark spark-10" d="M152 692 153.3 696.7 158 698 153.3 699.3 152 704 150.7 699.3 146 698 150.7 696.7Z" />
+                    <path className="spark spark-11" d="M268 96 269.1 99.9 273 101 269.1 102.1 268 106 266.9 102.1 263 101 266.9 99.9Z" />
+                    <path className="spark spark-12" d="M228 268 228.9 271.1 232 272 228.9 272.9 228 276 227.1 272.9 224 272 227.1 271.1Z" />
+                    <path className="spark spark-13" d="M292 388 293.3 392.7 298 394 293.3 395.3 292 400 290.7 395.3 286 394 290.7 392.7Z" />
+                    <path className="spark spark-14" d="M210 456 211.5 461.5 217 463 211.5 464.5 210 470 208.5 464.5 203 463 208.5 461.5Z" />
+                    <circle className="spark spark-15" cx="274" cy="190" r="2.2" />
+                    <circle className="spark spark-16" cx="242" cy="330" r="1.8" />
+                    <circle className="spark spark-17" cx="300" cy="510" r="1.7" />
+                  </g>
+                </svg>
               </div>
               <span className="loader-kicker">Creating a little magic</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>

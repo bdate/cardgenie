@@ -20,6 +20,7 @@ vite.config.ts.timestamp-*.mjs
 /public/logo-preview.html
 /public/logo-preview/
 /public/font-preview.html
+/public/loader-preview.html
 
 # Editor directories and files
 .vscode/*
