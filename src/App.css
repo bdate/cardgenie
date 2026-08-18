@@ -1034,6 +1034,19 @@ textarea:focus {
   grid-row: 1;
 }
 
+.opening-stack {
+  position: relative;
+  grid-row: 1;
+  width: min(520px, 88vw);
+  height: 320px;
+  isolation: isolate;
+}
+
+.opening-stack .envelope {
+  width: 100%;
+  height: 100%;
+}
+
 .envelope {
   --envelope-paper:
     linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
@@ -1270,7 +1283,7 @@ textarea:focus {
   position: absolute;
   left: 50%;
   bottom: 118px;
-  z-index: 7;
+  z-index: 9;
   overflow: hidden;
   width: min(360px, 60%);
   aspect-ratio: 5 / 7;

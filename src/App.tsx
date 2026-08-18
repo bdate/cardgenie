@@ -1944,15 +1944,17 @@ function App() {
                   className={`proof-stage envelope-scene${step === 'opening' ? ' opening-scene' : ''}`}
                   aria-live="polite"
                 >
-                  <div className={`envelope envelope-static${step === 'opening' ? ' is-opening' : ''}`}>
-                    <div className="envelope-back-face is-static">
-                      <div className="envelope-back" />
-                      <div className="envelope-body">
-                        {step === 'opening' ? <small aria-hidden="true"></small> : null}
+                  <div className="opening-stack">
+                    <div className={`envelope envelope-static${step === 'opening' ? ' is-opening' : ''}`}>
+                      <div className="envelope-back-face is-static">
+                        <div className="envelope-back" />
+                        <div className="envelope-body">
+                          {step === 'opening' ? <small aria-hidden="true"></small> : null}
+                        </div>
                       </div>
+                      <div className="envelope-liner" />
+                      <div className={`envelope-flap${step === 'opening' ? '' : ' envelope-flap-static'}`} />
                     </div>
-                    <div className="envelope-liner" />
-                    <div className={`envelope-flap${step === 'opening' ? '' : ' envelope-flap-static'}`} />
                     {step === 'opening' && (
                       <div className="envelope-card-rise">
                         <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
