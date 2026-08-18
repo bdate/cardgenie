@@ -1239,6 +1239,8 @@ textarea:focus {
 
 .envelope.is-opening .envelope-flap {
   z-index: 6;
+  transform: translateZ(0px);
+  -webkit-transform: translateZ(0px);
   animation: flapOpen 4.6s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 }
 
@@ -1270,8 +1272,9 @@ textarea:focus {
   background: #fff;
   box-shadow: 0 34px 72px rgba(63, 155, 145, 0.22);
   clip-path: inset(0 0 68% 0);
-  transform: translateX(-50%) translateY(120px) scale(0.86);
-  animation: cardToastRise 6.2s cubic-bezier(0.18, 0.88, 0.24, 1) forwards;
+  transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
+  -webkit-transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
+  animation: cardToastRise 4.6s cubic-bezier(0.18, 0.88, 0.24, 1) forwards;
 }
 
 .envelope-card-rise img {
@@ -2372,19 +2375,19 @@ textarea:focus {
 @keyframes flapOpen {
   0% {
     opacity: 1;
-    transform: rotateX(0deg);
+    transform: rotateX(0deg) translateZ(0px);
   }
   36% {
     opacity: 1;
-    transform: rotateX(118deg) translateY(-8px);
+    transform: rotateX(118deg) translateY(-8px) translateZ(0px);
   }
   78% {
     opacity: 1;
-    transform: rotateX(118deg) translateY(-8px);
+    transform: rotateX(118deg) translateY(-8px) translateZ(0px);
   }
   100% {
     opacity: 0;
-    transform: rotateX(118deg) translateY(-8px);
+    transform: rotateX(118deg) translateY(-8px) translateZ(0px);
   }
 }
 
@@ -2412,29 +2415,29 @@ textarea:focus {
   20% {
     opacity: 0;
     clip-path: inset(0 0 68% 0);
-    transform: translateX(-50%) translateY(120px) scale(0.86);
+    transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
   }
   32% {
     opacity: 1;
     clip-path: inset(0 0 55% 0);
-    transform: translateX(-50%) translateY(80px) scale(0.88);
+    transform: translateX(-50%) translateY(80px) scale(0.88) translateZ(2px);
   }
   50% {
     clip-path: inset(0 0 30% 0);
-    transform: translateX(-50%) translateY(10px) scale(0.92);
+    transform: translateX(-50%) translateY(10px) scale(0.92) translateZ(2px);
   }
   68% {
     clip-path: inset(0 0 8% 0);
-    transform: translateX(-50%) translateY(-42px) scale(0.96);
+    transform: translateX(-50%) translateY(-42px) scale(0.96) translateZ(2px);
   }
   82% {
     clip-path: inset(0 0 0 0);
-    transform: translateX(-50%) translateY(-86px) scale(0.98);
+    transform: translateX(-50%) translateY(-86px) scale(0.98) translateZ(2px);
   }
   100% {
     opacity: 1;
     clip-path: inset(0 0 0 0);
-    transform: translateX(-50%) translateY(-102px) scale(1);
+    transform: translateX(-50%) translateY(-102px) scale(1) translateZ(2px);
   }
 }
 
