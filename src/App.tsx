@@ -1270,7 +1270,7 @@ function App() {
 
   const openEnvelope = () => {
     setStep('opening')
-    window.setTimeout(() => setStep('front'), 4000)
+    window.setTimeout(() => setStep('front'), 4600)
   }
 
   const playEnvelopeBack = () => {

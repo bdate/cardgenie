@@ -21,7 +21,7 @@ Strictly obey the selected Length word-count range for the message body only. Co
 Return strict JSON only, with this shape:
 {
   "message": "Body copy only, split into 2-4 short logical paragraphs separated by blank lines. No salutation, closing, sender name, placeholder, or signature.",
-  "closing": "A short closing phrase, such as With all my love,"
+  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship — e.g. With love, / Cheers, / With gratitude, / Warmly, / Your friend, / Here's to you, etc. Never default to 'With all my love' unless it truly fits."
 }
 
 Do not include a salutation like "Dear..." and do not include the sender name, placeholder, or signature. The app will typeset the greeting, closing, and cursive signature separately.

@@ -1234,12 +1234,12 @@ textarea:focus {
 
 .opening-scene .envelope {
   z-index: 3;
-  animation: envelopeOpenAndFade 4s ease forwards;
+  animation: envelopeOpenAndFade 4.6s ease forwards;
 }
 
 .envelope.is-opening .envelope-flap {
   z-index: 6;
-  animation: flapOpen 4s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+  animation: flapOpen 4.6s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 }
 
 .envelope.is-opening .envelope-front-face {
@@ -1248,7 +1248,7 @@ textarea:focus {
 
 .envelope.is-opening .envelope-back-face,
 .envelope.is-opening .envelope-liner {
-  animation: envelopeLayerFade 4s ease forwards;
+  animation: envelopeLayerFade 4.6s ease forwards;
 }
 
 .envelope.is-opening .envelope-back,
@@ -2409,23 +2409,27 @@ textarea:focus {
 
 @keyframes cardToastRise {
   0%,
-  28% {
+  20% {
     opacity: 0;
     clip-path: inset(0 0 68% 0);
     transform: translateX(-50%) translateY(120px) scale(0.86);
   }
-  42% {
+  32% {
     opacity: 1;
-    clip-path: inset(0 0 62% 0);
-    transform: translateX(-50%) translateY(100px) scale(0.86);
+    clip-path: inset(0 0 55% 0);
+    transform: translateX(-50%) translateY(80px) scale(0.88);
   }
-  66% {
-    clip-path: inset(0 0 38% 0);
-    transform: translateX(-50%) translateY(6px) scale(0.9);
+  50% {
+    clip-path: inset(0 0 30% 0);
+    transform: translateX(-50%) translateY(10px) scale(0.92);
   }
-  80% {
-    clip-path: inset(0 0 12% 0);
-    transform: translateX(-50%) translateY(-48px) scale(0.96);
+  68% {
+    clip-path: inset(0 0 8% 0);
+    transform: translateX(-50%) translateY(-42px) scale(0.96);
+  }
+  82% {
+    clip-path: inset(0 0 0 0);
+    transform: translateX(-50%) translateY(-86px) scale(0.98);
   }
   100% {
     opacity: 1;
