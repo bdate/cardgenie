@@ -636,10 +636,11 @@ textarea:focus {
 .creative-loader {
   display: grid;
   place-items: center;
-  align-content: center;
+  align-content: start;
+  min-height: 0;
   border: 1px solid rgba(143, 208, 201, 0.36);
   border-radius: 30px;
-  padding: 42px;
+  padding: 16px 32px 28px;
   color: var(--gcu-dark-grey);
   background:
     radial-gradient(circle at 50% 8%, rgba(245, 158, 51, 0.32), transparent 32%),
@@ -667,8 +668,8 @@ textarea:focus {
   position: relative;
   display: grid;
   place-items: center;
-  width: 250px;
-  height: 430px;
+  width: 167px;
+  height: 272px;
   margin-bottom: 8px;
 }
 
@@ -1233,11 +1234,12 @@ textarea:focus {
 
 .opening-scene .envelope {
   z-index: 3;
-  animation: envelopeOpenAndFade 6.2s ease forwards;
+  animation: envelopeOpenAndFade 4s ease forwards;
 }
 
 .envelope.is-opening .envelope-flap {
-  animation: flapOpen 6.2s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+  z-index: 6;
+  animation: flapOpen 4s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
 }
 
 .envelope.is-opening .envelope-front-face {
@@ -1246,7 +1248,7 @@ textarea:focus {
 
 .envelope.is-opening .envelope-back-face,
 .envelope.is-opening .envelope-liner {
-  animation: envelopeLayerFade 6.2s ease forwards;
+  animation: envelopeLayerFade 4s ease forwards;
 }
 
 .envelope.is-opening .envelope-back,
@@ -1261,7 +1263,7 @@ textarea:focus {
   position: absolute;
   left: 50%;
   bottom: 118px;
-  z-index: 5;
+  z-index: 7;
   overflow: hidden;
   width: min(360px, 60%);
   aspect-ratio: 5 / 7;
@@ -2166,15 +2168,15 @@ textarea:focus {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  54% {
+  28% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  78% {
+  66% {
     opacity: 1;
     transform: translateY(34px) scale(0.99);
   }
-  84% {
+  78% {
     opacity: 1;
     transform: translateY(48px) scale(0.98);
   }
@@ -2368,16 +2370,15 @@ textarea:focus {
 }
 
 @keyframes flapOpen {
-  0%,
-  30% {
+  0% {
     opacity: 1;
     transform: rotateX(0deg);
   }
-  54% {
+  36% {
     opacity: 1;
     transform: rotateX(118deg) translateY(-8px);
   }
-  82% {
+  78% {
     opacity: 1;
     transform: rotateX(118deg) translateY(-8px);
   }
@@ -2408,21 +2409,21 @@ textarea:focus {
 
 @keyframes cardToastRise {
   0%,
-  54% {
+  28% {
     opacity: 0;
     clip-path: inset(0 0 68% 0);
     transform: translateX(-50%) translateY(120px) scale(0.86);
   }
-  62% {
+  42% {
     opacity: 1;
     clip-path: inset(0 0 62% 0);
     transform: translateX(-50%) translateY(100px) scale(0.86);
   }
-  78% {
+  66% {
     clip-path: inset(0 0 38% 0);
     transform: translateX(-50%) translateY(6px) scale(0.9);
   }
-  86% {
+  80% {
     clip-path: inset(0 0 12% 0);
     transform: translateX(-50%) translateY(-48px) scale(0.96);
   }
@@ -2601,6 +2602,11 @@ textarea:focus {
   .empty-state,
   .proof-stage {
     min-height: 440px;
+  }
+
+  .creative-loader {
+    min-height: 0;
+    padding: 12px 18px 24px;
   }
 
   .envelope-scene {

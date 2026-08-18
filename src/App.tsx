@@ -162,7 +162,7 @@ const generateJobPollMs = 2000
 const generateJobClientTimeoutMs = 12 * 60 * 1000
 const generateJobMaxPollFailures = 15
 const generationLostConnectionMessage =
-  'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No wishes are used until the card is ready.'
+  'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No credits are used until the card is ready.'
 
 const readStoredGenerationJob = () => {
   try {
@@ -801,7 +801,7 @@ function App() {
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
   const [cardSignature, setCardSignature] = useState<string | null>(null)
   const [credits, setCredits] = useState(initialCreditBalance)
-  const [creditNotice, setCreditNotice] = useState('You have 50 starter wishes for this demo.')
+  const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
   const [error, setError] = useState('')
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -1131,7 +1131,7 @@ function App() {
 
   const addCreditPack = () => {
     setCredits((current) => current + creditPackAmount)
-    setCreditNotice(`Added ${creditPackAmount} demo wishes. In production this would happen after checkout.`)
+    setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
   }
 
   const finishGeneratedCard = (data: { message: string; closing?: string; imageUrl: string }, signatureName: string) => {
@@ -1146,7 +1146,7 @@ function App() {
     setStep('envelope')
     setShowCompletionNote(true)
     setCredits((current) => current - cardGenerationCost)
-    setCreditNotice(`${cardGenerationCost} wishes used to create this card.`)
+    setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
     window.setTimeout(() => setShowCompletionNote(false), 6000)
     clearStoredGenerationJob()
   }
@@ -1199,7 +1199,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForCard) {
-      setCreditNotice(`You need ${cardGenerationCost} wishes to create a card. Buy more wishes to keep going.`)
+      setCreditNotice(`You need ${cardGenerationCost} credits to create a card. Buy more credits to keep going.`)
       return
     }
 
@@ -1270,7 +1270,7 @@ function App() {
 
   const openEnvelope = () => {
     setStep('opening')
-    window.setTimeout(() => setStep('front'), 6200)
+    window.setTimeout(() => setStep('front'), 4000)
   }
 
   const playEnvelopeBack = () => {
@@ -1280,7 +1280,7 @@ function App() {
 
   const flipEnvelope = () => {
     setStep('envelopeFlip')
-    window.setTimeout(playEnvelopeBack, 2400)
+    window.setTimeout(playEnvelopeBack, 1200)
   }
 
   const replayAnimation = () => {
@@ -1350,7 +1350,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} wishes to revise the cover. Buy more wishes to keep going.`)
+      setCreditNotice(`You need ${revisionCost} credits to revise the cover. Buy more credits to keep going.`)
       return
     }
 
@@ -1385,7 +1385,7 @@ function App() {
       setImageRefinement('')
       setStep('front')
       setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} wishes used to revise the cover.`)
+      setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
       setCreditNotice('Your wish is still in the lamp.')
@@ -1402,7 +1402,7 @@ function App() {
     setError('')
 
     if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} wishes to polish the message. Buy more wishes to keep going.`)
+      setCreditNotice(`You need ${revisionCost} credits to polish the message. Buy more credits to keep going.`)
       return
     }
 
@@ -1447,7 +1447,7 @@ function App() {
       setShowPolishDialog(false)
       setStep('inside')
       setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} wishes used to polish the inside message.`)
+      setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
       setCreditNotice('Your wish is still in the lamp.')
@@ -1607,13 +1607,13 @@ function App() {
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
             <span className="wallet-kicker">Welcome back, {senderLabel}. Ready for another wish?</span>
-            <strong>{credits} wishes in your lamp</strong>
+            <strong>{credits} credits in your lamp</strong>
             <small>
-              Cards use {cardGenerationCost} wishes. Revisions use {revisionCost} wishes.
+              Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
             </small>
           </div>
           <button className="secondary-button" type="button" onClick={addCreditPack}>
-            Buy more wishes - $10
+            Buy more credits - $10
           </button>
         </div>}
       </section>
@@ -1630,7 +1630,7 @@ function App() {
 
           <div className="credit-callout">
             <span>{creditNotice}</span>
-            <strong>{credits} wishes</strong>
+            <strong>{credits} credits</strong>
           </div>
 
           <div className="field-grid">
@@ -1787,8 +1787,8 @@ function App() {
             {isGenerating
               ? 'Creating a little magic...'
               : card
-                ? `Create another card - ${cardGenerationCost} wishes`
-                : `Create this card - ${cardGenerationCost} wishes`}
+                ? `Create another card - ${cardGenerationCost} credits`
+                : `Create this card - ${cardGenerationCost} credits`}
           </button>
           {isGenerating && (
             <p className="generate-scroll-hint">Your card is taking shape below.</p>
@@ -1829,7 +1829,7 @@ function App() {
               <div className="wish-loader" aria-hidden="true">
                 <div className="wish-halo" />
                 <img className="wish-art" src={`${import.meta.env.BASE_URL}loader-wish.png`} alt="" />
-                <svg className="wish-sparks" viewBox="0 0 500 862" fill="none">
+                <svg className="wish-sparks" viewBox="0 0 500 814" fill="none">
                   <defs>
                     <filter id="spark-glow" x="-80%" y="-80%" width="260%" height="260%">
                       <feGaussianBlur stdDeviation="1.4" result="blur" />
@@ -1843,30 +1843,30 @@ function App() {
                     </filter>
                   </defs>
                   <g className="wisps" filter="url(#wisp-blur)">
-                    <path className="wisp wisp-1" d="M70 620C110 580 145 555 125 525C90 495 75 475 100 450C170 415 310 405 400 355C445 320 430 295 350 268C240 238 125 225 132 185C140 145 230 115 285 78" />
-                    <path className="wisp wisp-2" d="M82 618C122 575 158 548 138 520C102 490 88 470 114 444C182 408 322 398 412 348C456 314 440 288 360 262C250 232 138 218 145 178C154 138 242 108 296 74" />
-                    <path className="wisp wisp-3" d="M58 622C96 586 132 562 112 532C78 502 64 482 88 456C158 422 298 412 388 362C434 328 418 302 338 274C228 244 114 232 120 192C128 154 218 122 274 84" />
-                    <path className="wisp wisp-4" d="M100 450C170 415 310 405 400 355C445 320 430 295 350 268C240 238 125 225 132 185" />
-                    <path className="wisp wisp-5" d="M68 628C88 600 120 575 118 548C110 528 88 518 78 505" />
+                    <path className="wisp wisp-1" d="M70 572C110 532 145 507 125 477C90 447 75 427 100 402C170 367 310 357 400 307C445 272 430 247 350 220C240 190 125 177 132 137C140 97 230 67 285 30" />
+                    <path className="wisp wisp-2" d="M82 570C122 527 158 500 138 472C102 442 88 422 114 396C182 360 322 350 412 300C456 266 440 240 360 214C250 184 138 170 145 130C154 90 242 60 296 26" />
+                    <path className="wisp wisp-3" d="M58 574C96 538 132 514 112 484C78 454 64 434 88 408C158 374 298 364 388 314C434 280 418 254 338 226C228 196 114 184 120 144C128 106 218 74 274 36" />
+                    <path className="wisp wisp-4" d="M100 402C170 367 310 357 400 307C445 272 430 247 350 220C240 190 125 177 132 137" />
+                    <path className="wisp wisp-5" d="M68 580C88 552 120 527 118 500C110 480 88 470 78 457" />
                   </g>
                   <g className="sparks" filter="url(#spark-glow)">
-                    <path className="spark spark-1" d="M248 72 249.3 76.7 254 78 249.3 79.3 248 84 246.7 79.3 242 78 246.7 76.7Z" />
-                    <path className="spark spark-2" d="M286 148 287.5 153.5 293 155 287.5 156.5 286 162 284.5 156.5 279 155 284.5 153.5Z" />
-                    <path className="spark spark-3" d="M214 214 215.8 220.2 222 222 215.8 223.8 214 230 212.2 223.8 206 222 212.2 220.2Z" />
-                    <path className="spark spark-4" d="M304 292 305.5 297.5 311 299 305.5 300.5 304 306 302.5 300.5 297 299 302.5 297.5Z" />
-                    <path className="spark spark-5" d="M236 372 237.3 376.7 242 378 237.3 379.3 236 384 234.7 379.3 230 378 234.7 376.7Z" />
-                    <path className="spark spark-6" d="M318 448 319.8 454.2 326 456 319.8 457.8 318 464 316.2 457.8 310 456 316.2 454.2Z" />
-                    <path className="spark spark-7" d="M176 518 177.1 521.9 181 523 177.1 524.1 176 528 174.9 524.1 171 523 174.9 521.9Z" />
-                    <path className="spark spark-8" d="M252 718 253.3 722.7 258 724 253.3 725.3 252 730 250.7 725.3 246 724 250.7 722.7Z" />
-                    <path className="spark spark-9" d="M348 752 349.1 755.9 353 757 349.1 758.1 348 762 346.9 758.1 343 757 346.9 755.9Z" />
-                    <path className="spark spark-10" d="M152 692 153.3 696.7 158 698 153.3 699.3 152 704 150.7 699.3 146 698 150.7 696.7Z" />
-                    <path className="spark spark-11" d="M268 96 269.1 99.9 273 101 269.1 102.1 268 106 266.9 102.1 263 101 266.9 99.9Z" />
-                    <path className="spark spark-12" d="M228 268 228.9 271.1 232 272 228.9 272.9 228 276 227.1 272.9 224 272 227.1 271.1Z" />
-                    <path className="spark spark-13" d="M292 388 293.3 392.7 298 394 293.3 395.3 292 400 290.7 395.3 286 394 290.7 392.7Z" />
-                    <path className="spark spark-14" d="M210 456 211.5 461.5 217 463 211.5 464.5 210 470 208.5 464.5 203 463 208.5 461.5Z" />
-                    <circle className="spark spark-15" cx="274" cy="190" r="2.2" />
-                    <circle className="spark spark-16" cx="242" cy="330" r="1.8" />
-                    <circle className="spark spark-17" cx="300" cy="510" r="1.7" />
+                    <path className="spark spark-1" d="M248 24 249.3 28.7 254 30 249.3 31.3 248 36 246.7 31.3 242 30 246.7 28.7Z" />
+                    <path className="spark spark-2" d="M286 100 287.5 105.5 293 107 287.5 108.5 286 114 284.5 108.5 279 107 284.5 105.5Z" />
+                    <path className="spark spark-3" d="M214 166 215.8 172.2 222 174 215.8 175.8 214 182 212.2 175.8 206 174 212.2 172.2Z" />
+                    <path className="spark spark-4" d="M304 244 305.5 249.5 311 251 305.5 252.5 304 258 302.5 252.5 297 251 302.5 249.5Z" />
+                    <path className="spark spark-5" d="M236 324 237.3 328.7 242 330 237.3 331.3 236 336 234.7 331.3 230 330 234.7 328.7Z" />
+                    <path className="spark spark-6" d="M318 400 319.8 406.2 326 408 319.8 409.8 318 416 316.2 409.8 310 408 316.2 406.2Z" />
+                    <path className="spark spark-7" d="M176 470 177.1 473.9 181 475 177.1 476.1 176 480 174.9 476.1 171 475 174.9 473.9Z" />
+                    <path className="spark spark-8" d="M252 670 253.3 674.7 258 676 253.3 677.3 252 682 250.7 677.3 246 676 250.7 674.7Z" />
+                    <path className="spark spark-9" d="M348 704 349.1 707.9 353 709 349.1 710.1 348 714 346.9 710.1 343 709 346.9 707.9Z" />
+                    <path className="spark spark-10" d="M152 644 153.3 648.7 158 650 153.3 651.3 152 656 150.7 651.3 146 650 150.7 648.7Z" />
+                    <path className="spark spark-11" d="M268 48 269.1 51.9 273 53 269.1 54.1 268 58 266.9 54.1 263 53 266.9 51.9Z" />
+                    <path className="spark spark-12" d="M228 220 228.9 223.1 232 224 228.9 224.9 228 228 227.1 224.9 224 224 227.1 223.1Z" />
+                    <path className="spark spark-13" d="M292 340 293.3 344.7 298 346 293.3 347.3 292 352 290.7 347.3 286 346 290.7 344.7Z" />
+                    <path className="spark spark-14" d="M210 408 211.5 413.5 217 415 211.5 416.5 210 422 208.5 416.5 203 415 208.5 413.5Z" />
+                    <circle className="spark spark-15" cx="274" cy="142" r="2.2" />
+                    <circle className="spark spark-16" cx="242" cy="282" r="1.8" />
+                    <circle className="spark spark-17" cx="300" cy="462" r="1.7" />
                   </g>
                 </svg>
               </div>
@@ -2388,7 +2388,7 @@ function App() {
                                 ) : (
                                   <>
                                     <span>Rewrite with AI</span>
-                                    <span className="button-points">{revisionCost} wishes</span>
+                                    <span className="button-points">{revisionCost} credits</span>
                                   </>
                                 )}
                               </button>
