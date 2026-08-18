@@ -151,7 +151,7 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   }
 
   if (/timeout|timed out|504|524/i.test(message)) {
-    return 'That wish took too long. Please try again in a moment. Your wish is still in the lamp.'
+    return 'That card took too long. Please try again in a moment. Your credits are still in the lamp.'
   }
 
   return message || fallbackMessage
@@ -232,7 +232,7 @@ const waitForGenerationJob = async (jobId: string, isCurrent: () => boolean) => 
   while (isCurrent()) {
     if (Date.now() - startedAt > generateJobClientTimeoutMs) {
       throw new Error(
-        'That wish took too long. Please try generating again. Your wish is still in the lamp.',
+        'That card took too long. Please try generating again. Your credits are still in the lamp.',
       )
     }
 
@@ -1040,7 +1040,7 @@ function App() {
 
     if (Date.now() - stored.startedAt > generateJobClientTimeoutMs) {
       clearStoredGenerationJob()
-      setError('A previous card took too long to finish. Please try again. Your wish is still in the lamp.')
+      setError('A previous card took too long to finish. Please try again. Your credits are still in the lamp.')
       return
     }
 
@@ -1184,7 +1184,7 @@ function App() {
       }
 
       setError(message)
-      setCreditNotice('Your wish is still in the lamp.')
+      setCreditNotice('Your credits are still in the lamp.')
     } finally {
       if (isCurrent()) {
         setIsGenerating(false)
@@ -1260,7 +1260,7 @@ function App() {
       }
 
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
-      setCreditNotice('Your wish is still in the lamp.')
+      setCreditNotice('Your credits are still in the lamp.')
     } finally {
       if (!startedBackgroundJob) {
         setIsGenerating(false)
@@ -1388,7 +1388,7 @@ function App() {
       setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
-      setCreditNotice('Your wish is still in the lamp.')
+      setCreditNotice('Your credits are still in the lamp.')
     } finally {
       setIsRefiningImage(false)
     }
@@ -1450,7 +1450,7 @@ function App() {
       setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
-      setCreditNotice('Your wish is still in the lamp.')
+      setCreditNotice('Your credits are still in the lamp.')
     } finally {
       setIsRefiningCopy(false)
     }
@@ -1606,7 +1606,7 @@ function App() {
         </p>
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
-            <span className="wallet-kicker">Welcome back, {senderLabel}. Ready for another wish?</span>
+            <span className="wallet-kicker">Welcome back, {senderLabel}. Ready to make another card?</span>
             <strong>{credits} credits in your lamp</strong>
             <small>
               Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
@@ -1796,33 +1796,32 @@ function App() {
         </form>}
 
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
-          <div className="panel-heading proof-heading">
-            {!isRecipientView && <span>02</span>}
-            <div>
-              <h2>
-                {isRecipientView ? 'Your card' : showEditor ? 'Revise your card' : 'Your card'}
-              </h2>
+          {!isRecipientView && (
+            <div className="panel-heading proof-heading">
+              <span>02</span>
+              <div>
+                <h2>{showEditor ? 'Revise your card' : 'Your card'}</h2>
+              </div>
+              {!isGenerating &&
+                card &&
+                (showEditor ? (
+                  <button
+                    className="secondary-button revise-top-button"
+                    type="button"
+                    onClick={() => {
+                      setShowEditor(false)
+                      setShowPolishDialog(false)
+                    }}
+                  >
+                    Close Editor
+                  </button>
+                ) : (
+                  <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
+                    Revise card
+                  </button>
+                ))}
             </div>
-            {!isRecipientView &&
-              !isGenerating &&
-              card &&
-              (showEditor ? (
-                <button
-                  className="secondary-button revise-top-button"
-                  type="button"
-                  onClick={() => {
-                    setShowEditor(false)
-                    setShowPolishDialog(false)
-                  }}
-                >
-                  Close Editor
-                </button>
-              ) : (
-                <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
-                  Revise card
-                </button>
-              ))}
-          </div>
+          )}
 
           {isGenerating && (
             <div className="creative-loader" role="status" aria-live="polite">
@@ -2080,7 +2079,7 @@ function App() {
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send?</span>
-                  <h3>Send this wish</h3>
+                  <h3>Send this card</h3>
                   <p>Send a secure card link by email or text after you approve the card.</p>
                 </div>
                 <div className="mode-toggle delivery-methods" aria-label="Delivery method">
@@ -2179,7 +2178,7 @@ function App() {
                   disabled={isDelivering || (deliveryMethod === 'text' && !smsConsentConfirmed)}
                   aria-busy={isDelivering}
                 >
-                  {isDelivering ? 'Sending your wish...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
+                  {isDelivering ? 'Sending your card...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
                 </button>
                 {sharedCard && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">

@@ -482,7 +482,7 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
   const blocked = formatBlockedTextNote(details, error)
 
   if (blocked) {
-    return `The genie couldn't grant that wish. ${blocked} No card was created. Change that wording and try again.`
+    return `The genie couldn't create that card. ${blocked} No card was created. Change that wording and try again.`
   }
 
   if (hasPhotos) {
@@ -493,7 +493,7 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
     return 'Card Genie cannot put trademarked characters or brands on the cover. Try describing the hobby without naming a superhero or brand, then generate again.'
   }
 
-  return "The genie couldn't grant that wish. Try a different image style, or simplify the personal details. No card was created."
+  return "The genie couldn't create that card. Try a different image style, or simplify the personal details. No card was created."
 }
 
 const maxReferenceImages = 3
@@ -1325,7 +1325,7 @@ const expireStuckGenerateJob = async (job) => {
     return await saveGenerateJob({
       ...job,
       status: 'failed',
-      error: 'That wish took too long. Please try generating again. Your wish is still in the lamp.',
+      error: 'That card took too long. Please try generating again. Your credits are still in the lamp.',
       referenceImages: [],
       result: null,
     })
@@ -1334,7 +1334,7 @@ const expireStuckGenerateJob = async (job) => {
     return {
       ...job,
       status: 'failed',
-      error: 'That wish took too long. Please try generating again. Your wish is still in the lamp.',
+      error: 'That card took too long. Please try generating again. Your credits are still in the lamp.',
       referenceImages: [],
       result: null,
       updatedAt: Date.now(),

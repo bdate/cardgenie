@@ -145,6 +145,11 @@
 
 .recipient-preview-panel {
   min-height: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .recipient-preview-panel .proof-heading {
