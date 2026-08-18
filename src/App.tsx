@@ -1596,12 +1596,12 @@ function App() {
           <span className="brand-wordmark">Card Genie</span>
         </a>
         <h1>
-          {isRecipientView ? 'You received a card' : 'Any Card Imaginable'}
+          {isRecipientView ? `You received a card from ${senderLabel}` : 'Any Card Imaginable'}
           {!isRecipientView && <span className="trademark-mark">™</span>}
         </h1>
         <p>
           {isRecipientView
-            ? 'Open the envelope to see your personalized greeting card.'
+            ? ''
             : 'Powered by GreetingCardUniverse.com'}
         </p>
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
@@ -1800,7 +1800,7 @@ function App() {
             {!isRecipientView && <span>02</span>}
             <div>
               <h2>
-                {isRecipientView ? `Your card from ${senderLabel}` : showEditor ? 'Revise your card' : 'Your card'}
+                {isRecipientView ? 'Your card' : showEditor ? 'Revise your card' : 'Your card'}
               </h2>
             </div>
             {!isRecipientView &&
