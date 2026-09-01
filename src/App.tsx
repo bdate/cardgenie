@@ -151,7 +151,7 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
   }
 
   if (/timeout|timed out|504|524/i.test(message)) {
-    return 'That card took too long. Please try again in a moment. Your credits are still in the lamp.'
+    return 'That card took too long. Please try again in a moment. Your credits are still in your account.'
   }
 
   return message || fallbackMessage
@@ -232,7 +232,7 @@ const waitForGenerationJob = async (jobId: string, isCurrent: () => boolean) => 
   while (isCurrent()) {
     if (Date.now() - startedAt > generateJobClientTimeoutMs) {
       throw new Error(
-        'That card took too long. Please try generating again. Your credits are still in the lamp.',
+        'That card took too long. Please try generating again. Your credits are still in your account.',
       )
     }
 
@@ -786,6 +786,7 @@ function App() {
   const [details, setDetails] = useState<CardDetails>(initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
+  const [hasViewedFront, setHasViewedFront] = useState(false)
   const [hasViewedInside, setHasViewedInside] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showCompletionNote, setShowCompletionNote] = useState(false)
@@ -811,6 +812,7 @@ function App() {
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
+  const [hasSentCurrentCard, setHasSentCurrentCard] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
@@ -874,9 +876,17 @@ function App() {
   const hasEnoughCreditsForRevision = credits >= revisionCost
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
+  const showReviseButton = hasViewedFront && hasViewedInside
+  const showCoverWatermark = !isRecipientView && Boolean(card) && !hasSentCurrentCard
+  const coverPreviewClass = (baseClass = '') =>
+    [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
   const keepScreenAwake = isGenerating || isRefiningImage || isRefiningCopy || isDelivering
 
   useEffect(() => {
+    if (step === 'front') {
+      setHasViewedFront(true)
+    }
+
     if (step === 'inside') {
       setHasViewedInside(true)
     }
@@ -1040,7 +1050,7 @@ function App() {
 
     if (Date.now() - stored.startedAt > generateJobClientTimeoutMs) {
       clearStoredGenerationJob()
-      setError('A previous card took too long to finish. Please try again. Your credits are still in the lamp.')
+      setError('A previous card took too long to finish. Please try again. Your credits are still in your account.')
       return
     }
 
@@ -1144,6 +1154,7 @@ function App() {
     setCardGreeting('')
     setCardSignature(signatureName)
     setStep('envelope')
+    setHasSentCurrentCard(false)
     setShowCompletionNote(true)
     setCredits((current) => current - cardGenerationCost)
     setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
@@ -1160,6 +1171,7 @@ function App() {
     setError('')
     setShowEditor(false)
     setShowPolishDialog(false)
+    setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
 
@@ -1184,7 +1196,7 @@ function App() {
       }
 
       setError(message)
-      setCreditNotice('Your credits are still in the lamp.')
+      setCreditNotice('Your credits are still in your account.')
     } finally {
       if (isCurrent()) {
         setIsGenerating(false)
@@ -1210,6 +1222,8 @@ function App() {
     setShowPolishDialog(false)
     setSharedCard(null)
     setDeliveryNotice('')
+    setHasSentCurrentCard(false)
+    setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
     void requestScreenWakeLock()
@@ -1260,7 +1274,7 @@ function App() {
       }
 
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
-      setCreditNotice('Your credits are still in the lamp.')
+      setCreditNotice('Your credits are still in your account.')
     } finally {
       if (!startedBackgroundJob) {
         setIsGenerating(false)
@@ -1286,6 +1300,7 @@ function App() {
   const replayAnimation = () => {
     setShowEditor(false)
     setShowPolishDialog(false)
+    setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
   }
@@ -1382,13 +1397,14 @@ function App() {
       }
 
       setCard((current) => (current ? { ...current, imageUrl: data.imageUrl } : current))
+      setHasSentCurrentCard(false)
       setImageRefinement('')
       setStep('front')
       setCredits((current) => current - revisionCost)
       setCreditNotice(`${revisionCost} credits used to revise the cover.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
-      setCreditNotice('Your credits are still in the lamp.')
+      setCreditNotice('Your credits are still in your account.')
     } finally {
       setIsRefiningImage(false)
     }
@@ -1450,7 +1466,7 @@ function App() {
       setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
-      setCreditNotice('Your credits are still in the lamp.')
+      setCreditNotice('Your credits are still in your account.')
     } finally {
       setIsRefiningCopy(false)
     }
@@ -1568,6 +1584,7 @@ function App() {
           : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
 
       setDeliveryNotice(data.message || 'Card sent.')
+      setHasSentCurrentCard(true)
       addDeliveryLog({
         method: deliveryMethod,
         destination: deliveredDisplay,
@@ -1606,8 +1623,12 @@ function App() {
         </p>
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
-            <span className="wallet-kicker">Welcome back, {senderLabel}. Ready to make another card?</span>
-            <strong>{credits} credits in your lamp</strong>
+            <span className="wallet-kicker">
+              {details.senderName.trim()
+                ? `Welcome back, ${details.senderName.trim()}. Ready to make another card?`
+                : 'Ready to make your next card?'}
+            </span>
+            <strong>{credits} credits in your account</strong>
             <small>
               Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
             </small>
@@ -1624,7 +1645,7 @@ function App() {
             <span>01</span>
             <div>
               <h2>Tell us about the card</h2>
-              <p>One set of details powers both the image and the message.</p>
+              <p>Your details will help create both the image and message.</p>
             </div>
           </div>
 
@@ -1816,9 +1837,11 @@ function App() {
                     Close Editor
                   </button>
                 ) : (
-                  <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
-                    Revise card
-                  </button>
+                  showReviseButton && (
+                    <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
+                      Revise card
+                    </button>
+                  )
                 ))}
             </div>
           )}
@@ -1871,7 +1894,7 @@ function App() {
               </div>
               <span className="loader-kicker">Creating a little magic</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
-              <p className="loader-note">You can switch apps. We will keep working, and the card will be waiting when you come back.</p>
+              <p className="loader-note">You can leave and come back. We will keep working, and the card will be waiting when you come back.</p>
             </div>
           )}
 
@@ -1956,7 +1979,7 @@ function App() {
                       <div className={`envelope-flap${step === 'opening' ? '' : ' envelope-flap-static'}`} />
                     </div>
                     {step === 'opening' && (
-                      <div className="envelope-card-rise">
+                      <div className={coverPreviewClass('envelope-card-rise')}>
                         <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
                       </div>
                     )}
@@ -1974,7 +1997,7 @@ function App() {
                   onClick={() => setStep('inside')}
                   aria-label={`Show inside of card for ${recipientLabel}`}
                 >
-                  <div className="card-cover-frame">
+                  <div className={coverPreviewClass('card-cover-frame')}>
                     <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
                   </div>
                 </button>
@@ -1993,7 +2016,7 @@ function App() {
                       {cardClosing ? <div className="card-closing">{cardClosing}</div> : null}
                       <div className="card-signature">{cardSignatureLabel}</div>
                     </div>
-                    <div className="card-opening-cover">
+                    <div className={coverPreviewClass('card-opening-cover')}>
                       <img src={card.imageUrl} alt={`Opening card cover for ${recipientLabel}`} />
                     </div>
                   </div>
@@ -2040,6 +2063,13 @@ function App() {
                     Inside
                   </button>
                 </nav>
+              )}
+              {showCoverWatermark &&
+                !showEditor &&
+                (step === 'front' || step === 'inside' || step === 'opening' || step === 'cardOpening') && (
+                <p className="cover-watermark-note">
+                  A preview watermark is shown on the cover. It will not appear on the card sent to your recipient.
+                </p>
               )}
               {isRecipientView && card && (step === 'front' || step === 'inside') && (
                 <>
@@ -2224,7 +2254,9 @@ function App() {
                       type="button"
                       onClick={() => setEditorTab('front')}
                     >
-                      <img src={card.imageUrl} alt="" />
+                      <span className={coverPreviewClass('editor-cover-thumb')}>
+                        <img src={card.imageUrl} alt="" />
+                      </span>
                       <span>Cover</span>
                     </button>
                     <button
@@ -2242,14 +2274,21 @@ function App() {
                       {editorTab === 'front' ? (
                         <>
                           <div className="image-zoom">
-                            <div className="card-cover-frame editor-cover-frame">
+                            <div className={coverPreviewClass('card-cover-frame editor-cover-frame')}>
                               <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
                             </div>
-                            <div className="image-zoom-popover" aria-hidden="true">
+                            <div className={coverPreviewClass('image-zoom-popover')} aria-hidden="true">
                               <img src={card.imageUrl} alt="" />
                             </div>
                           </div>
-                          <span className="zoom-hint">Hover over the cover to enlarge</span>
+                          {showCoverWatermark ? (
+                            <span className="cover-watermark-note editor-watermark-note">
+                              A preview watermark is shown on the cover. It will not appear on the card sent to your
+                              recipient.
+                            </span>
+                          ) : (
+                            <span className="zoom-hint">Hover over the cover to enlarge</span>
+                          )}
                         </>
                       ) : (
                         <>

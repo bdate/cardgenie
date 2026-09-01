@@ -926,8 +926,8 @@ const buildSharePreviewCopy = (record) => {
     ? `${recipientFirstName}, ${sender} sent you a ${occasion} card`
     : `${sender} sent you a ${occasion} card`
   const description = recipientFirstName
-    ? `${recipientFirstName}, open your personalized ${occasion} card from ${sender}.`
-    : `Open your personalized ${occasion} card from ${sender}.`
+    ? `${recipientFirstName}, open your personalized card from ${sender}.`
+    : `Open your personalized card from ${sender}.`
 
   return { title, description }
 }
@@ -1026,8 +1026,8 @@ const buildDeliveryCopy = (record, shareUrl) => {
   const sender = record.signature || record.details.senderName || 'Someone special'
   const occasion = record.details.occasion || 'card'
   const openLine = recipientFirstName
-    ? `${recipientFirstName}, open your personalized ${occasion} card from ${sender}.`
-    : `Open your personalized ${occasion} card from ${sender}.`
+    ? `${recipientFirstName}, open your personalized card from ${sender}.`
+    : `Open your personalized card from ${sender}.`
 
   return {
     subject: `${sender} sent you a ${occasion} card`,
@@ -1325,7 +1325,7 @@ const expireStuckGenerateJob = async (job) => {
     return await saveGenerateJob({
       ...job,
       status: 'failed',
-      error: 'That card took too long. Please try generating again. Your credits are still in the lamp.',
+      error: 'That card took too long. Please try generating again. Your credits are still in your account.',
       referenceImages: [],
       result: null,
     })
@@ -1334,7 +1334,7 @@ const expireStuckGenerateJob = async (job) => {
     return {
       ...job,
       status: 'failed',
-      error: 'That card took too long. Please try generating again. Your credits are still in the lamp.',
+      error: 'That card took too long. Please try generating again. Your credits are still in your account.',
       referenceImages: [],
       result: null,
       updatedAt: Date.now(),
