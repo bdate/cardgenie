@@ -1459,6 +1459,32 @@ const handleShareCover = async (request, env, cardId) => {
   return jsonResponse(request, env, { error: 'Card cover is unavailable.' }, 404)
 }
 
+const publicDeliveryError = (error, method = 'email') => {
+  const message = error instanceof Error ? error.message : String(error || '')
+
+  if (/sendgrid/i.test(message)) {
+    if (/maximum credits exceeded/i.test(message)) {
+      return 'Email delivery is temporarily unavailable because the sending limit was reached. You can still open the shareable card link and send it yourself.'
+    }
+
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+  }
+
+  if (/postmark/i.test(message)) {
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+  }
+
+  if (/twilio/i.test(message)) {
+    return 'Text delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+  }
+
+  if (/not configured/i.test(message)) {
+    return message
+  }
+
+  return message || (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.')
+}
+
 const handleDeliverCard = async (request, env) => {
   const { cardId, method, destination, recipientConsentConfirmed } = (await readJson(request)) || {}
   const record = await getCardRecord(env, cardId)
@@ -1506,12 +1532,17 @@ const handleDeliverCard = async (request, env) => {
       message: 'Card has been sent.',
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to deliver the card.'
+    const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
     const isValidationError =
-      /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(message) &&
-      !/SendGrid|Postmark|Twilio|configured/i.test(message)
+      /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(rawMessage) &&
+      !/SendGrid|Postmark|Twilio|configured/i.test(rawMessage)
 
-    return jsonResponse(request, env, { error: message }, isValidationError ? 400 : 500)
+    return jsonResponse(
+      request,
+      env,
+      { error: isValidationError ? rawMessage : publicDeliveryError(error, method) },
+      isValidationError ? 400 : 500,
+    )
   }
 }
 
