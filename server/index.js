@@ -146,7 +146,7 @@ app.post('/api/deliver-card', async (req, res) => {
       ok: true,
       shareUrl,
       deliveredTo,
-      message: method === 'email' ? 'Card email sent.' : 'Card text sent.',
+      message: 'Card has been sent.',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to deliver the card.'

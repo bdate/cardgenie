@@ -1583,13 +1583,13 @@ function App() {
           ? formatEmailAddress(String(data.deliveredTo || destinationValue))
           : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
 
-      setDeliveryNotice(data.message || 'Card sent.')
+      setDeliveryNotice(data.message || 'Card has been sent.')
       setHasSentCurrentCard(true)
       addDeliveryLog({
         method: deliveryMethod,
         destination: deliveredDisplay,
         status: 'Sent',
-        message: data.message || 'Card sent.',
+        message: data.message || 'Card has been sent.',
       })
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Unable to deliver the card.'
