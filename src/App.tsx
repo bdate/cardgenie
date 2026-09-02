@@ -1765,9 +1765,13 @@ function App() {
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
               placeholder={
-                'Add memories, interests, relationship details, places, colors, or anything the card should include.\nIf you’re asking for people to be included in the image, please provide physical attributes like: grandma is tall with short blonde hair with green eyes.'
+                'Add memories, interests, stories, or scene ideas for the card.\nPhysical traits (tall, green eyes, blonde hair, etc.) help draw people on the cover — they won\u2019t appear in the inside message.'
               }
             />
+            <p className="field-help">
+              Describe how people should look if you want them on the cover. Those details shape the artwork, not
+              the inside note.
+            </p>
           </label>
 
           <div className="reference-photos-field">

@@ -4,7 +4,12 @@ const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 const fallbackCardStore = new Map()
 
-const buildCopyPrompt = (details, refinement = '') => `
+const buildCopyPrompt = (details, refinement = '', messageKeyDetails) => {
+  const personalDetails =
+    typeof messageKeyDetails === 'string' ? messageKeyDetails : details.keyDetails || ''
+  const appearanceRemoved = personalDetails.trim() !== (details.keyDetails || '').trim()
+
+  return `
 Write the inside message for a personalized greeting card.
 
 Recipient: ${details.recipientName || details.recipientType}
@@ -13,8 +18,9 @@ Sender: ${details.senderName}
 Occasion: ${details.occasion}
 Tone: ${details.tone}
 Length: ${details.length}
-Personal details to include: ${details.keyDetails}
+Personal details to include: ${personalDetails || 'Use the occasion, tone, and relationship only.'}
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
+${appearanceRemoved ? '\nNote: Physical appearance details were removed from the list above. They are used only for the cover artwork. Do not infer, describe, or compliment anyone\'s looks, height, hair, eyes, figure, or skin tone.' : ''}
 
 Strictly obey the selected Length word-count range for the message body only. Count the body copy words, not the greeting, closing, or signature. Do not exceed the maximum word count in the selected range.
 
@@ -26,7 +32,141 @@ Return strict JSON only, with this shape:
 
 Do not include a salutation like "Dear..." and do not include the sender name, placeholder, or signature. The app will typeset the greeting, closing, and cursive signature separately.
 Make the body warm, specific, natural, and suitable to appear inside a digital greeting card. Keep it concise enough to fit inside a 5x7 card with generous margins. Use natural paragraph breaks based on grammar and meaning.
+
+Physical appearance vs. message content:
+- Personal details often include physical descriptions (height, eye color, hair color or style, build, glasses, facial hair, etc.) meant for the front cover artwork only.
+- Do NOT mention physical appearance in the inside message. Never write that someone is tall, has green eyes, blonde hair, a radiant figure, or similar look-based details.
+- Use personal details for the message only when they describe memories, interests, hobbies, relationships, places, feelings, jokes, or occasion-relevant stories — not how someone looks.
+- Wrong: "Your tall figure and green eyes captivate me." Right: "Your passion for pilates and how you embrace life inspire me."
 `
+}
+
+const appearanceKeywordPattern =
+  /\b(tall|taller|short|shorter|petite|slim|slender|muscular|stocky|tan|tanned|sun[- ]?kissed|figure|stature|frame|build|complexion|freckles|dimples)\b|\b(green|blue|brown|hazel|gray|grey|amber)\s+eyes?\b|\beye[- ]?color\b|\b(blonde|blond|brunette|auburn|redhead)\b|\b(black|brown|blonde|blond|red|auburn|gray|grey|white|silver|medium|dark|light|short|long|curly|wavy|straight)\s+(?:\w+\s+){0,2}hair\b|\bhair\s+(?:color|with|is)\b|\b(short|long|curly|wavy|straight)\s+hair\b|\b(radiant|captivating|stunning|beautiful|handsome|pretty)\s+(?:green|blue|brown|)?\s*eyes\b/gi
+
+const splitIntoDetailSentences = (text = '') =>
+  text
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+
+const isAppearanceFocusedSentence = (sentence) => {
+  const trimmed = sentence.trim()
+
+  if (!trimmed) {
+    return false
+  }
+
+  const appearanceMatches = trimmed.match(appearanceKeywordPattern) || []
+
+  if (appearanceMatches.length === 0) {
+    return false
+  }
+
+  if (/^(?:is|are|was|were|has|have|had)\b/i.test(trimmed) && appearanceMatches.length >= 1) {
+    return true
+  }
+
+  if (
+    /^(?:she|he|they|[A-Za-z]+)\s+(?:is|are|was|were|has|have|had)\s+/i.test(trimmed) &&
+    appearanceMatches.length >= 1 &&
+    !/\b(?:love|loves|liked|enjoy|enjoys|passion|favorite|favourite|hobby|hobbies)\b/i.test(trimmed)
+  ) {
+    return true
+  }
+
+  const words = trimmed.split(/\s+/).filter(Boolean)
+
+  return appearanceMatches.length >= 2 && appearanceMatches.length / Math.max(words.length, 1) > 0.12
+}
+
+const stripAppearanceClausesFromSentence = (sentence) => {
+  let result = sentence
+    .replace(
+      /\b(?:your|her|his|their)\s+(?:\w+\s+){0,2}(?:tall\s+)?(?:figure|stature|frame|build)\s+and\s+(?:radiant\s+|beautiful\s+|captivating\s+|stunning\s+)?(?:\w+\s+){0,2}eyes?\s+\w+\s+me,?\s*(?:while\s+)?/gi,
+      '',
+    )
+    .replace(
+      /\b(?:your|her|his|their)\s+(?:tall\s+)?(?:figure|stature|frame|build)\b(?:\s+and\s+(?:radiant\s+|beautiful\s+|captivating\s+|stunning\s+)?(?:\w+\s+){0,2}eyes?(?:\s+\w+\s+me)?)?/gi,
+      '',
+    )
+    .replace(
+      /,?\s*\b(?:is|are|was|were)\s+(?:very\s+|so\s+)?(?:tall|short|tan|tanned|slim|petite|muscular)(?:\s*,\s*|\s+and\s+)has\s+(?:medium\s+|long\s+|short\s+|beautiful\s+)?(?:(?:blonde|blond|brunette|auburn|black|brown|red|gray|grey|white|silver|\w+)\s+){0,2}hair(?:\s+with\s+(?:green|blue|brown|hazel|gray|grey)\s+eyes?)?(?:\s*,\s*|\s+and\s+)is\s+(?:tan|tanned)\b/gi,
+      '',
+    )
+    .replace(
+      /,?\s*\b(?:is|are|was|were)\s+(?:very\s+|so\s+)?(?:tall|short|tan|tanned|slim|petite|muscular)\b/gi,
+      '',
+    )
+    .replace(
+      /,?\s*\b(?:has|have|had)\s+(?:medium\s+|long\s+|short\s+|beautiful\s+)?(?:(?:blonde|blond|brunette|auburn|black|brown|red|gray|grey|white|silver|\w+)\s+){0,2}hair(?:\s+with\s+(?:green|blue|brown|hazel|gray|grey)\s+eyes?)?/gi,
+      '',
+    )
+    .replace(
+      /,?\s*\b(?:with\s+)?(?:green|blue|brown|hazel|gray|grey|radiant|captivating|beautiful|stunning)\s+eyes?\b/gi,
+      '',
+    )
+    .replace(/\b(?:and\s+)?(?:radiant|beautiful|captivating|stunning)\s+captivate me,?\s*(?:while\s+)?/gi, '')
+    .replace(/\bwhich\s+is\s+black\s+and\s+white(?:\s+with\s+short\s+hair)?/gi, '')
+    .replace(/\s+,/g, ',')
+    .replace(/,\s*,/g, ',')
+    .replace(/,\s*\./g, '.')
+    .replace(/\.\s*\./g, '.')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (/^(?:while|and)\b/i.test(result)) {
+    result = result.replace(/^(?:while|and)\s+/i, '')
+  }
+
+  if (result && /^[a-z]/.test(result)) {
+    result = `${result.charAt(0).toUpperCase()}${result.slice(1)}`
+  }
+
+  return result
+}
+
+const getOriginalKeyDetails = (details = {}) => {
+  const raw = details.keyDetails || ''
+  const marker = '\n\nCurrent inside message:'
+  const index = raw.indexOf(marker)
+
+  return index === -1 ? raw : raw.slice(0, index)
+}
+
+const extractMessageKeyDetails = (keyDetails = '') => {
+  const sentences = splitIntoDetailSentences(keyDetails)
+
+  return sentences
+    .filter((sentence) => !isAppearanceFocusedSentence(sentence))
+    .map((sentence) => stripAppearanceClausesFromSentence(sentence))
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+}
+
+const messageStillMentionsAppearance = (message = '') => appearanceKeywordPattern.test(message)
+
+const stripAppearanceFromMessage = (message = '') => {
+  const paragraphs = message
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  const cleanedParagraphs = paragraphs
+    .map((paragraph) => {
+      const sentences = splitIntoDetailSentences(paragraph)
+
+      return sentences
+        .map((sentence) => stripAppearanceClausesFromSentence(sentence))
+        .filter((sentence) => sentence && !messageStillMentionsAppearance(sentence))
+        .join(' ')
+        .trim()
+    })
+    .filter(Boolean)
+
+  return cleanedParagraphs.join('\n\n').trim()
+}
 
 const buildStyleResemblanceDirection = (imageStyle = '') => {
   if (/comic/i.test(imageStyle)) {
@@ -353,6 +493,11 @@ Relationship: ${details.recipientType}
 Tone: ${details.tone}
 Visual style: ${details.imageStyle || 'AI chooses the best style for this card'}
 Important personal context: ${details.keyDetails}
+
+Physical appearance from personal details:
+- When the sender describes how someone looks (height, eye color, hair, glasses, build, age cues, clothing colors, etc.), use those details to depict people accurately on the cover.
+- Physical adjectives and appearance notes in the personal context are primarily for cover artwork, not for text on the card. Reflect them visually when people appear on the cover.
+
 Name and relationship context: the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}". Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
 
@@ -1243,6 +1388,7 @@ Return strict JSON only with this shape:
 
 Keep the same recipient, occasion, tone, and most important personal detail.
 Do not include salutation, closing, sender name, placeholder, or signature in the message.
+Do not mention physical appearance (height, eye color, hair, build, etc.).
 
 Current body:
 ${copy.message}
@@ -1257,15 +1403,21 @@ ${copy.message}
 }
 
 const generateCopy = async (openai, env, details, refinement = '', _referenceImages = [], likenessBrief = '') => {
-  const prompt = `${buildCopyPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief)}
-If a likeness brief is provided, keep the message consistent with those people and details. Do not mention photos or that you saw pictures.`
+  const messageKeyDetails = extractMessageKeyDetails(getOriginalKeyDetails(details))
+  const prompt = `${buildCopyPrompt(details, refinement, messageKeyDetails)}${buildLikenessBriefSection(likenessBrief)}
+If a likeness brief is provided, you may use it to know who the card is about, but do not describe anyone's physical appearance in the message. Do not mention photos or that you saw pictures.`
 
   const copyResponse = await openai.responses.create({
     model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
     input: prompt,
   })
 
-  return fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
+  const copy = await fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
+
+  return {
+    ...copy,
+    message: stripAppearanceFromMessage(copy.message),
+  }
 }
 
 const getImageUrl = (imageResponse, fallbackMessage) => {
