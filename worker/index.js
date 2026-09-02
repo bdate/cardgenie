@@ -990,6 +990,25 @@ const buildDeliveryCopy = (record, shareUrl) => {
   }
 }
 
+const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
+  const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
+  const sender = record.signature || record.details.senderName || 'You'
+
+  return {
+    subject: `Your copy of the card for ${recipient}`,
+    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        <h1 style="margin: 0 0 12px;">Your card copy</h1>
+        <p>Here is a copy of the card you sent to ${recipient}.</p>
+        <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
+        <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+        <p style="margin-top: 18px; color: #666;">Sent by ${sender} through Card Genie.</p>
+      </div>
+    `,
+  }
+}
+
 const parseEmailSender = (from = '') => {
   const match = from.trim().match(/^(.*?)\s*<([^>]+)>$/)
 
@@ -1486,9 +1505,11 @@ const publicDeliveryError = (error, method = 'email') => {
 }
 
 const handleDeliverCard = async (request, env) => {
-  const { cardId, method, destination, recipientConsentConfirmed } = (await readJson(request)) || {}
+  const { cardId, method, destination, recipientConsentConfirmed, senderCopyEmail: rawSenderCopyEmail } =
+    (await readJson(request)) || {}
   const record = await getCardRecord(env, cardId)
   const cleanDestination = destination?.trim()
+  const senderCopyEmail = rawSenderCopyEmail?.trim()
 
   if (!record) {
     return jsonResponse(request, env, { error: 'Save the card before delivering it.' }, 404)
@@ -1525,11 +1546,25 @@ const handleDeliverCard = async (request, env) => {
         ? await sendEmailDelivery({ env, to: normalizeEmailAddress(cleanDestination), copy })
         : await sendTextDelivery({ env, to: cleanDestination, copy })
 
+    let senderCopyDeliveredTo = null
+
+    if (senderCopyEmail) {
+      const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl)
+      senderCopyDeliveredTo = await sendEmailDelivery({
+        env,
+        to: normalizeEmailAddress(senderCopyEmail),
+        copy: senderCopy,
+      })
+    }
+
     return jsonResponse(request, env, {
       ok: true,
       shareUrl,
       deliveredTo,
-      message: 'Card has been sent.',
+      senderCopyDeliveredTo,
+      message: senderCopyDeliveredTo
+        ? 'Card has been sent. A copy was emailed to you.'
+        : 'Card has been sent.',
     })
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'

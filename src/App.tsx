@@ -808,6 +808,8 @@ function App() {
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
   const [deliveryDestination, setDeliveryDestination] = useState('')
+  const [showSenderCopyField, setShowSenderCopyField] = useState(false)
+  const [senderCopyEmail, setSenderCopyEmail] = useState('')
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
@@ -1556,6 +1558,20 @@ function App() {
       return
     }
 
+    let senderCopyValue = ''
+
+    if (showSenderCopyField && senderCopyEmail.trim()) {
+      const validatedSenderCopy = validateEmailAddress(senderCopyEmail)
+
+      if (!validatedSenderCopy.ok) {
+        setDeliveryNotice(validatedSenderCopy.message)
+        return
+      }
+
+      senderCopyValue = validatedSenderCopy.value
+      setSenderCopyEmail(validatedSenderCopy.value)
+    }
+
     setIsDelivering(true)
 
     try {
@@ -1570,6 +1586,7 @@ function App() {
           method: deliveryMethod,
           destination: destinationValue,
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
+          senderCopyEmail: senderCopyValue || undefined,
         }),
       })
       const data = await getApiJson(response, 'Unable to deliver the card.')
@@ -1585,6 +1602,9 @@ function App() {
 
       setDeliveryNotice(data.message || 'Card has been sent.')
       setHasSentCurrentCard(true)
+      if (senderCopyValue) {
+        setShowSenderCopyField(false)
+      }
       addDeliveryLog({
         method: deliveryMethod,
         destination: deliveredDisplay,
@@ -1642,7 +1662,6 @@ function App() {
       <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'}`.trim()}>
         {!isRecipientView && <form className="card-panel form-panel" onSubmit={generateCard}>
           <div className="panel-heading">
-            <span>01</span>
             <div>
               <h2>Tell us about the card</h2>
               <p>Your details will help create both the image and message.</p>
@@ -1819,7 +1838,6 @@ function App() {
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           {!isRecipientView && (
             <div className="panel-heading proof-heading">
-              <span>02</span>
               <div>
                 <h2>{showEditor ? 'Revise your card' : 'Your card'}</h2>
               </div>
@@ -1894,7 +1912,7 @@ function App() {
               </div>
               <span className="loader-kicker">Creating a little magic</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
-              <p className="loader-note">You can leave and come back. We will keep working, and the card will be waiting when you come back.</p>
+              <p className="loader-note">This could take up to a minute. You can leave and come back. We will keep working, and the card will be waiting when you come back.</p>
             </div>
           )}
 
@@ -2123,6 +2141,8 @@ function App() {
                     onClick={() => {
                       setDeliveryMethod('email')
                       setDeliveryDestination('')
+                      setShowSenderCopyField(false)
+                      setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
                       setDeliveryNotice('')
                     }}
@@ -2135,6 +2155,8 @@ function App() {
                     onClick={() => {
                       setDeliveryMethod('text')
                       setDeliveryDestination('')
+                      setShowSenderCopyField(false)
+                      setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
                       setDeliveryNotice('')
                     }}
@@ -2183,6 +2205,47 @@ function App() {
                     placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
                   />
                 </label>
+                {!showSenderCopyField ? (
+                  <button
+                    className="sender-copy-link"
+                    type="button"
+                    onClick={() => {
+                      setShowSenderCopyField(true)
+                      setDeliveryNotice('')
+                    }}
+                  >
+                    Send me a copy
+                  </button>
+                ) : (
+                  <label>
+                    Your email for a copy
+                    <input
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      value={senderCopyEmail}
+                      onChange={(event) => {
+                        setSenderCopyEmail(event.target.value)
+                        setDeliveryNotice('')
+                      }}
+                      onBlur={() => {
+                        if (!senderCopyEmail.trim()) {
+                          return
+                        }
+
+                        const validated = validateEmailAddress(senderCopyEmail)
+
+                        if (validated.ok) {
+                          setSenderCopyEmail(validated.value)
+                          setDeliveryNotice('')
+                        } else {
+                          setDeliveryNotice(validated.message)
+                        }
+                      }}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                )}
                 {deliveryMethod === 'text' && (
                   <label className="sms-consent">
                     <input

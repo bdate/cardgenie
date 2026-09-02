@@ -185,18 +185,6 @@
   margin-bottom: 4px;
 }
 
-.panel-heading span {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 16px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--gcu-orange), #e9821f);
-  font-weight: 900;
-}
-
 .panel-heading h2 {
   margin: 0;
   color: var(--gcu-ink);
@@ -1340,12 +1328,12 @@ textarea:focus {
 .cover-preview.is-watermarked::after {
   content: '';
   position: absolute;
-  inset: -20%;
+  inset: 0;
   z-index: 3;
   pointer-events: none;
   opacity: 0.88;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='140' viewBox='0 0 280 140'%3E%3Cg fill='%23ffffff' fill-opacity='0.42' font-family='Arial,sans-serif' font-size='17' font-weight='700' letter-spacing='0.08em'%3E%3Ctext transform='rotate(-28 72 44)' x='8' y='44'%3Ecard-genie.com%3C/text%3E%3Ctext transform='rotate(-28 202 98)' x='72' y='98'%3Ecard-genie.com%3C/text%3E%3C/g%3E%3C/svg%3E");
-  background-size: 280px 140px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='190' viewBox='0 0 520 190'%3E%3Cg fill='%23ffffff' fill-opacity='0.42' font-family='Arial,sans-serif' font-size='26' font-weight='700' letter-spacing='0.08em'%3E%3Ctext transform='rotate(-28 140 78)' x='140' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3Ctext transform='rotate(-28 380 78)' x='380' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3C/g%3E%3C/svg%3E");
+  background-size: 520px 190px;
   background-repeat: repeat;
   mix-blend-mode: soft-light;
 }
@@ -1788,10 +1776,22 @@ textarea:focus {
   font-weight: 900;
 }
 
-.share-link {
+.share-link,
+.sender-copy-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
   color: var(--gcu-dark-teal);
+  background: transparent;
   font-size: 0.88rem;
   font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.share-link {
+  display: inline;
 }
 
 .delivery-notice {
@@ -2659,13 +2659,6 @@ textarea:focus {
 
   .panel-heading {
     gap: 10px;
-  }
-
-  .panel-heading span {
-    width: 38px;
-    height: 38px;
-    flex-basis: 38px;
-    border-radius: 14px;
   }
 
   .proof-heading {

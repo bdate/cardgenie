@@ -131,9 +131,11 @@ const publicDeliveryError = (error, method = 'email') => {
 }
 
 app.post('/api/deliver-card', async (req, res) => {
-  const { cardId, method, destination, recipientConsentConfirmed } = req.body || {}
+  const { cardId, method, destination, recipientConsentConfirmed, senderCopyEmail: rawSenderCopyEmail } =
+    req.body || {}
   const record = cardStore.get(cardId)
   const cleanDestination = destination?.trim()
+  const senderCopyEmail = rawSenderCopyEmail?.trim()
 
   if (!record) {
     return res.status(404).json({
@@ -168,11 +170,24 @@ app.post('/api/deliver-card', async (req, res) => {
         ? await sendEmailDelivery({ to: normalizeEmailAddress(cleanDestination), copy })
         : await sendTextDelivery({ to: cleanDestination, copy })
 
+    let senderCopyDeliveredTo = null
+
+    if (senderCopyEmail) {
+      const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl)
+      senderCopyDeliveredTo = await sendEmailDelivery({
+        to: normalizeEmailAddress(senderCopyEmail),
+        copy: senderCopy,
+      })
+    }
+
     res.json({
       ok: true,
       shareUrl,
       deliveredTo,
-      message: 'Card has been sent.',
+      senderCopyDeliveredTo,
+      message: senderCopyDeliveredTo
+        ? 'Card has been sent. A copy was emailed to you.'
+        : 'Card has been sent.',
     })
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
@@ -1064,6 +1079,25 @@ const buildDeliveryCopy = (record, shareUrl) => {
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+      </div>
+    `,
+  }
+}
+
+const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
+  const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
+  const sender = record.signature || record.details.senderName || 'You'
+
+  return {
+    subject: `Your copy of the card for ${recipient}`,
+    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        <h1 style="margin: 0 0 12px;">Your card copy</h1>
+        <p>Here is a copy of the card you sent to ${recipient}.</p>
+        <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
+        <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+        <p style="margin-top: 18px; color: #666;">Sent by ${sender} through Card Genie.</p>
       </div>
     `,
   }
