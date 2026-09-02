@@ -1212,6 +1212,7 @@ textarea:focus {
 
 .envelope-liner {
   z-index: 3;
+  -webkit-clip-path: polygon(0 0, 50% 62%, 100% 0);
   clip-path: polygon(0 0, 50% 62%, 100% 0);
   background: var(--envelope-inside);
   pointer-events: none;
@@ -1222,9 +1223,11 @@ textarea:focus {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  -webkit-clip-path: polygon(0 0, 50% 62%, 100% 0);
   clip-path: polygon(0 0, 50% 62%, 100% 0);
   background: var(--envelope-lining);
-  transform-origin: top;
+  transform-origin: top center;
+  -webkit-transform-origin: top center;
   animation: flapPeek 2.2s ease-in-out infinite;
 }
 
@@ -2689,6 +2692,7 @@ textarea:focus {
     grid-template-rows: 224px auto;
     row-gap: 16px;
     padding: 56px 14px 20px;
+    perspective: none;
   }
 
   .card-reveal,
@@ -2698,9 +2702,21 @@ textarea:focus {
     padding: 32px 14px 20px;
   }
 
+  .opening-stack {
+    width: min(92vw, 360px);
+    height: 224px;
+  }
+
   .envelope {
     width: min(92vw, 360px);
     height: 224px;
+    transform-style: flat;
+  }
+
+  .envelope-static:not(.is-opening) .envelope-flap,
+  .envelope-static:not(.is-opening) .envelope-liner {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
   .envelope-front-address {
@@ -2839,6 +2855,7 @@ textarea:focus {
   .envelope-scene {
     grid-template-rows: 196px auto;
     padding-top: 44px;
+    perspective: none;
   }
 
   .card-reveal,
@@ -2848,9 +2865,15 @@ textarea:focus {
     padding: 28px 14px 20px;
   }
 
+  .opening-stack {
+    width: min(90vw, 320px);
+    height: 196px;
+  }
+
   .envelope {
     width: min(90vw, 320px);
     height: 196px;
+    transform-style: flat;
   }
 
   .envelope-card-rise {
