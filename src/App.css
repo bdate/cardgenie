@@ -1331,11 +1331,9 @@ textarea:focus {
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  opacity: 0.88;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='190' viewBox='0 0 520 190'%3E%3Cg fill='%23ffffff' fill-opacity='0.42' font-family='Arial,sans-serif' font-size='26' font-weight='700' letter-spacing='0.08em'%3E%3Ctext transform='rotate(-28 140 78)' x='140' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3Ctext transform='rotate(-28 380 78)' x='380' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='190' viewBox='0 0 520 190'%3E%3Cg fill='%23ffffff' fill-opacity='0.34' stroke='%23315f5b' stroke-opacity='0.34' stroke-width='1.4' paint-order='stroke fill' font-family='Arial,sans-serif' font-size='26' font-weight='700' letter-spacing='0.08em'%3E%3Ctext transform='rotate(-28 140 78)' x='140' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3Ctext transform='rotate(-28 380 78)' x='380' y='78' text-anchor='middle'%3Ecard-genie.com%3C/text%3E%3C/g%3E%3C/svg%3E");
   background-size: 520px 190px;
   background-repeat: repeat;
-  mix-blend-mode: soft-light;
 }
 
 .cover-watermark-note {
