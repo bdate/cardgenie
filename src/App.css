@@ -1085,15 +1085,41 @@ textarea:focus {
   animation: envelopeFrontFlipOut 2.4s cubic-bezier(0.18, 0.82, 0.22, 1) both;
 }
 
-.envelope.is-flipping .envelope-front-address {
+.envelope.is-flipping .envelope-front-address,
+.envelope.is-flipping .envelope-from {
   animation: frontAddressFlipCutoff 2.4s linear both;
 }
 
+.envelope-from {
+  position: absolute;
+  top: 36px;
+  left: 38px;
+  max-width: 42%;
+  color: var(--gcu-dark-teal);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+}
+
 .envelope-front-address {
+  max-width: 68%;
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(2rem, 4vw, 2.5rem);
-  line-height: 1;
+  line-height: 1.12;
+  text-align: center;
+  text-wrap: balance;
   grid-area: 1 / 1;
+}
+
+.envelope-front-address.is-medium {
+  max-width: 62%;
+  font-size: clamp(1.45rem, 3.1vw, 1.85rem);
+}
+
+.envelope-front-address.is-long {
+  max-width: 58%;
+  font-size: clamp(1.15rem, 2.5vw, 1.45rem);
 }
 
 .envelope-stamp {
@@ -2719,8 +2745,26 @@ textarea:focus {
     -webkit-transform: translateZ(0);
   }
 
+  .envelope-from {
+    top: 22px;
+    left: 22px;
+    max-width: 40%;
+    font-size: 0.68rem;
+  }
+
   .envelope-front-address {
+    max-width: 70%;
     font-size: clamp(1.45rem, 7vw, 2rem);
+  }
+
+  .envelope-front-address.is-medium {
+    max-width: 64%;
+    font-size: clamp(1.15rem, 5.4vw, 1.5rem);
+  }
+
+  .envelope-front-address.is-long {
+    max-width: 60%;
+    font-size: clamp(0.98rem, 4.4vw, 1.2rem);
   }
 
   .envelope-stamp {

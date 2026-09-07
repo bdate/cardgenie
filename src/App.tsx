@@ -836,6 +836,9 @@ function App() {
     [details.recipientName, details.recipientType],
   )
   const senderLabel = useMemo(() => details.senderName.trim() || 'Your Name', [details.senderName])
+  const envelopeAddress = `To ${envelopeLabel}`
+  const envelopeAddressSize =
+    envelopeAddress.length > 34 ? 'is-long' : envelopeAddress.length > 22 ? 'is-medium' : ''
   const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
   const defaultGreeting = ''
   const insideGreeting = cardGreeting ?? defaultGreeting
@@ -1957,7 +1960,10 @@ function App() {
                   <div className="envelope">
                     <div className="envelope-front-face">
                       <img className="envelope-stamp" src={stampSrc} alt="" aria-hidden="true" />
-                      <span className="envelope-front-address">To {envelopeLabel}</span>
+                      <span className="envelope-from">From {cardSignatureLabel}</span>
+                      <span className={`envelope-front-address ${envelopeAddressSize}`.trim()}>
+                        {envelopeAddress}
+                      </span>
                     </div>
                   </div>
                   <span className="envelope-prompt">Reveal your card</span>
@@ -1969,7 +1975,10 @@ function App() {
                   <div className="envelope is-flipping">
                     <div className="envelope-front-face">
                       <img className="envelope-stamp" src={stampSrc} alt="" aria-hidden="true" />
-                      <span className="envelope-front-address">To {envelopeLabel}</span>
+                      <span className="envelope-from">From {cardSignatureLabel}</span>
+                      <span className={`envelope-front-address ${envelopeAddressSize}`.trim()}>
+                        {envelopeAddress}
+                      </span>
                     </div>
                     <div className="envelope-back-face">
                       <div className="envelope-back" />
