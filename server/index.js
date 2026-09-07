@@ -167,7 +167,8 @@ app.post('/api/deliver-card', async (req, res) => {
 
   try {
     const shareUrl = getShareUrl(req, record.id)
-    const copy = buildDeliveryCopy(record, shareUrl)
+    const coverUrl = getEmailCoverUrl(req, record.id)
+    const copy = buildDeliveryCopy(record, shareUrl, coverUrl)
 
     const deliveredTo =
       method === 'email'
@@ -177,7 +178,7 @@ app.post('/api/deliver-card', async (req, res) => {
     let senderCopyDeliveredTo = null
 
     if (senderCopyEmail) {
-      const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl)
+      const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl)
       senderCopyDeliveredTo = await sendEmailDelivery({
         to: normalizeEmailAddress(senderCopyEmail),
         copy: senderCopy,
@@ -1218,12 +1219,10 @@ const getCardSummary = (record, req) => ({
   shareUrl: getShareUrl(req, record.id),
 })
 
-const getCoverUrlFromShareUrl = (shareUrl = '') => `${String(shareUrl).replace(/\/$/, '')}/cover`
+const getEmailCoverUrl = (req, cardId) =>
+  `${req.protocol}://${req.get('host')}/c/${encodeURIComponent(cardId)}/cover`
 
-const buildCoverThumbnailHtml = (shareUrl, alt = 'Card cover') => {
-  const coverUrl = getCoverUrlFromShareUrl(shareUrl)
-
-  return `
+const buildCoverThumbnailHtml = (coverUrl, alt = 'Card cover') => `
         <p style="margin: 0 0 16px;">
           <img
             src="${coverUrl}"
@@ -1232,9 +1231,8 @@ const buildCoverThumbnailHtml = (shareUrl, alt = 'Card cover') => {
             style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
           />
         </p>`
-}
 
-const buildDeliveryCopy = (record, shareUrl) => {
+const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
   const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
   const sender = record.signature || record.details.senderName || 'Someone special'
   const occasion = record.details.occasion || 'card'
@@ -1248,7 +1246,7 @@ const buildDeliveryCopy = (record, shareUrl) => {
     text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
+        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1257,7 +1255,7 @@ const buildDeliveryCopy = (record, shareUrl) => {
   }
 }
 
-const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
+const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
   const thumbnailAlt = `Cover of the card you sent to ${recipient}`
@@ -1267,7 +1265,7 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
     text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
+        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
