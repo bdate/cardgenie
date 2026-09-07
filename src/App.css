@@ -1101,6 +1101,7 @@ textarea:focus {
   font-weight: 700;
   line-height: 1.25;
   text-align: left;
+  transform: translateZ(1px);
 }
 
 .envelope-front-address {
@@ -1125,8 +1126,8 @@ textarea:focus {
 
 .envelope-stamp {
   position: absolute;
-  top: 34px;
-  right: 38px;
+  top: 18px;
+  right: 22px;
   width: 82px;
   height: auto;
   object-fit: contain;
@@ -2769,8 +2770,8 @@ textarea:focus {
   }
 
   .envelope-stamp {
-    top: 22px;
-    right: 24px;
+    top: 12px;
+    right: 14px;
     width: 58px;
   }
 
