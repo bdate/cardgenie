@@ -1214,23 +1214,35 @@ const getCardSummary = (record, req) => ({
   shareUrl: getShareUrl(req, record.id),
 })
 
-const getCoverUrlFromShareUrl = (shareUrl = '') => `${String(shareUrl).replace(/\/$/, '')}/cover`
+const coverContentId = 'card-cover'
 
-const buildCoverThumbnailHtml = (shareUrl, alt = 'Card cover') => {
-  const coverUrl = getCoverUrlFromShareUrl(shareUrl)
+const getInlineCoverAttachment = (record) => {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(record?.card?.imageUrl || '')
 
-  return `
-        <p style="margin: 0 0 16px;">
-          <a href="${shareUrl}" style="display:inline-block;text-decoration:none;">
-            <img
-              src="${coverUrl}"
-              alt="${escapeHtml(alt)}"
-              width="120"
-              style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
-            />
-          </a>
-        </p>`
+  if (!match) {
+    return null
+  }
+
+  const mimeType = match[1]
+  const extension = mimeType.includes('jpeg') ? 'jpg' : mimeType.split('/')[1] || 'png'
+
+  return {
+    content: match[2],
+    mimeType,
+    filename: `cover.${extension}`,
+    contentId: coverContentId,
+  }
 }
+
+const buildCoverThumbnailHtml = (alt = 'Card cover') => `
+        <p style="margin: 0 0 16px;">
+          <img
+            src="cid:${coverContentId}"
+            alt="${escapeHtml(alt)}"
+            width="120"
+            style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
+          />
+        </p>`
 
 const buildDeliveryCopy = (record, shareUrl) => {
   const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
@@ -1240,13 +1252,15 @@ const buildDeliveryCopy = (record, shareUrl) => {
     ? `${recipientFirstName}, open your personalized card from ${sender}.`
     : `Open your personalized card from ${sender}.`
   const thumbnailAlt = `${occasion} card cover from ${sender}`
+  const inlineCover = getInlineCoverAttachment(record)
 
   return {
     subject: `${sender} sent you a ${occasion} card`,
     text: `${openLine} ${shareUrl}`,
+    inlineCover,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
+        ${inlineCover ? buildCoverThumbnailHtml(thumbnailAlt) : ''}
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1259,13 +1273,15 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
   const thumbnailAlt = `Cover of the card you sent to ${recipient}`
+  const inlineCover = getInlineCoverAttachment(record)
 
   return {
     subject: `Your copy of the card for ${recipient}`,
     text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
+    inlineCover,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
+        ${inlineCover ? buildCoverThumbnailHtml(thumbnailAlt) : ''}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1294,25 +1310,45 @@ const sendSendGridEmailDelivery = async ({ to, copy }) => {
     throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
   }
 
+  const payload = {
+    personalizations: [
+      {
+        to: [{ email: to }],
+        subject: copy.subject,
+      },
+    ],
+    from: parseEmailSender(process.env.EMAIL_FROM),
+    content: [
+      { type: 'text/plain', value: copy.text },
+      { type: 'text/html', value: copy.html },
+    ],
+    tracking_settings: {
+      click_tracking: {
+        enable: true,
+        enable_text: false,
+      },
+    },
+  }
+
+  if (copy.inlineCover) {
+    payload.attachments = [
+      {
+        content: copy.inlineCover.content,
+        type: copy.inlineCover.mimeType,
+        filename: copy.inlineCover.filename,
+        disposition: 'inline',
+        content_id: copy.inlineCover.contentId,
+      },
+    ]
+  }
+
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: to }],
-          subject: copy.subject,
-        },
-      ],
-      from: parseEmailSender(process.env.EMAIL_FROM),
-      content: [
-        { type: 'text/plain', value: copy.text },
-        { type: 'text/html', value: copy.html },
-      ],
-    }),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
