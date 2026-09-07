@@ -1092,10 +1092,11 @@ textarea:focus {
 
 .envelope-from {
   position: absolute;
+  z-index: 3;
   top: 36px;
   left: 38px;
   max-width: 42%;
-  color: var(--gcu-dark-teal);
+  color: var(--gcu-ink);
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.25;
