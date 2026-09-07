@@ -1214,6 +1214,24 @@ const getCardSummary = (record, req) => ({
   shareUrl: getShareUrl(req, record.id),
 })
 
+const getCoverUrlFromShareUrl = (shareUrl = '') => `${String(shareUrl).replace(/\/$/, '')}/cover`
+
+const buildCoverThumbnailHtml = (shareUrl, alt = 'Card cover') => {
+  const coverUrl = getCoverUrlFromShareUrl(shareUrl)
+
+  return `
+        <p style="margin: 0 0 16px;">
+          <a href="${shareUrl}" style="display:inline-block;text-decoration:none;">
+            <img
+              src="${coverUrl}"
+              alt="${escapeHtml(alt)}"
+              width="120"
+              style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
+            />
+          </a>
+        </p>`
+}
+
 const buildDeliveryCopy = (record, shareUrl) => {
   const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
   const sender = record.signature || record.details.senderName || 'Someone special'
@@ -1221,12 +1239,14 @@ const buildDeliveryCopy = (record, shareUrl) => {
   const openLine = recipientFirstName
     ? `${recipientFirstName}, open your personalized card from ${sender}.`
     : `Open your personalized card from ${sender}.`
+  const thumbnailAlt = `${occasion} card cover from ${sender}`
 
   return {
     subject: `${sender} sent you a ${occasion} card`,
     text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1238,12 +1258,14 @@ const buildDeliveryCopy = (record, shareUrl) => {
 const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
+  const thumbnailAlt = `Cover of the card you sent to ${recipient}`
 
   return {
     subject: `Your copy of the card for ${recipient}`,
     text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
+        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
