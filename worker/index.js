@@ -1113,35 +1113,21 @@ const getCardSummary = (record, request, env) => ({
   shareUrl: getShareUrl(request, env, record.id),
 })
 
-const coverContentId = 'card-cover'
+const getCoverUrlFromShareUrl = (shareUrl = '') => `${String(shareUrl).replace(/\/$/, '')}/cover`
 
-const getInlineCoverAttachment = (record) => {
-  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(record?.card?.imageUrl || '')
+const buildCoverThumbnailHtml = (shareUrl, alt = 'Card cover') => {
+  const coverUrl = getCoverUrlFromShareUrl(shareUrl)
 
-  if (!match) {
-    return null
-  }
-
-  const mimeType = match[1]
-  const extension = mimeType.includes('jpeg') ? 'jpg' : mimeType.split('/')[1] || 'png'
-
-  return {
-    content: match[2],
-    mimeType,
-    filename: `cover.${extension}`,
-    contentId: coverContentId,
-  }
-}
-
-const buildCoverThumbnailHtml = (alt = 'Card cover') => `
+  return `
         <p style="margin: 0 0 16px;">
           <img
-            src="cid:${coverContentId}"
+            src="${coverUrl}"
             alt="${escapeHtml(alt)}"
             width="120"
             style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
           />
         </p>`
+}
 
 const buildDeliveryCopy = (record, shareUrl) => {
   const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
@@ -1151,15 +1137,13 @@ const buildDeliveryCopy = (record, shareUrl) => {
     ? `${recipientFirstName}, open your personalized card from ${sender}.`
     : `Open your personalized card from ${sender}.`
   const thumbnailAlt = `${occasion} card cover from ${sender}`
-  const inlineCover = getInlineCoverAttachment(record)
 
   return {
     subject: `${sender} sent you a ${occasion} card`,
     text: `${openLine} ${shareUrl}`,
-    inlineCover,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${inlineCover ? buildCoverThumbnailHtml(thumbnailAlt) : ''}
+        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1172,15 +1156,13 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
   const thumbnailAlt = `Cover of the card you sent to ${recipient}`
-  const inlineCover = getInlineCoverAttachment(record)
 
   return {
     subject: `Your copy of the card for ${recipient}`,
     text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
-    inlineCover,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${inlineCover ? buildCoverThumbnailHtml(thumbnailAlt) : ''}
+        ${buildCoverThumbnailHtml(shareUrl, thumbnailAlt)}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1227,18 +1209,6 @@ const sendSendGridEmailDelivery = async ({ env, to, copy }) => {
         enable_text: false,
       },
     },
-  }
-
-  if (copy.inlineCover) {
-    payload.attachments = [
-      {
-        content: copy.inlineCover.content,
-        type: copy.inlineCover.mimeType,
-        filename: copy.inlineCover.filename,
-        disposition: 'inline',
-        content_id: copy.inlineCover.contentId,
-      },
-    ]
   }
 
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -1692,6 +1662,10 @@ const publicDeliveryError = (error, method = 'email') => {
   if (/sendgrid/i.test(message)) {
     if (/maximum credits exceeded/i.test(message)) {
       return 'Email delivery is temporarily unavailable because the sending limit was reached. You can still open the shareable card link and send it yourself.'
+    }
+
+    if (/payload|too large|entity too large|413/i.test(message)) {
+      return 'Email delivery failed because the message was too large. Try sending again.'
     }
 
     return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
