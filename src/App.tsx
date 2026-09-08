@@ -1958,7 +1958,13 @@ function App() {
           {!isRecipientView && (
             <div className="panel-heading proof-heading">
               <div>
-                <h2>{showEditor ? 'Revise your card' : 'Your card'}</h2>
+                {showSendActions && !showEditor ? (
+                  <button className="secondary-button" type="button" onClick={replayAnimation}>
+                    Watch the reveal again
+                  </button>
+                ) : (
+                  <h2>{showEditor ? 'Revise your card' : 'Your card'}</h2>
+                )}
               </div>
               {!isGenerating &&
                 card &&
@@ -2237,7 +2243,7 @@ function App() {
                 </>
               )}
 
-              {showSendActions && (
+              {showSendActions && isRecipientView && (
                 <div className="proof-actions">
                   <button className="secondary-button" type="button" onClick={replayAnimation}>
                     Watch the reveal again
@@ -2254,12 +2260,8 @@ function App() {
               )}
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
-                  <span className="delivery-kicker">Ready to send?</span>
-                  <h3>Send this card</h3>
+                  <span className="delivery-kicker">Ready to send this card</span>
                   <p>Send a secure card link by email or text after you approve the card.</p>
-                  <p className="delivery-support">
-                    Questions? <a href={supportMailto}>Email us</a>
-                  </p>
                 </div>
                 <div className="mode-toggle delivery-methods" aria-label="Delivery method">
                   <button
@@ -2401,7 +2403,9 @@ function App() {
                   </label>
                 )}
                 {accountSession ? (
-                  <p className="account-confirmed">Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}</p>
+                  <p className="account-confirmed">
+                    Your Phone# Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}
+                  </p>
                 ) : (
                   <>
                     <label className="sender-copy">
