@@ -2261,7 +2261,7 @@ function App() {
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send this card</span>
-                  <p>Send a secure card link by email or text after you approve the card.</p>
+                  <p>Send by email or cellphone after you approve the card.</p>
                 </div>
                 <div className="mode-toggle delivery-methods" aria-label="Delivery method">
                   <button
@@ -2351,11 +2351,11 @@ function App() {
                 </label>
                 {showSenderCopyField && (
                   <label>
-                    Your email for a copy
                     <input
                       type="email"
                       inputMode="email"
                       autoComplete="email"
+                      aria-label="Your email for a copy"
                       value={senderCopyEmail}
                       onChange={(event) => {
                         setSenderCopyEmail(event.target.value)
@@ -2375,7 +2375,7 @@ function App() {
                           setDeliveryNotice(validated.message)
                         }
                       }}
-                      placeholder="you@example.com"
+                      placeholder="your-email@example.com"
                     />
                   </label>
                 )}
@@ -2404,7 +2404,7 @@ function App() {
                 )}
                 {accountSession ? (
                   <p className="account-confirmed">
-                    Your Phone# Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}
+                    Your Phone# is Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}
                   </p>
                 ) : (
                   <>
