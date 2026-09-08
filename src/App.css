@@ -1805,8 +1805,7 @@ textarea:focus {
   font-weight: 900;
 }
 
-.share-link,
-.sender-copy-link {
+.share-link {
   justify-self: start;
   padding: 0;
   border: 0;
@@ -1817,6 +1816,30 @@ textarea:focus {
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+
+.sender-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  color: var(--gcu-dark-grey);
+  font-size: 0.92rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.sender-copy input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--gcu-orange);
 }
 
 .share-link {

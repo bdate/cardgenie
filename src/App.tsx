@@ -819,6 +819,7 @@ function App() {
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
+  const [showAccountConfirm, setShowAccountConfirm] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [accountCode, setAccountCode] = useState('')
   const [accountSession, setAccountSession] = useState<{ token: string; phoneE164: string } | null>(null)
@@ -2331,18 +2332,22 @@ function App() {
                     placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
                   />
                 </label>
-                {!showSenderCopyField ? (
-                  <button
-                    className="sender-copy-link"
-                    type="button"
-                    onClick={() => {
-                      setShowSenderCopyField(true)
+                <label className="sender-copy">
+                  <input
+                    type="checkbox"
+                    checked={showSenderCopyField}
+                    onChange={(event) => {
+                      const checked = event.target.checked
+                      setShowSenderCopyField(checked)
+                      if (!checked) {
+                        setSenderCopyEmail('')
+                      }
                       setDeliveryNotice('')
                     }}
-                  >
-                    Send me a copy
-                  </button>
-                ) : (
+                  />
+                  <span>Send me a copy</span>
+                </label>
+                {showSenderCopyField && (
                   <label>
                     Your email for a copy
                     <input
@@ -2395,57 +2400,75 @@ function App() {
                     </span>
                   </label>
                 )}
-                <div className="account-gate">
-                  <span className="field-title">Your mobile number</span>
-                  <p className="field-help">
-                    Confirm your number to send. We’ll text a one-time code. Recipients will not see this number.
-                  </p>
-                  {accountSession ? (
-                    <p className="account-confirmed">Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}</p>
-                  ) : (
-                    <>
-                      <label>
-                        Mobile number
-                        <input
-                          type="tel"
-                          inputMode="tel"
-                          autoComplete="tel"
-                          value={accountPhone}
-                          onChange={(event) => setAccountPhone(event.target.value)}
-                          placeholder="(925) 555-1234"
-                        />
-                      </label>
-                      <div className="account-code-row">
+                {accountSession ? (
+                  <p className="account-confirmed">Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}</p>
+                ) : (
+                  <>
+                    <label className="sender-copy">
+                      <input
+                        type="checkbox"
+                        checked={showAccountConfirm}
+                        onChange={(event) => {
+                          const checked = event.target.checked
+                          setShowAccountConfirm(checked)
+                          if (!checked) {
+                            setAccountPhone('')
+                            setAccountCode('')
+                          }
+                          setDeliveryNotice('')
+                        }}
+                      />
+                      <span>Confirm my number</span>
+                    </label>
+                    {showAccountConfirm && (
+                      <div className="account-gate">
+                        <span className="field-title">Your mobile number</span>
+                        <p className="field-help">
+                          Confirm your number to send. We’ll text a one-time code. Recipients will not see this number.
+                        </p>
                         <label>
-                          Text code
+                          Mobile number
                           <input
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            value={accountCode}
-                            onChange={(event) => setAccountCode(event.target.value)}
-                            placeholder="6-digit code"
+                            type="tel"
+                            inputMode="tel"
+                            autoComplete="tel"
+                            value={accountPhone}
+                            onChange={(event) => setAccountPhone(event.target.value)}
+                            placeholder="(925) 555-1234"
                           />
                         </label>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={isSendingAccountCode}
-                          onClick={() => void requestAccountCode()}
-                        >
-                          {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
-                        </button>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={isVerifyingAccountCode || !accountCode.trim()}
-                          onClick={() => void verifyAccountCode()}
-                        >
-                          {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
-                        </button>
+                        <div className="account-code-row">
+                          <label>
+                            Text code
+                            <input
+                              inputMode="numeric"
+                              autoComplete="one-time-code"
+                              value={accountCode}
+                              onChange={(event) => setAccountCode(event.target.value)}
+                              placeholder="6-digit code"
+                            />
+                          </label>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            disabled={isSendingAccountCode}
+                            onClick={() => void requestAccountCode()}
+                          >
+                            {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            disabled={isVerifyingAccountCode || !accountCode.trim()}
+                            onClick={() => void verifyAccountCode()}
+                          >
+                            {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
+                          </button>
+                        </div>
                       </div>
-                    </>
-                  )}
-                </div>
+                    )}
+                  </>
+                )}
                 <button
                   className="primary-button"
                   type="submit"
