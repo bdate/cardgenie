@@ -2135,9 +2135,8 @@ function App() {
               {isRecipientView && (step === 'front' || step === 'inside') && (
                 <aside className="recipient-invite" aria-label="Make a card of your own">
                   <h3>Loved this card?</h3>
-                  <p>Create one just as personal for someone you care about.</p>
                   <a className="primary-button" href="/">
-                    Create your own card
+                    Create your own
                   </a>
                 </aside>
               )}
