@@ -1667,15 +1667,15 @@ const publicDeliveryError = (error, method = 'email') => {
       return 'Email delivery failed because the message was too large. Try sending again.'
     }
 
-    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/postmark/i.test(message)) {
-    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/twilio/i.test(message)) {
-    return 'Text delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Text delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/not configured/i.test(message)) {
@@ -1685,7 +1685,175 @@ const publicDeliveryError = (error, method = 'email') => {
   return message || (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.')
 }
 
+const accountSessionTtlSeconds = 60 * 60 * 24 * 30
+const otpTtlSeconds = 60 * 10
+
+const hashSecret = async (value) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+const sendAccountSms = async ({ env, to, body }) => {
+  if (!env.TWILIO_FROM_NUMBER) {
+    throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
+  }
+
+  const twilioAuth = getTwilioAuthCredentials(env)
+  const form = new URLSearchParams({
+    From: env.TWILIO_FROM_NUMBER,
+    To: to,
+    Body: body,
+  })
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioAuth.accountSid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${twilioAuth.username}:${twilioAuth.password}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: form,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Twilio could not send the sign-in code. ${errorText}`)
+  }
+}
+
+const readAccountToken = (request) => {
+  const header = request.headers.get('Authorization') || ''
+  const match = header.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() || ''
+}
+
+const getAccountSession = async (env, token) => {
+  if (!token || !env.CARD_STORE) {
+    return null
+  }
+
+  return (await env.CARD_STORE.get(`session:${token}`, 'json')) || null
+}
+
+const handleStartAccountOtp = async (request, env) => {
+  try {
+    const { phone } = (await readJson(request)) || {}
+    const phoneE164 = normalizePhoneNumber(phone)
+
+    if (!env.CARD_STORE) {
+      return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+    }
+
+    const existing = (await env.CARD_STORE.get(`otp:${phoneE164}`, 'json')) || null
+    if (existing?.sentAt && Date.now() - existing.sentAt < 30 * 1000) {
+      return jsonResponse(request, env, { error: 'Please wait a moment before requesting another code.' }, 429)
+    }
+
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
+    await env.CARD_STORE.put(
+      `otp:${phoneE164}`,
+      JSON.stringify({
+        codeHash: await hashSecret(code),
+        attempts: 0,
+        sentAt: Date.now(),
+      }),
+      { expirationTtl: otpTtlSeconds },
+    )
+    await sendAccountSms({
+      env,
+      to: phoneE164,
+      body: `Your Card Genie code is ${code}. It expires in 10 minutes.`,
+    })
+
+    return jsonResponse(request, env, {
+      ok: true,
+      phoneE164,
+      message: 'We texted you a 6-digit code.',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to send a sign-in code.'
+    return jsonResponse(request, env, { error: message }, 400)
+  }
+}
+
+const handleVerifyAccountOtp = async (request, env) => {
+  try {
+    const { phone, code } = (await readJson(request)) || {}
+    const phoneE164 = normalizePhoneNumber(phone)
+    const cleanCode = String(code || '').replace(/\D/g, '')
+
+    if (!env.CARD_STORE) {
+      return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+    }
+
+    if (cleanCode.length !== 6) {
+      return jsonResponse(request, env, { error: 'Enter the 6-digit code from the text message.' }, 400)
+    }
+
+    const challenge = await env.CARD_STORE.get(`otp:${phoneE164}`, 'json')
+    if (!challenge) {
+      return jsonResponse(request, env, { error: 'That code expired. Request a new one.' }, 400)
+    }
+
+    if ((challenge.attempts || 0) >= 5) {
+      return jsonResponse(request, env, { error: 'Too many tries. Request a new code.' }, 400)
+    }
+
+    if ((await hashSecret(cleanCode)) !== challenge.codeHash) {
+      await env.CARD_STORE.put(
+        `otp:${phoneE164}`,
+        JSON.stringify({ ...challenge, attempts: (challenge.attempts || 0) + 1 }),
+        { expirationTtl: otpTtlSeconds },
+      )
+      return jsonResponse(request, env, { error: 'That code does not match. Try again.' }, 400)
+    }
+
+    const userKey = `user:phone:${phoneE164}`
+    const existingUser = (await env.CARD_STORE.get(userKey, 'json')) || null
+    const user = existingUser || {
+      id: crypto.randomUUID(),
+      phoneE164,
+      creditBalance: 50,
+      createdAt: Date.now(),
+    }
+    user.lastLoginAt = Date.now()
+    await env.CARD_STORE.put(userKey, JSON.stringify(user))
+
+    const token = crypto.randomUUID()
+    await env.CARD_STORE.put(
+      `session:${token}`,
+      JSON.stringify({
+        token,
+        userId: user.id,
+        phoneE164,
+        createdAt: Date.now(),
+      }),
+      { expirationTtl: accountSessionTtlSeconds },
+    )
+    await env.CARD_STORE.delete(`otp:${phoneE164}`)
+
+    return jsonResponse(request, env, {
+      ok: true,
+      token,
+      phoneE164,
+      creditBalance: user.creditBalance ?? 0,
+      message: existingUser ? 'Welcome back.' : 'Your account is ready.',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to confirm that code.'
+    return jsonResponse(request, env, { error: message }, 400)
+  }
+}
+
 const handleDeliverCard = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Confirm your mobile number before sending. We’ll text you a one-time code.' },
+      401,
+    )
+  }
+
   const { cardId, method, destination, recipientConsentConfirmed, senderCopyEmail: rawSenderCopyEmail } =
     (await readJson(request)) || {}
   const record = await getCardRecord(env, cardId)
@@ -2001,6 +2169,14 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname.startsWith('/api/cards/')) {
     return handleGetCard(request, env, decodeURIComponent(url.pathname.replace('/api/cards/', '')))
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/otp/start') {
+    return handleStartAccountOtp(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/otp/verify') {
+    return handleVerifyAccountOtp(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/deliver-card') {

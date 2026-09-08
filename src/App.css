@@ -1823,6 +1823,63 @@ textarea:focus {
   display: inline;
 }
 
+.account-gate {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(63, 155, 145, 0.22);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.account-gate .field-help {
+  margin: 0;
+}
+
+.account-code-row {
+  display: grid;
+  gap: 10px;
+}
+
+.account-confirmed {
+  margin: 0;
+  color: var(--gcu-dark-teal);
+  font-weight: 800;
+}
+
+.delivery-support {
+  margin: 8px 0 0;
+  color: var(--gcu-grey);
+  font-size: 0.9rem;
+}
+
+.delivery-support a {
+  color: var(--gcu-dark-teal);
+  font-weight: 800;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px 22px;
+  margin: 28px auto 0;
+  max-width: 980px;
+  color: var(--gcu-grey);
+  font-size: 0.92rem;
+}
+
+.site-footer a {
+  color: var(--gcu-dark-teal);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  text-decoration: underline;
+}
+
 .delivery-notice {
   border: 1px solid rgba(63, 155, 145, 0.24);
   border-radius: 16px;

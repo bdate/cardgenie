@@ -116,15 +116,15 @@ const publicDeliveryError = (error, method = 'email') => {
       return 'Email delivery failed because the message was too large. Try sending again.'
     }
 
-    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/postmark/i.test(message)) {
-    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Email delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/twilio/i.test(message)) {
-    return 'Text delivery is temporarily unavailable. You can still open the shareable card link and send it yourself.'
+    return 'Text delivery is temporarily unavailable. You can still open the shareable card link and send it yourself, or email support@card-genie.com.'
   }
 
   if (/not configured/i.test(message)) {

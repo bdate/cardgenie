@@ -109,9 +109,15 @@ const staticPageRedirects: Record<string, string> = {
   '/sms-opt-in/': '/sms-opt-in/index.html',
   '/styles': '/styles/index.html',
   '/styles/': '/styles/index.html',
+  '/faq': '/faq/index.html',
+  '/faq/': '/faq/index.html',
   '/terms': '/terms/index.html',
   '/terms/': '/terms/index.html',
 }
+
+const supportEmail = 'support@card-genie.com'
+const supportMailto = `mailto:${supportEmail}`
+const accountSessionStorageKey = 'cardGenieAccountSession'
 
 const staticPageRedirect = staticPageRedirects[window.location.pathname]
 
@@ -813,6 +819,11 @@ function App() {
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
+  const [accountPhone, setAccountPhone] = useState('')
+  const [accountCode, setAccountCode] = useState('')
+  const [accountSession, setAccountSession] = useState<{ token: string; phoneE164: string } | null>(null)
+  const [isSendingAccountCode, setIsSendingAccountCode] = useState(false)
+  const [isVerifyingAccountCode, setIsVerifyingAccountCode] = useState(false)
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
   const [hasSentCurrentCard, setHasSentCurrentCard] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
@@ -886,6 +897,23 @@ function App() {
   const coverPreviewClass = (baseClass = '') =>
     [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
   const keepScreenAwake = isGenerating || isRefiningImage || isRefiningCopy || isDelivering
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(accountSessionStorageKey)
+      if (!raw) {
+        return
+      }
+
+      const parsed = JSON.parse(raw) as { token?: string; phoneE164?: string }
+      if (parsed.token && parsed.phoneE164) {
+        setAccountSession({ token: parsed.token, phoneE164: parsed.phoneE164 })
+        setAccountPhone(formatPhoneNumberDisplay(parsed.phoneE164))
+      }
+    } catch {
+      window.localStorage.removeItem(accountSessionStorageKey)
+    }
+  }, [])
 
   useEffect(() => {
     if (step === 'front') {
@@ -1524,6 +1552,80 @@ function App() {
     ])
   }
 
+  const saveAccountSession = (session: { token: string; phoneE164: string }) => {
+    setAccountSession(session)
+    window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+  }
+
+  const requestAccountCode = async () => {
+    const validated = validatePhoneNumber(accountPhone)
+    if (!validated.ok) {
+      setDeliveryNotice(validated.message)
+      return
+    }
+
+    setIsSendingAccountCode(true)
+    setDeliveryNotice('')
+
+    try {
+      const response = await fetch(apiUrl('/api/auth/otp/start'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: validated.value }),
+      })
+      const data = await getApiJson(response, 'Unable to send a sign-in code.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to send a sign-in code.')
+      }
+
+      setAccountPhone(formatPhoneNumberDisplay(String(data.phoneE164 || validated.value)))
+      setDeliveryNotice(data.message || 'We texted you a 6-digit code.')
+    } catch (caughtError) {
+      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to send a sign-in code.')
+    } finally {
+      setIsSendingAccountCode(false)
+    }
+  }
+
+  const verifyAccountCode = async () => {
+    const validated = validatePhoneNumber(accountPhone)
+    if (!validated.ok) {
+      setDeliveryNotice(validated.message)
+      return
+    }
+
+    if (!/^\d{6}$/.test(accountCode.trim())) {
+      setDeliveryNotice('Enter the 6-digit code from the text message.')
+      return
+    }
+
+    setIsVerifyingAccountCode(true)
+    setDeliveryNotice('')
+
+    try {
+      const response = await fetch(apiUrl('/api/auth/otp/verify'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: validated.value, code: accountCode.trim() }),
+      })
+      const data = await getApiJson(response, 'Unable to confirm that code.')
+      if (!response.ok || !data.token) {
+        throw new Error(data.error || 'Unable to confirm that code.')
+      }
+
+      saveAccountSession({
+        token: String(data.token),
+        phoneE164: String(data.phoneE164 || validated.value),
+      })
+      setAccountCode('')
+      setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
+    } catch (caughtError) {
+      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to confirm that code.')
+    } finally {
+      setIsVerifyingAccountCode(false)
+    }
+  }
+
   const deliverCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -1575,6 +1677,11 @@ function App() {
       setSenderCopyEmail(validatedSenderCopy.value)
     }
 
+    if (!accountSession?.token) {
+      setDeliveryNotice('Confirm your mobile number before sending. We’ll text you a one-time code.')
+      return
+    }
+
     setIsDelivering(true)
 
     try {
@@ -1583,6 +1690,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accountSession.token}`,
         },
         body: JSON.stringify({
           cardId: shared.id,
@@ -1603,7 +1711,10 @@ function App() {
           ? formatEmailAddress(String(data.deliveredTo || destinationValue))
           : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
 
-      setDeliveryNotice(data.message || 'Card has been sent.')
+      setDeliveryNotice(
+        `Card sent to ${deliveredDisplay}. You can send it to someone else below, or email ${supportEmail} if it does not arrive.`,
+      )
+      setDeliveryDestination('')
       setHasSentCurrentCard(true)
       if (senderCopyValue) {
         setShowSenderCopyField(false)
@@ -2145,6 +2256,9 @@ function App() {
                   <span className="delivery-kicker">Ready to send?</span>
                   <h3>Send this card</h3>
                   <p>Send a secure card link by email or text after you approve the card.</p>
+                  <p className="delivery-support">
+                    Questions? <a href={supportMailto}>Email us</a>
+                  </p>
                 </div>
                 <div className="mode-toggle delivery-methods" aria-label="Delivery method">
                   <button
@@ -2281,10 +2395,61 @@ function App() {
                     </span>
                   </label>
                 )}
+                <div className="account-gate">
+                  <span className="field-title">Your mobile number</span>
+                  <p className="field-help">
+                    Confirm your number to send. We’ll text a one-time code. Recipients will not see this number.
+                  </p>
+                  {accountSession ? (
+                    <p className="account-confirmed">Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}</p>
+                  ) : (
+                    <>
+                      <label>
+                        Mobile number
+                        <input
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          value={accountPhone}
+                          onChange={(event) => setAccountPhone(event.target.value)}
+                          placeholder="(925) 555-1234"
+                        />
+                      </label>
+                      <div className="account-code-row">
+                        <label>
+                          Text code
+                          <input
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            value={accountCode}
+                            onChange={(event) => setAccountCode(event.target.value)}
+                            placeholder="6-digit code"
+                          />
+                        </label>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={isSendingAccountCode}
+                          onClick={() => void requestAccountCode()}
+                        >
+                          {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={isVerifyingAccountCode || !accountCode.trim()}
+                          onClick={() => void verifyAccountCode()}
+                        >
+                          {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={isDelivering || (deliveryMethod === 'text' && !smsConsentConfirmed)}
+                  disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
                   aria-busy={isDelivering}
                 >
                   {isDelivering ? 'Sending your card...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
@@ -2522,6 +2687,12 @@ function App() {
           )}
         </section>}
       </section>
+      <footer className="site-footer">
+        <a href={supportMailto}>Email us</a>
+        <a href="/faq/">FAQ</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </footer>
     </main>
   )
 }
