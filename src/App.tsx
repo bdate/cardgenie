@@ -78,9 +78,9 @@ const styleOptions = [
   'Bold graphic poster art',
   'Vintage greeting card illustration',
 ]
-const initialCreditBalance = 10
+const initialCreditBalance = 5
 const creditStorageKey = 'cardGenieCredits'
-const sendCreditCost = 5
+const sendCreditCost = 3
 const coverRevisionCost = 1
 const aiCopyCost = 1
 const creditPacks = [
@@ -852,7 +852,7 @@ function App() {
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
-  const [creditNotice, setCreditNotice] = useState('You have 10 starter credits.')
+  const [creditNotice, setCreditNotice] = useState('You have 5 starter credits.')
   const [error, setError] = useState('')
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -1297,22 +1297,12 @@ function App() {
     return date.toLocaleString()
   }
 
-  const openAccountPage = async () => {
-    setShowAccountPage(true)
-    setShowCreditMenu(false)
-    setAccountHistoryError('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-
-    if (!accountSession?.token) {
-      setAccountHistory(null)
-      setAccountHistoryError('Confirm your mobile number when you send a card to see your history.')
-      return
-    }
-
+  const loadAccountHistory = async (token: string) => {
     setIsLoadingAccountHistory(true)
+    setAccountHistoryError('')
     try {
       const response = await fetch(apiUrl('/api/account/history'), {
-        headers: { Authorization: `Bearer ${accountSession.token}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await getApiJson(response, 'Unable to load your account.')
       if (!response.ok) {
@@ -1323,7 +1313,7 @@ function App() {
       if (Number.isFinite(serverBalance) && serverBalance !== credits) {
         await syncAccountCredits({ balance: credits, reason: 'balance_sync' })
         const refreshed = await fetch(apiUrl('/api/account/history'), {
-          headers: { Authorization: `Bearer ${accountSession.token}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (refreshed.ok) {
           setAccountHistory(await getApiJson(refreshed, 'Unable to load your account.'))
@@ -1334,6 +1324,20 @@ function App() {
     } finally {
       setIsLoadingAccountHistory(false)
     }
+  }
+
+  const openAccountPage = async () => {
+    setShowAccountPage(true)
+    setShowCreditMenu(false)
+    setAccountHistoryError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+
+    if (!accountSession?.token) {
+      setAccountHistory(null)
+      return
+    }
+
+    await loadAccountHistory(accountSession.token)
   }
 
   const buyCreditPack = (pack: (typeof creditPacks)[number]) => {
@@ -1362,7 +1366,7 @@ function App() {
     setStep('envelope')
     setHasSentCurrentCard(false)
     setShowCompletionNote(true)
-    setCreditNotice('Creating a card is free. Sending uses 5 credits.')
+    setCreditNotice('Creating a card is free. Sending uses 3 credits.')
     window.setTimeout(() => setShowCompletionNote(false), 6000)
     clearStoredGenerationJob()
   }
@@ -1732,12 +1736,17 @@ function App() {
   const requestAccountCode = async () => {
     const validated = validatePhoneNumber(accountPhone)
     if (!validated.ok) {
-      setDeliveryNotice(validated.message)
+      if (showAccountPage) {
+        setAccountHistoryError(validated.message)
+      } else {
+        setDeliveryNotice(validated.message)
+      }
       return
     }
 
     setIsSendingAccountCode(true)
     setDeliveryNotice('')
+    setAccountHistoryError('')
 
     try {
       const response = await fetch(apiUrl('/api/auth/otp/start'), {
@@ -1751,9 +1760,19 @@ function App() {
       }
 
       setAccountPhone(formatPhoneNumberDisplay(String(data.phoneE164 || validated.value)))
-      setDeliveryNotice(data.message || 'We texted you a 6-digit code.')
+      const notice = data.message || 'We texted you a 6-digit code.'
+      if (showAccountPage) {
+        setAccountHistoryError(notice)
+      } else {
+        setDeliveryNotice(notice)
+      }
     } catch (caughtError) {
-      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to send a sign-in code.')
+      const message = caughtError instanceof Error ? caughtError.message : 'Unable to send a sign-in code.'
+      if (showAccountPage) {
+        setAccountHistoryError(message)
+      } else {
+        setDeliveryNotice(message)
+      }
     } finally {
       setIsSendingAccountCode(false)
     }
@@ -1761,18 +1780,28 @@ function App() {
 
   const verifyAccountCode = async () => {
     const validated = validatePhoneNumber(accountPhone)
-    if (!validated.ok) {
-      setDeliveryNotice(validated.message)
-      return
-    }
+      if (!validated.ok) {
+        if (showAccountPage) {
+          setAccountHistoryError(validated.message)
+        } else {
+          setDeliveryNotice(validated.message)
+        }
+        return
+      }
 
-    if (!/^\d{6}$/.test(accountCode.trim())) {
-      setDeliveryNotice('Enter the 6-digit code from the text message.')
-      return
-    }
+      if (!/^\d{6}$/.test(accountCode.trim())) {
+        const message = 'Enter the 6-digit code from the text message.'
+        if (showAccountPage) {
+          setAccountHistoryError(message)
+        } else {
+          setDeliveryNotice(message)
+        }
+        return
+      }
 
-    setIsVerifyingAccountCode(true)
-    setDeliveryNotice('')
+      setIsVerifyingAccountCode(true)
+      setDeliveryNotice('')
+      setAccountHistoryError('')
 
     try {
       const response = await fetch(apiUrl('/api/auth/otp/verify'), {
@@ -1785,8 +1814,10 @@ function App() {
         throw new Error(data.error || 'Unable to confirm that code.')
       }
 
+      const token = String(data.token)
+      const signingInFromAccount = showAccountPage
       saveAccountSession({
-        token: String(data.token),
+        token,
         phoneE164: String(data.phoneE164 || validated.value),
         copyEmail: String(data.email || ''),
       })
@@ -1794,9 +1825,19 @@ function App() {
         rememberCredits(Number(data.creditBalance))
       }
       setAccountCode('')
-      setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
+      if (signingInFromAccount) {
+        setAccountHistoryError('')
+        await loadAccountHistory(token)
+      } else {
+        setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
+      }
     } catch (caughtError) {
-      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to confirm that code.')
+      const message = caughtError instanceof Error ? caughtError.message : 'Unable to confirm that code.'
+      if (showAccountPage) {
+        setAccountHistoryError(message)
+      } else {
+        setDeliveryNotice(message)
+      }
     } finally {
       setIsVerifyingAccountCode(false)
     }
@@ -1952,7 +1993,7 @@ function App() {
                 : 'Ready to make your next card?'}
             </span>
             <strong>{credits} credits in your account</strong>
-            <small>Creating a card is free. Sending uses 5 credits. Cover and AI text changes use 1 credit.</small>
+            <small>Creating a card is free. Sending uses 3 credits. Cover and AI text changes use 1 credit.</small>
           </div>
           <div className="credit-buy">
             <div className="credit-buy-actions">
@@ -2004,9 +2045,56 @@ function App() {
               Back to card
             </button>
           </div>
+          {!accountSession && (
+            <div className="account-gate">
+              <span className="field-title">Sign in</span>
+              <p className="field-help">
+                Enter your mobile number. We’ll text a one-time code so you can open this account.
+              </p>
+              <label>
+                Mobile number
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={accountPhone}
+                  onChange={(event) => setAccountPhone(event.target.value)}
+                  placeholder="(925) 555-1234"
+                />
+              </label>
+              <div className="account-code-row">
+                <label>
+                  Text code
+                  <input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={accountCode}
+                    onChange={(event) => setAccountCode(event.target.value)}
+                    placeholder="6-digit code"
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isSendingAccountCode}
+                  onClick={() => void requestAccountCode()}
+                >
+                  {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isVerifyingAccountCode || !accountCode.trim()}
+                  onClick={() => void verifyAccountCode()}
+                >
+                  {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
+                </button>
+              </div>
+            </div>
+          )}
           {isLoadingAccountHistory && <p>Loading your account...</p>}
           {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
-          {accountHistory && (
+          {accountSession && accountHistory && (
             <>
               <div className="account-summary">
                 <div>

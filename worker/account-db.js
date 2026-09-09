@@ -1,4 +1,4 @@
-const starterCredits = 10
+const starterCredits = 5
 
 const isoNow = () => new Date().toISOString()
 
