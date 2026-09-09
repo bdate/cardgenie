@@ -822,7 +822,11 @@ function App() {
   const [showAccountConfirm, setShowAccountConfirm] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [accountCode, setAccountCode] = useState('')
-  const [accountSession, setAccountSession] = useState<{ token: string; phoneE164: string } | null>(null)
+  const [accountSession, setAccountSession] = useState<{
+    token: string
+    phoneE164: string
+    copyEmail?: string
+  } | null>(null)
   const [isSendingAccountCode, setIsSendingAccountCode] = useState(false)
   const [isVerifyingAccountCode, setIsVerifyingAccountCode] = useState(false)
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
@@ -900,20 +904,46 @@ function App() {
   const keepScreenAwake = isGenerating || isRefiningImage || isRefiningCopy || isDelivering
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(accountSessionStorageKey)
-      if (!raw) {
-        return
-      }
+    const restoreAccount = async () => {
+      try {
+        const raw = window.localStorage.getItem(accountSessionStorageKey)
+        if (!raw) {
+          return
+        }
 
-      const parsed = JSON.parse(raw) as { token?: string; phoneE164?: string }
-      if (parsed.token && parsed.phoneE164) {
-        setAccountSession({ token: parsed.token, phoneE164: parsed.phoneE164 })
+        const parsed = JSON.parse(raw) as { token?: string; phoneE164?: string; copyEmail?: string }
+        if (!parsed.token || !parsed.phoneE164) {
+          return
+        }
+
+        setAccountSession({ token: parsed.token, phoneE164: parsed.phoneE164, copyEmail: parsed.copyEmail })
         setAccountPhone(formatPhoneNumberDisplay(parsed.phoneE164))
+        if (parsed.copyEmail) {
+          setSenderCopyEmail(parsed.copyEmail)
+        }
+
+        const response = await fetch(apiUrl('/api/account'), {
+          headers: { Authorization: `Bearer ${parsed.token}` },
+        })
+        if (!response.ok) {
+          return
+        }
+
+        const data = await getApiJson(response, 'Unable to load the saved account.')
+        const copyEmail = String(data.email || parsed.copyEmail || '')
+        const session = {
+          token: parsed.token,
+          phoneE164: String(data.phoneE164 || parsed.phoneE164),
+          copyEmail,
+        }
+        setAccountSession(session)
+        window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+      } catch {
+        // Keep the saved phone session if the account lookup cannot be reached.
       }
-    } catch {
-      window.localStorage.removeItem(accountSessionStorageKey)
     }
+
+    void restoreAccount()
   }, [])
 
   useEffect(() => {
@@ -1553,9 +1583,12 @@ function App() {
     ])
   }
 
-  const saveAccountSession = (session: { token: string; phoneE164: string }) => {
+  const saveAccountSession = (session: { token: string; phoneE164: string; copyEmail?: string }) => {
     setAccountSession(session)
     window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+    if (session.copyEmail) {
+      setSenderCopyEmail((current) => current || session.copyEmail || '')
+    }
   }
 
   const requestAccountCode = async () => {
@@ -1617,6 +1650,7 @@ function App() {
       saveAccountSession({
         token: String(data.token),
         phoneE164: String(data.phoneE164 || validated.value),
+        copyEmail: String(data.email || ''),
       })
       setAccountCode('')
       setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
@@ -1719,6 +1753,11 @@ function App() {
       setHasSentCurrentCard(true)
       if (senderCopyValue) {
         setShowSenderCopyField(false)
+        saveAccountSession({
+          token: accountSession.token,
+          phoneE164: accountSession.phoneE164,
+          copyEmail: senderCopyValue,
+        })
       }
       addDeliveryLog({
         method: deliveryMethod,
@@ -2341,7 +2380,9 @@ function App() {
                     onChange={(event) => {
                       const checked = event.target.checked
                       setShowSenderCopyField(checked)
-                      if (!checked) {
+                      if (checked) {
+                        setSenderCopyEmail((current) => current || accountSession?.copyEmail || '')
+                      } else {
                         setSenderCopyEmail('')
                       }
                       setDeliveryNotice('')

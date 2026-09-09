@@ -1,4 +1,10 @@
 import OpenAI from 'openai'
+import {
+  getAccountForSession,
+  recordFailedDelivery,
+  recordSuccessfulDelivery,
+  upsertUserOnLogin,
+} from './account-db.js'
 
 const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
@@ -1808,13 +1814,19 @@ const handleVerifyAccountOtp = async (request, env) => {
 
     const userKey = `user:phone:${phoneE164}`
     const existingUser = (await env.CARD_STORE.get(userKey, 'json')) || null
-    const user = existingUser || {
-      id: crypto.randomUUID(),
+    const account = await upsertUserOnLogin(env, {
       phoneE164,
-      creditBalance: 50,
-      createdAt: Date.now(),
+      request,
+      existingUserId: existingUser?.id,
+    })
+    const user = {
+      id: account?.id || existingUser?.id || crypto.randomUUID(),
+      phoneE164,
+      email: account?.email || existingUser?.email || '',
+      creditBalance: account?.creditBalance ?? existingUser?.creditBalance ?? 50,
+      createdAt: existingUser?.createdAt || Date.now(),
+      lastLoginAt: Date.now(),
     }
-    user.lastLoginAt = Date.now()
     await env.CARD_STORE.put(userKey, JSON.stringify(user))
 
     const token = crypto.randomUUID()
@@ -1834,13 +1846,29 @@ const handleVerifyAccountOtp = async (request, env) => {
       ok: true,
       token,
       phoneE164,
+      email: user.email || '',
       creditBalance: user.creditBalance ?? 0,
-      message: existingUser ? 'Welcome back.' : 'Your account is ready.',
+      message: existingUser || account?.isNew === false ? 'Welcome back.' : 'Your account is ready.',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to confirm that code.'
     return jsonResponse(request, env, { error: message }, 400)
   }
+}
+
+const handleGetAccount = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number before sending.' }, 401)
+  }
+
+  const account = await getAccountForSession(env, session.userId)
+  return jsonResponse(request, env, {
+    ok: true,
+    phoneE164: session.phoneE164,
+    email: account?.email || '',
+    creditBalance: account?.creditBalance ?? null,
+  })
 }
 
 const handleDeliverCard = async (request, env) => {
@@ -1907,6 +1935,18 @@ const handleDeliverCard = async (request, env) => {
       })
     }
 
+    try {
+      await recordSuccessfulDelivery(env, {
+        userId: session.userId,
+        record,
+        method,
+        destination: deliveredTo,
+        senderCopyEmail: senderCopyDeliveredTo || '',
+      })
+    } catch (accountError) {
+      console.error(accountError)
+    }
+
     return jsonResponse(request, env, {
       ok: true,
       shareUrl,
@@ -1921,6 +1961,20 @@ const handleDeliverCard = async (request, env) => {
     const isValidationError =
       /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(rawMessage) &&
       !/SendGrid|Postmark|Twilio|configured/i.test(rawMessage)
+
+    if (!isValidationError) {
+      try {
+        await recordFailedDelivery(env, {
+          userId: session.userId,
+          cardId,
+          method,
+          destination: cleanDestination,
+          error,
+        })
+      } catch (accountError) {
+        console.error(accountError)
+      }
+    }
 
     return jsonResponse(
       request,
@@ -2177,6 +2231,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/auth/otp/verify') {
     return handleVerifyAccountOtp(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/account') {
+    return handleGetAccount(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/deliver-card') {

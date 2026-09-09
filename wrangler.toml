@@ -22,6 +22,11 @@ zone_name = "card-genie.com"
 binding = "CARD_STORE"
 id = "e599b5d8c31b4d5296a7d4c8e7a8aef0"
 
+[[d1_databases]]
+binding = "ACCOUNT_DB"
+database_name = "cardgenie"
+database_id = "58744606-9ecf-4171-ac8b-406de3f45177"
+
 [[queues.producers]]
 queue = "cardgenie-generate"
 binding = "GENERATE_QUEUE"
