@@ -2122,9 +2122,11 @@ function App() {
                   <div className="account-list">
                     {(accountHistory.creditEvents || []).map((event, index) => (
                       <div className="account-row" key={`${event.createdAt}-${index}`}>
-                        <span>{event.label}</span>
-                        <span>{event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}</span>
-                        <span>{formatAccountDate(event.createdAt)}</span>
+                        <span className="account-row-title">{event.label}</span>
+                        <span className="account-row-amount">
+                          {event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}
+                        </span>
+                        <span className="account-row-date">{formatAccountDate(event.createdAt)}</span>
                       </div>
                     ))}
                   </div>
@@ -2138,20 +2140,23 @@ function App() {
                   <div className="account-list">
                     {(accountHistory.cards || []).map((card) => (
                       <div className="account-row" key={card.id}>
-                        <span>Created</span>
-                        <span>{[card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card'}</span>
-                        <span>{card.status}</span>
-                        <span>{formatAccountDate(card.createdAt)}</span>
+                        <span className="account-row-title">Created</span>
+                        <span className="account-row-detail">
+                          {[card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card'}
+                        </span>
+                        <span className="account-row-status">{card.status}</span>
+                        <span className="account-row-date">{formatAccountDate(card.createdAt)}</span>
                       </div>
                     ))}
                     {(accountHistory.deliveries || []).map((delivery) => (
                       <div className="account-row" key={delivery.id}>
-                        <span>
-                          {delivery.isSenderCopy ? 'Copy to you' : 'Sent'} · {delivery.method === 'text' ? 'Text' : 'Email'}
+                        <span className="account-row-title">
+                          {delivery.isSenderCopy ? 'Copy to you' : 'Sent'} ·{' '}
+                          {delivery.method === 'text' ? 'Text' : 'Email'}
                         </span>
-                        <span>{delivery.destination}</span>
-                        <span>{delivery.status}</span>
-                        <span>{formatAccountDate(delivery.createdAt)}</span>
+                        <span className="account-row-detail">{delivery.destination}</span>
+                        <span className="account-row-status">{delivery.status}</span>
+                        <span className="account-row-date">{formatAccountDate(delivery.createdAt)}</span>
                       </div>
                     ))}
                   </div>
