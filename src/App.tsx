@@ -1319,6 +1319,16 @@ function App() {
         throw new Error(data.error || 'Unable to load your account.')
       }
       setAccountHistory(data)
+      const serverBalance = Number(data.account?.creditBalance)
+      if (Number.isFinite(serverBalance) && serverBalance !== credits) {
+        await syncAccountCredits({ balance: credits, reason: 'balance_sync' })
+        const refreshed = await fetch(apiUrl('/api/account/history'), {
+          headers: { Authorization: `Bearer ${accountSession.token}` },
+        })
+        if (refreshed.ok) {
+          setAccountHistory(await getApiJson(refreshed, 'Unable to load your account.'))
+        }
+      }
     } catch (caughtError) {
       setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
     } finally {

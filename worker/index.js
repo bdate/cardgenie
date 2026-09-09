@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
   applyCreditChange,
+  ensureAccountUser,
   getAccountForSession,
   getAccountHistory,
   recordFailedDelivery,
@@ -1867,6 +1868,7 @@ const handleAdjustAccountCredits = async (request, env) => {
   const { balance, add, reason } = (await readJson(request)) || {}
   const nextBalance = await applyCreditChange(env, {
     userId: session.userId,
+    phoneE164: session.phoneE164,
     balance: Number.isFinite(Number(balance)) ? Number(balance) : undefined,
     delta: Number.isFinite(Number(add)) ? Number(add) : undefined,
     reason: String(reason || 'adjustment'),
@@ -1887,7 +1889,7 @@ const handleGetAccountHistory = async (request, env) => {
     return jsonResponse(request, env, { error: 'Confirm your mobile number to see your account.' }, 401)
   }
 
-  const history = await getAccountHistory(env, session.userId)
+  const history = await getAccountHistory(env, session.userId, session.phoneE164)
   if (!history) {
     return jsonResponse(request, env, {
       ok: true,
@@ -1908,6 +1910,7 @@ const handleGetAccount = async (request, env) => {
     return jsonResponse(request, env, { error: 'Confirm your mobile number before sending.' }, 401)
   }
 
+  await ensureAccountUser(env, { userId: session.userId, phoneE164: session.phoneE164 })
   const account = await getAccountForSession(env, session.userId)
   return jsonResponse(request, env, {
     ok: true,
@@ -1984,6 +1987,7 @@ const handleDeliverCard = async (request, env) => {
     try {
       await recordSuccessfulDelivery(env, {
         userId: session.userId,
+        phoneE164: session.phoneE164,
         record,
         method,
         destination: deliveredTo,

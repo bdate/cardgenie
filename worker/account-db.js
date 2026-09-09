@@ -89,10 +89,57 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
   }
 }
 
+export const ensureAccountUser = async (env, { userId, phoneE164 }) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  const existing = await getUserById(env.ACCOUNT_DB, userId)
+  if (existing) {
+    return mapUser(existing)
+  }
+
+  if (phoneE164) {
+    const byPhone = await getUserByPhone(env.ACCOUNT_DB, phoneE164)
+    if (byPhone) {
+      return mapUser(byPhone)
+    }
+  }
+
+  const now = isoNow()
+  await env.ACCOUNT_DB.batch([
+    env.ACCOUNT_DB.prepare(
+      `INSERT INTO users (
+        id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
+        credit_balance, credits_granted, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'active', 'web', ?, ?, ?)`,
+    ).bind(userId, phoneE164 || '', now, now, now, starterCredits, starterCredits, now),
+    env.ACCOUNT_DB.prepare(
+      `INSERT INTO credit_events (
+        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
+      ) VALUES (?, ?, ?, 'grant', 'signup_starter', ?, ?, 'system', 'Starter credits')`,
+    ).bind(crypto.randomUUID(), userId, now, starterCredits, starterCredits),
+  ])
+
+  return mapUser({
+    id: userId,
+    phone_e164: phoneE164 || '',
+    email: '',
+    credit_balance: starterCredits,
+    credits_granted: starterCredits,
+    credits_purchased: 0,
+    credits_spent: 0,
+    status: 'active',
+    created_at: now,
+    last_used_at: now,
+  })
+}
+
 const creditReasonLabel = (reason) => {
   const labels = {
     signup_starter: 'Starter credits',
     demo_purchase: 'Credit purchase',
+    balance_sync: 'Credits added',
     cover_revise: 'Cover change',
     ai_copy: 'AI text change',
     card_send: 'Card sent',
@@ -101,11 +148,12 @@ const creditReasonLabel = (reason) => {
   return labels[reason] || reason || 'Credit change'
 }
 
-export const getAccountHistory = async (env, userId) => {
+export const getAccountHistory = async (env, userId, phoneE164) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
   }
 
+  await ensureAccountUser(env, { userId, phoneE164 })
   const user = await getUserById(env.ACCOUNT_DB, userId)
   if (!user) {
     return null
@@ -219,11 +267,12 @@ const ensureCard = async (env, { userId, record, now }) => {
   return true
 }
 
-export const recordSuccessfulDelivery = async (env, { userId, record, method, destination, senderCopyEmail }) => {
+export const recordSuccessfulDelivery = async (env, { userId, phoneE164, record, method, destination, senderCopyEmail }) => {
   if (!env.ACCOUNT_DB || !userId || !record?.id) {
     return
   }
 
+  await ensureAccountUser(env, { userId, phoneE164 })
   const now = isoNow()
   const createdCard = await ensureCard(env, { userId, record, now })
   const copyEmail = senderCopyEmail ? String(senderCopyEmail).trim() : ''
@@ -282,11 +331,12 @@ export const recordSuccessfulDelivery = async (env, { userId, record, method, de
   await env.ACCOUNT_DB.batch(statements)
 }
 
-export const applyCreditChange = async (env, { userId, balance, delta, reason, kind, note }) => {
+export const applyCreditChange = async (env, { userId, phoneE164, balance, delta, reason, kind, note }) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
   }
 
+  await ensureAccountUser(env, { userId, phoneE164 })
   const user = await getUserById(env.ACCOUNT_DB, userId)
   if (!user) {
     return null
@@ -311,7 +361,7 @@ export const applyCreditChange = async (env, { userId, balance, delta, reason, k
     ).bind(
       nextBalance,
       creditsDelta > 0 && eventKind !== 'purchase' ? creditsDelta : 0,
-      creditsDelta > 0 && eventKind === 'purchase' ? creditsDelta : 0,
+      creditsDelta > 0 && (eventKind === 'purchase' || reason === 'balance_sync') ? creditsDelta : 0,
       creditsDelta < 0 ? Math.abs(creditsDelta) : 0,
       now,
       now,
