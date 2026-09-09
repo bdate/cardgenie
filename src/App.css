@@ -1985,6 +1985,11 @@ textarea:focus {
 
 .account-page .panel-heading {
   align-items: center;
+  justify-content: space-between;
+}
+
+.account-page .account-back {
+  margin-left: auto;
 }
 
 .account-summary {

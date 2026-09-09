@@ -2000,7 +2000,7 @@ function App() {
               <h2>My account</h2>
               <p>Credits, cards, and sends for this phone number.</p>
             </div>
-            <button className="secondary-button" type="button" onClick={() => setShowAccountPage(false)}>
+            <button className="secondary-button account-back" type="button" onClick={() => setShowAccountPage(false)}>
               Back to card
             </button>
           </div>
