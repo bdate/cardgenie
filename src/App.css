@@ -128,6 +128,13 @@
   gap: 8px;
 }
 
+.credit-buy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .credit-menu {
   display: grid;
   gap: 6px;
@@ -1942,15 +1949,86 @@ textarea:focus {
   font-size: 0.92rem;
 }
 
-.site-footer a {
+.site-footer a,
+.site-footer button {
+  padding: 0;
+  border: 0;
   color: var(--gcu-dark-teal);
+  background: transparent;
+  font: inherit;
   font-weight: 800;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .site-footer a:hover,
-.site-footer a:focus-visible {
+.site-footer a:focus-visible,
+.site-footer button:hover,
+.site-footer button:focus-visible {
   text-decoration: underline;
+}
+
+.workspace.is-hidden {
+  display: none;
+}
+
+.account-page {
+  display: grid;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: 980px;
+  border: 1px solid rgba(143, 208, 201, 0.36);
+  border-radius: 28px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.account-page .panel-heading {
+  align-items: center;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.account-summary div,
+.account-block {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(63, 155, 145, 0.16);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 248, 239, 0.55);
+}
+
+.account-summary span,
+.account-row span {
+  color: var(--gcu-grey);
+  font-size: 0.82rem;
+}
+
+.account-summary strong {
+  color: var(--gcu-ink);
+  font-size: 1.05rem;
+}
+
+.account-block h3,
+.account-block p {
+  margin: 0;
+}
+
+.account-list {
+  display: grid;
+  gap: 8px;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr auto auto;
+  gap: 10px;
+  align-items: center;
 }
 
 .delivery-notice {
@@ -2809,8 +2887,15 @@ textarea:focus {
     width: 100%;
   }
 
-  .credit-buy {
+  .credit-buy,
+  .credit-buy-actions {
     justify-items: stretch;
+    justify-content: stretch;
+  }
+
+  .account-summary,
+  .account-row {
+    grid-template-columns: 1fr;
   }
 
   .field-grid {

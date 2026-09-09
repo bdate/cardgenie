@@ -19,6 +19,9 @@ const mapUser = (row) => {
     phoneE164: row.phone_e164,
     email: row.email || '',
     creditBalance: row.credit_balance ?? 0,
+    creditsGranted: row.credits_granted ?? 0,
+    creditsPurchased: row.credits_purchased ?? 0,
+    creditsSpent: row.credits_spent ?? 0,
     status: row.status,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -83,6 +86,88 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
       last_used_at: now,
     }),
     isNew: true,
+  }
+}
+
+const creditReasonLabel = (reason) => {
+  const labels = {
+    signup_starter: 'Starter credits',
+    demo_purchase: 'Credit purchase',
+    cover_revise: 'Cover change',
+    ai_copy: 'AI text change',
+    card_send: 'Card sent',
+    dev_set: 'Balance adjusted',
+  }
+  return labels[reason] || reason || 'Credit change'
+}
+
+export const getAccountHistory = async (env, userId) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  const user = await getUserById(env.ACCOUNT_DB, userId)
+  if (!user) {
+    return null
+  }
+
+  const [events, cards, deliveries] = await Promise.all([
+    env.ACCOUNT_DB.prepare(
+      `SELECT created_at, kind, reason, credits_delta, balance_after
+       FROM credit_events
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+      .bind(userId)
+      .all(),
+    env.ACCOUNT_DB.prepare(
+      `SELECT id, created_at, status, recipient_name, occasion, sender_name
+       FROM cards
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+      .bind(userId)
+      .all(),
+    env.ACCOUNT_DB.prepare(
+      `SELECT id, card_id, created_at, method, destination, is_sender_copy, status
+       FROM deliveries
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+      .bind(userId)
+      .all(),
+  ])
+
+  return {
+    account: mapUser(user),
+    creditEvents: (events.results || []).map((row) => ({
+      createdAt: row.created_at,
+      kind: row.kind,
+      reason: row.reason,
+      label: creditReasonLabel(row.reason),
+      creditsDelta: row.credits_delta,
+      balanceAfter: row.balance_after,
+    })),
+    cards: (cards.results || []).map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      status: row.status,
+      recipientName: row.recipient_name || '',
+      occasion: row.occasion || '',
+      senderName: row.sender_name || '',
+    })),
+    deliveries: (deliveries.results || []).map((row) => ({
+      id: row.id,
+      cardId: row.card_id,
+      createdAt: row.created_at,
+      method: row.method,
+      destination: row.destination,
+      isSenderCopy: Boolean(row.is_sender_copy),
+      status: row.status,
+    })),
   }
 }
 

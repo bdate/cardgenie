@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import {
   applyCreditChange,
   getAccountForSession,
+  getAccountHistory,
   recordFailedDelivery,
   recordSuccessfulDelivery,
   upsertUserOnLogin,
@@ -1880,6 +1881,27 @@ const handleAdjustAccountCredits = async (request, env) => {
   return jsonResponse(request, env, { ok: true, creditBalance: nextBalance })
 }
 
+const handleGetAccountHistory = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number to see your account.' }, 401)
+  }
+
+  const history = await getAccountHistory(env, session.userId)
+  if (!history) {
+    return jsonResponse(request, env, {
+      ok: true,
+      phoneE164: session.phoneE164,
+      account: null,
+      creditEvents: [],
+      cards: [],
+      deliveries: [],
+    })
+  }
+
+  return jsonResponse(request, env, { ok: true, phoneE164: session.phoneE164, ...history })
+}
+
 const handleGetAccount = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -2259,6 +2281,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account') {
     return handleGetAccount(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/account/history') {
+    return handleGetAccountHistory(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/account/credits') {

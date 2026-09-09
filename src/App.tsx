@@ -818,6 +818,40 @@ function App() {
     return Number.isFinite(stored) ? stored : initialCreditBalance
   })
   const [showCreditMenu, setShowCreditMenu] = useState(false)
+  const [showAccountPage, setShowAccountPage] = useState(false)
+  const [accountHistory, setAccountHistory] = useState<{
+    phoneE164?: string
+    account?: {
+      creditBalance?: number
+      creditsGranted?: number
+      creditsPurchased?: number
+      creditsSpent?: number
+      createdAt?: string
+    } | null
+    creditEvents?: Array<{
+      createdAt: string
+      label: string
+      creditsDelta: number
+      balanceAfter: number
+    }>
+    cards?: Array<{
+      id: string
+      createdAt: string
+      recipientName: string
+      occasion: string
+      status: string
+    }>
+    deliveries?: Array<{
+      id: string
+      createdAt: string
+      method: string
+      destination: string
+      isSenderCopy: boolean
+      status: string
+    }>
+  } | null>(null)
+  const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
+  const [accountHistoryError, setAccountHistoryError] = useState('')
   const [creditNotice, setCreditNotice] = useState('You have 10 starter credits.')
   const [error, setError] = useState('')
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -1249,6 +1283,46 @@ function App() {
       }
     } catch {
       // Keep the local balance if the account update cannot be reached.
+    }
+  }
+
+  const formatAccountDate = (value?: string) => {
+    if (!value) {
+      return ''
+    }
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return date.toLocaleString()
+  }
+
+  const openAccountPage = async () => {
+    setShowAccountPage(true)
+    setShowCreditMenu(false)
+    setAccountHistoryError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+
+    if (!accountSession?.token) {
+      setAccountHistory(null)
+      setAccountHistoryError('Confirm your mobile number when you send a card to see your history.')
+      return
+    }
+
+    setIsLoadingAccountHistory(true)
+    try {
+      const response = await fetch(apiUrl('/api/account/history'), {
+        headers: { Authorization: `Bearer ${accountSession.token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load your account.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load your account.')
+      }
+      setAccountHistory(data)
+    } catch (caughtError) {
+      setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
+    } finally {
+      setIsLoadingAccountHistory(false)
     }
   }
 
@@ -1809,7 +1883,7 @@ function App() {
           : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
 
       setDeliveryNotice(
-        `Card sent to ${deliveredDisplay}. You can send it to someone else below, or email ${supportEmail} if it does not arrive.`,
+        `Card sent to ${deliveredDisplay}.`,
       )
       setDeliveryDestination('')
       setHasSentCurrentCard(true)
@@ -1871,14 +1945,19 @@ function App() {
             <small>Creating a card is free. Sending uses 5 credits. Cover and AI text changes use 1 credit.</small>
           </div>
           <div className="credit-buy">
-            <button
-              className="secondary-button"
-              type="button"
-              aria-expanded={showCreditMenu}
-              onClick={() => setShowCreditMenu((current) => !current)}
-            >
-              Buy more credits
-            </button>
+            <div className="credit-buy-actions">
+              <button className="secondary-button" type="button" onClick={() => void openAccountPage()}>
+                My account
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                aria-expanded={showCreditMenu}
+                onClick={() => setShowCreditMenu((current) => !current)}
+              >
+                Buy more credits
+              </button>
+            </div>
             {showCreditMenu && (
               <div className="credit-menu" role="menu" aria-label="Credit packs">
                 {creditPacks.map((pack) => (
@@ -1904,7 +1983,84 @@ function App() {
         </div>}
       </section>
 
-      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'}`.trim()}>
+      {showAccountPage && !isRecipientView && (
+        <section className="account-page" aria-label="My account">
+          <div className="panel-heading">
+            <div>
+              <h2>My account</h2>
+              <p>Credits, cards, and sends for this phone number.</p>
+            </div>
+            <button className="secondary-button" type="button" onClick={() => setShowAccountPage(false)}>
+              Back to card
+            </button>
+          </div>
+          {isLoadingAccountHistory && <p>Loading your account...</p>}
+          {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+          {accountHistory && (
+            <>
+              <div className="account-summary">
+                <div>
+                  <span>Credits now</span>
+                  <strong>{accountHistory.account?.creditBalance ?? credits}</strong>
+                </div>
+                <div>
+                  <span>Purchased</span>
+                  <strong>{accountHistory.account?.creditsPurchased ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Spent</span>
+                  <strong>{accountHistory.account?.creditsSpent ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong>{formatPhoneNumberDisplay(accountHistory.phoneE164 || accountSession?.phoneE164 || '')}</strong>
+                </div>
+              </div>
+              <div className="account-block">
+                <h3>Credit activity</h3>
+                {(accountHistory.creditEvents || []).length === 0 ? (
+                  <p>No credit activity yet.</p>
+                ) : (
+                  <div className="account-list">
+                    {(accountHistory.creditEvents || []).map((event, index) => (
+                      <div className="account-row" key={`${event.createdAt}-${index}`}>
+                        <span>{event.label}</span>
+                        <span>{event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}</span>
+                        <span>{formatAccountDate(event.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="account-block">
+                <h3>Cards and sends</h3>
+                {(accountHistory.deliveries || []).length === 0 && (accountHistory.cards || []).length === 0 ? (
+                  <p>No cards sent yet.</p>
+                ) : (
+                  <div className="account-list">
+                    {(accountHistory.deliveries || []).map((delivery) => (
+                      <div className="account-row" key={delivery.id}>
+                        <span>
+                          {delivery.isSenderCopy ? 'Copy to you' : 'Sent'} · {delivery.method === 'text' ? 'Text' : 'Email'}
+                        </span>
+                        <span>{delivery.destination}</span>
+                        <span>{delivery.status}</span>
+                        <span>{formatAccountDate(delivery.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="account-block">
+                <h3>Printed cards</h3>
+                <p>A mailing address will be saved here when printed cards are offered.</p>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage ? 'is-hidden' : ''}`.trim()}>
         {!isRecipientView && <form className="card-panel form-panel" onSubmit={generateCard}>
           <div className="panel-heading">
             <div>
@@ -2850,6 +3006,11 @@ function App() {
         </section>}
       </section>
       <footer className="site-footer">
+        {!isRecipientView && (
+          <button type="button" onClick={() => void openAccountPage()}>
+            My account
+          </button>
+        )}
         <a href={supportMailto}>Email us</a>
         <a href="/faq/">FAQ</a>
         <a href="/privacy/">Privacy</a>
