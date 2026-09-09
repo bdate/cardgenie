@@ -2048,6 +2048,14 @@ function App() {
                   <p>No cards sent yet.</p>
                 ) : (
                   <div className="account-list">
+                    {(accountHistory.cards || []).map((card) => (
+                      <div className="account-row" key={card.id}>
+                        <span>Created</span>
+                        <span>{[card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card'}</span>
+                        <span>{card.status}</span>
+                        <span>{formatAccountDate(card.createdAt)}</span>
+                      </div>
+                    ))}
                     {(accountHistory.deliveries || []).map((delivery) => (
                       <div className="account-row" key={delivery.id}>
                         <span>

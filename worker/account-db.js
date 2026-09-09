@@ -154,10 +154,13 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
   }
 
   await ensureAccountUser(env, { userId, phoneE164 })
-  const user = await getUserById(env.ACCOUNT_DB, userId)
+  const byPhone = phoneE164 ? await getUserByPhone(env.ACCOUNT_DB, phoneE164) : null
+  const user = byPhone || (await getUserById(env.ACCOUNT_DB, userId))
   if (!user) {
     return null
   }
+
+  userId = user.id
 
   const [events, cards, deliveries] = await Promise.all([
     env.ACCOUNT_DB.prepare(
