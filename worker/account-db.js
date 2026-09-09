@@ -1,4 +1,4 @@
-const starterCredits = 50
+const starterCredits = 10
 
 const isoNow = () => new Date().toISOString()
 
@@ -195,6 +195,51 @@ export const recordSuccessfulDelivery = async (env, { userId, record, method, de
   )
 
   await env.ACCOUNT_DB.batch(statements)
+}
+
+export const applyCreditChange = async (env, { userId, balance, delta, reason, kind, note }) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  const user = await getUserById(env.ACCOUNT_DB, userId)
+  if (!user) {
+    return null
+  }
+
+  const current = Number(user.credit_balance) || 0
+  const nextBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : current + Math.floor(delta || 0)
+  const creditsDelta = nextBalance - current
+  const now = isoNow()
+  const eventKind = kind || (creditsDelta >= 0 ? 'grant' : 'adjustment')
+
+  await env.ACCOUNT_DB.batch([
+    env.ACCOUNT_DB.prepare(
+      `UPDATE users
+       SET credit_balance = ?,
+           credits_granted = credits_granted + ?,
+           credits_purchased = credits_purchased + ?,
+           credits_spent = credits_spent + ?,
+           last_used_at = ?,
+           updated_at = ?
+       WHERE id = ?`,
+    ).bind(
+      nextBalance,
+      creditsDelta > 0 && eventKind !== 'purchase' ? creditsDelta : 0,
+      creditsDelta > 0 && eventKind === 'purchase' ? creditsDelta : 0,
+      creditsDelta < 0 ? Math.abs(creditsDelta) : 0,
+      now,
+      now,
+      userId,
+    ),
+    env.ACCOUNT_DB.prepare(
+      `INSERT INTO credit_events (
+        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?)`,
+    ).bind(crypto.randomUUID(), userId, now, eventKind, reason || 'adjustment', creditsDelta, nextBalance, note || ''),
+  ])
+
+  return nextBalance
 }
 
 export const recordFailedDelivery = async (env, { userId, cardId, method, destination, error }) => {

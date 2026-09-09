@@ -122,6 +122,56 @@
   border: 1px solid rgba(63, 155, 145, 0.16);
 }
 
+.credit-buy {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.credit-menu {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid rgba(63, 155, 145, 0.22);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.credit-menu button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--gcu-ink);
+  background: rgba(255, 248, 239, 0.9);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.credit-dev-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.72rem;
+}
+
+.credit-dev-links button {
+  padding: 0;
+  border: 0;
+  color: var(--gcu-dark-teal);
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(340px, 0.9fr) minmax(420px, 1.1fr);
@@ -2753,8 +2803,14 @@ textarea:focus {
     text-align: center;
   }
 
-  .credit-wallet .secondary-button {
+  .credit-wallet .secondary-button,
+  .credit-buy,
+  .credit-menu {
     width: 100%;
+  }
+
+  .credit-buy {
+    justify-items: stretch;
   }
 
   .field-grid {

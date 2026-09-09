@@ -78,10 +78,16 @@ const styleOptions = [
   'Bold graphic poster art',
   'Vintage greeting card illustration',
 ]
-const initialCreditBalance = 50
-const creditPackAmount = 50
-const cardGenerationCost = 10
-const revisionCost = 2
+const initialCreditBalance = 10
+const creditStorageKey = 'cardGenieCredits'
+const sendCreditCost = 5
+const coverRevisionCost = 1
+const aiCopyCost = 1
+const creditPacks = [
+  { id: '10', credits: 10, price: 5 },
+  { id: '25', credits: 25, price: 10 },
+  { id: '60', credits: 60, price: 20 },
+] as const
 const maxReferencePhotos = 3
 const referencePhotoMaxEdge = 1280
 const referencePhotoMinEdge = 240
@@ -807,8 +813,12 @@ function App() {
   const [showPolishDialog, setShowPolishDialog] = useState(false)
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
   const [cardSignature, setCardSignature] = useState<string | null>(null)
-  const [credits, setCredits] = useState(initialCreditBalance)
-  const [creditNotice, setCreditNotice] = useState('You have 50 starter credits for this demo.')
+  const [credits, setCredits] = useState(() => {
+    const stored = Number(window.localStorage.getItem(creditStorageKey))
+    return Number.isFinite(stored) ? stored : initialCreditBalance
+  })
+  const [showCreditMenu, setShowCreditMenu] = useState(false)
+  const [creditNotice, setCreditNotice] = useState('You have 10 starter credits.')
   const [error, setError] = useState('')
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -893,8 +903,9 @@ function App() {
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
-  const hasEnoughCreditsForCard = credits >= cardGenerationCost
-  const hasEnoughCreditsForRevision = credits >= revisionCost
+  const hasEnoughCreditsToSend = credits >= sendCreditCost
+  const hasEnoughCreditsForCover = credits >= coverRevisionCost
+  const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
   const showReviseButton = hasViewedFront && hasViewedInside
@@ -938,6 +949,11 @@ function App() {
         }
         setAccountSession(session)
         window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+        if (Number.isFinite(Number(data.creditBalance))) {
+          const accountCredits = Number(data.creditBalance)
+          setCredits(accountCredits)
+          window.localStorage.setItem(creditStorageKey, String(accountCredits))
+        }
       } catch {
         // Keep the saved phone session if the account lookup cannot be reached.
       }
@@ -1203,9 +1219,51 @@ function App() {
     setReferencePhotoNotice('')
   }
 
-  const addCreditPack = () => {
-    setCredits((current) => current + creditPackAmount)
-    setCreditNotice(`Added ${creditPackAmount} demo credits. In production this would happen after checkout.`)
+  const rememberCredits = (nextCredits: number) => {
+    const balance = Math.max(0, nextCredits)
+    setCredits(balance)
+    window.localStorage.setItem(creditStorageKey, String(balance))
+    return balance
+  }
+
+  const syncAccountCredits = async (payload: { balance?: number; add?: number; reason: string }) => {
+    if (!accountSession?.token) {
+      return
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/account/credits'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accountSession.token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        return
+      }
+      const data = await getApiJson(response, 'Unable to update credits.')
+      if (Number.isFinite(Number(data.creditBalance))) {
+        rememberCredits(Number(data.creditBalance))
+      }
+    } catch {
+      // Keep the local balance if the account update cannot be reached.
+    }
+  }
+
+  const buyCreditPack = (pack: (typeof creditPacks)[number]) => {
+    const nextCredits = rememberCredits(credits + pack.credits)
+    setShowCreditMenu(false)
+    setCreditNotice(`Added ${pack.credits} credits for $${pack.price}. No payment was taken.`)
+    void syncAccountCredits({ add: pack.credits, reason: 'demo_purchase' })
+    return nextCredits
+  }
+
+  const setCreditBalance = (balance: number) => {
+    rememberCredits(balance)
+    setCreditNotice(`Credits set to ${balance} for testing.`)
+    void syncAccountCredits({ balance, reason: 'dev_set' })
   }
 
   const finishGeneratedCard = (data: { message: string; closing?: string; imageUrl: string }, signatureName: string) => {
@@ -1220,8 +1278,7 @@ function App() {
     setStep('envelope')
     setHasSentCurrentCard(false)
     setShowCompletionNote(true)
-    setCredits((current) => current - cardGenerationCost)
-    setCreditNotice(`${cardGenerationCost} credits used to create this card.`)
+    setCreditNotice('Creating a card is free. Sending uses 5 credits.')
     window.setTimeout(() => setShowCompletionNote(false), 6000)
     clearStoredGenerationJob()
   }
@@ -1273,11 +1330,6 @@ function App() {
   const generateCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
-
-    if (!hasEnoughCreditsForCard) {
-      setCreditNotice(`You need ${cardGenerationCost} credits to create a card. Buy more credits to keep going.`)
-      return
-    }
 
     setIsGenerating(true)
     setShowCompletionNote(false)
@@ -1428,8 +1480,8 @@ function App() {
 
     setError('')
 
-    if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} credits to revise the cover. Buy more credits to keep going.`)
+    if (!hasEnoughCreditsForCover) {
+      setCreditNotice(`You need ${coverRevisionCost} credit to revise the cover. Buy more credits to keep going.`)
       return
     }
 
@@ -1464,8 +1516,9 @@ function App() {
       setHasSentCurrentCard(false)
       setImageRefinement('')
       setStep('front')
-      setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} credits used to revise the cover.`)
+      const nextCredits = rememberCredits(credits - coverRevisionCost)
+      setCreditNotice(`${coverRevisionCost} credit used to ${coverRefinementMode === 'revise' ? 'revise' : 'create'} the cover.`)
+      void syncAccountCredits({ balance: nextCredits, reason: 'cover_revise' })
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
       setCreditNotice('Your credits are still in your account.')
@@ -1481,8 +1534,8 @@ function App() {
 
     setError('')
 
-    if (!hasEnoughCreditsForRevision) {
-      setCreditNotice(`You need ${revisionCost} credits to polish the message. Buy more credits to keep going.`)
+    if (!hasEnoughCreditsForAiCopy) {
+      setCreditNotice(`You need ${aiCopyCost} credit for an AI rewrite. Editing the message yourself is free.`)
       return
     }
 
@@ -1526,8 +1579,9 @@ function App() {
       setCopyRefinement('')
       setShowPolishDialog(false)
       setStep('inside')
-      setCredits((current) => current - revisionCost)
-      setCreditNotice(`${revisionCost} credits used to polish the inside message.`)
+      const nextCredits = rememberCredits(credits - aiCopyCost)
+      setCreditNotice(`${aiCopyCost} credit used for the AI rewrite. Editing the message yourself is free.`)
+      void syncAccountCredits({ balance: nextCredits, reason: 'ai_copy' })
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
       setCreditNotice('Your credits are still in your account.')
@@ -1652,6 +1706,9 @@ function App() {
         phoneE164: String(data.phoneE164 || validated.value),
         copyEmail: String(data.email || ''),
       })
+      if (Number.isFinite(Number(data.creditBalance))) {
+        rememberCredits(Number(data.creditBalance))
+      }
       setAccountCode('')
       setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
     } catch (caughtError) {
@@ -1717,6 +1774,11 @@ function App() {
       return
     }
 
+    if (!hasEnoughCreditsToSend) {
+      setDeliveryNotice(`You need ${sendCreditCost} credits to send a card. Buy more credits to keep going.`)
+      return
+    }
+
     setIsDelivering(true)
 
     try {
@@ -1751,6 +1813,9 @@ function App() {
       )
       setDeliveryDestination('')
       setHasSentCurrentCard(true)
+      const nextCredits = rememberCredits(credits - sendCreditCost)
+      setCreditNotice(`${sendCreditCost} credits used to send this card.`)
+      void syncAccountCredits({ balance: nextCredits, reason: 'card_send' })
       if (senderCopyValue) {
         setShowSenderCopyField(false)
         saveAccountSession({
@@ -1803,13 +1868,39 @@ function App() {
                 : 'Ready to make your next card?'}
             </span>
             <strong>{credits} credits in your account</strong>
-            <small>
-              Cards use {cardGenerationCost} credits. Revisions use {revisionCost} credits.
-            </small>
+            <small>Creating a card is free. Sending uses 5 credits. Cover and AI text changes use 1 credit.</small>
           </div>
-          <button className="secondary-button" type="button" onClick={addCreditPack}>
-            Buy more credits - $10
-          </button>
+          <div className="credit-buy">
+            <button
+              className="secondary-button"
+              type="button"
+              aria-expanded={showCreditMenu}
+              onClick={() => setShowCreditMenu((current) => !current)}
+            >
+              Buy more credits
+            </button>
+            {showCreditMenu && (
+              <div className="credit-menu" role="menu" aria-label="Credit packs">
+                {creditPacks.map((pack) => (
+                  <button key={pack.id} type="button" role="menuitem" onClick={() => buyCreditPack(pack)}>
+                    {pack.credits} credits — ${pack.price}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="credit-dev-links">
+              Set credits:
+              <button type="button" onClick={() => setCreditBalance(0)}>
+                0
+              </button>
+              <button type="button" onClick={() => setCreditBalance(1)}>
+                1
+              </button>
+              <button type="button" onClick={() => setCreditBalance(2)}>
+                2
+              </button>
+            </p>
+          </div>
         </div>}
       </section>
 
@@ -1982,11 +2073,7 @@ function App() {
           {error && <div className="error-message">{error}</div>}
 
           <button className="primary-button" disabled={isGenerating} aria-busy={isGenerating}>
-            {isGenerating
-              ? 'Creating a little magic...'
-              : card
-                ? `Create another card - ${cardGenerationCost} credits`
-                : `Create this card - ${cardGenerationCost} credits`}
+            {isGenerating ? 'Creating a little magic...' : card ? 'Create another card' : 'Create this card'}
           </button>
           {isGenerating && (
             <p className="generate-scroll-hint">Your card is taking shape below.</p>
@@ -2517,10 +2604,17 @@ function App() {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
+                  disabled={
+                    isDelivering ||
+                    !accountSession ||
+                    !hasEnoughCreditsToSend ||
+                    (deliveryMethod === 'text' && !smsConsentConfirmed)
+                  }
                   aria-busy={isDelivering}
                 >
-                  {isDelivering ? 'Sending your card...' : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
+                  {isDelivering
+                    ? 'Sending your card...'
+                    : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${sendCreditCost} credits`}
                 </button>
                 {sharedCard && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
@@ -2656,7 +2750,7 @@ function App() {
                           <button
                             className="primary-button cost-button"
                             type="button"
-                            disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForRevision}
+                            disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForCover}
                             aria-busy={isRefiningImage}
                             onClick={refineImage}
                           >
@@ -2667,7 +2761,7 @@ function App() {
                                 <span>
                                   {coverRefinementMode === 'revise' ? 'Revise Card Image' : 'Create New Card Image'}
                                 </span>
-                                <span className="button-points">{revisionCost} points</span>
+                                <span className="button-points">{coverRevisionCost} credit</span>
                               </>
                             )}
                           </button>
@@ -2730,7 +2824,7 @@ function App() {
                               <button
                                 className="primary-button cost-button"
                                 type="button"
-                                disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForRevision}
+                                disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForAiCopy}
                                 aria-busy={isRefiningCopy}
                                 onClick={refineCopy}
                               >
@@ -2739,7 +2833,7 @@ function App() {
                                 ) : (
                                   <>
                                     <span>Rewrite with AI</span>
-                                    <span className="button-points">{revisionCost} credits</span>
+                                    <span className="button-points">{aiCopyCost} credit</span>
                                   </>
                                 )}
                               </button>

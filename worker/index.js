@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import {
+  applyCreditChange,
   getAccountForSession,
   recordFailedDelivery,
   recordSuccessfulDelivery,
@@ -1856,6 +1857,29 @@ const handleVerifyAccountOtp = async (request, env) => {
   }
 }
 
+const handleAdjustAccountCredits = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number before changing credits.' }, 401)
+  }
+
+  const { balance, add, reason } = (await readJson(request)) || {}
+  const nextBalance = await applyCreditChange(env, {
+    userId: session.userId,
+    balance: Number.isFinite(Number(balance)) ? Number(balance) : undefined,
+    delta: Number.isFinite(Number(add)) ? Number(add) : undefined,
+    reason: String(reason || 'adjustment'),
+    kind: Number(add) > 0 ? 'purchase' : 'adjustment',
+    note: 'Demo credit change. No payment was taken.',
+  })
+
+  if (nextBalance === null) {
+    return jsonResponse(request, env, { error: 'Unable to update credits for this account.' }, 400)
+  }
+
+  return jsonResponse(request, env, { ok: true, creditBalance: nextBalance })
+}
+
 const handleGetAccount = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -2235,6 +2259,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account') {
     return handleGetAccount(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/credits') {
+    return handleAdjustAccountCredits(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/deliver-card') {
