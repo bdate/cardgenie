@@ -2926,6 +2926,11 @@ textarea:focus {
     margin-bottom: 26px;
   }
 
+  .hero-section .brand-powered {
+    margin-top: 3px;
+    font-size: 0.68rem;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
     gap: 22px;
