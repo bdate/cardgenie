@@ -373,6 +373,12 @@ textarea {
     transform 160ms ease;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #b5b5b5;
+  opacity: 1;
+}
+
 .form-panel.is-validated :invalid {
   border-color: rgba(196, 47, 86, 0.55);
   box-shadow:
