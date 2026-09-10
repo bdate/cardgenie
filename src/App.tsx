@@ -83,11 +83,21 @@ const creditStorageKey = 'cardGenieCredits'
 const sendCreditCost = 3
 const coverRevisionCost = 1
 const aiCopyCost = 1
+const adminPhoneNumbers = new Set(['+19259637453'])
 const creditPacks = [
   { id: '10', credits: 10, price: 5 },
   { id: '25', credits: 25, price: 10 },
   { id: '60', credits: 60, price: 20 },
 ] as const
+
+const parseCreditBalance = (value: unknown) => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const balance = Number(value)
+  return Number.isFinite(balance) ? balance : null
+}
 const maxReferencePhotos = 3
 const referencePhotoMaxEdge = 1280
 const referencePhotoMinEdge = 240
@@ -814,8 +824,13 @@ function App() {
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
   const [cardSignature, setCardSignature] = useState<string | null>(null)
   const [credits, setCredits] = useState(() => {
-    const stored = Number(window.localStorage.getItem(creditStorageKey))
-    return Number.isFinite(stored) ? stored : initialCreditBalance
+    const stored = window.localStorage.getItem(creditStorageKey)
+    if (stored === null) {
+      return initialCreditBalance
+    }
+
+    const parsed = Number(stored)
+    return Number.isFinite(parsed) ? parsed : initialCreditBalance
   })
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
@@ -940,6 +955,7 @@ function App() {
   const hasEnoughCreditsToSend = credits >= sendCreditCost
   const hasEnoughCreditsForCover = credits >= coverRevisionCost
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
+  const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
   const showReviseButton = hasViewedFront && hasViewedInside
@@ -983,8 +999,8 @@ function App() {
         }
         setAccountSession(session)
         window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
-        if (Number.isFinite(Number(data.creditBalance))) {
-          const accountCredits = Number(data.creditBalance)
+        if (parseCreditBalance(data.creditBalance) !== null) {
+          const accountCredits = parseCreditBalance(data.creditBalance) as number
           setCredits(accountCredits)
           window.localStorage.setItem(creditStorageKey, String(accountCredits))
         }
@@ -1278,8 +1294,9 @@ function App() {
         return
       }
       const data = await getApiJson(response, 'Unable to update credits.')
-      if (Number.isFinite(Number(data.creditBalance))) {
-        rememberCredits(Number(data.creditBalance))
+      const nextBalance = parseCreditBalance(data.creditBalance)
+      if (nextBalance !== null) {
+        rememberCredits(nextBalance)
       }
     } catch {
       // Keep the local balance if the account update cannot be reached.
@@ -1309,15 +1326,9 @@ function App() {
         throw new Error(data.error || 'Unable to load your account.')
       }
       setAccountHistory(data)
-      const serverBalance = Number(data.account?.creditBalance)
-      if (Number.isFinite(serverBalance) && serverBalance !== credits) {
-        await syncAccountCredits({ balance: credits, reason: 'balance_sync' })
-        const refreshed = await fetch(apiUrl('/api/account/history'), {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (refreshed.ok) {
-          setAccountHistory(await getApiJson(refreshed, 'Unable to load your account.'))
-        }
+      const serverBalance = parseCreditBalance(data.account?.creditBalance)
+      if (serverBalance !== null) {
+        rememberCredits(serverBalance)
       }
     } catch (caughtError) {
       setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
@@ -1561,6 +1572,17 @@ function App() {
     setSaveNotice('The image was saved to your downloads folder.')
   }
 
+  const acceptEditorChanges = () => {
+    setShowEditor(false)
+    setShowPolishDialog(false)
+  }
+
+  const scrollToCardPreview = () => {
+    window.setTimeout(() => {
+      previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+  }
+
   const refineImage = async () => {
     if (!card) {
       return
@@ -1607,6 +1629,7 @@ function App() {
       const nextCredits = rememberCredits(credits - coverRevisionCost)
       setCreditNotice(`${coverRevisionCost} credit used to ${coverRefinementMode === 'revise' ? 'revise' : 'create'} the cover.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'cover_revise' })
+      scrollToCardPreview()
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
       setCreditNotice('Your credits are still in your account.')
@@ -1670,6 +1693,7 @@ function App() {
       const nextCredits = rememberCredits(credits - aiCopyCost)
       setCreditNotice(`${aiCopyCost} credit used for the AI rewrite. Editing the message yourself is free.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'ai_copy' })
+      scrollToCardPreview()
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
       setCreditNotice('Your credits are still in your account.')
@@ -1821,8 +1845,8 @@ function App() {
         phoneE164: String(data.phoneE164 || validated.value),
         copyEmail: String(data.email || ''),
       })
-      if (Number.isFinite(Number(data.creditBalance))) {
-        rememberCredits(Number(data.creditBalance))
+      if (parseCreditBalance(data.creditBalance) !== null) {
+        rememberCredits(parseCreditBalance(data.creditBalance) as number)
       }
       setAccountCode('')
       if (signingInFromAccount) {
@@ -1900,7 +1924,10 @@ function App() {
     }
 
     if (!hasEnoughCreditsToSend) {
-      setDeliveryNotice(`You need ${sendCreditCost} credits to send a card. Buy more credits to keep going.`)
+      setDeliveryNotice(
+        `You need ${sendCreditCost} credits to send a card. You currently have ${credits}. Buy more credits to keep going.`,
+      )
+      setShowCreditMenu(true)
       return
     }
 
@@ -1976,15 +2003,11 @@ function App() {
           <img className="brand-mark" src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
           <span className="brand-wordmark">Card Genie</span>
         </a>
-        <h1>
-          {isRecipientView ? `You received a card from ${senderLabel}` : 'Any Card Imaginable'}
-          {!isRecipientView && <span className="trademark-mark">™</span>}
-        </h1>
-        <p>
-          {isRecipientView
-            ? ''
-            : 'Powered by GreetingCardUniverse.com'}
-        </p>
+        {isRecipientView ? (
+          <h1>You received a card from {senderLabel}</h1>
+        ) : (
+          <p className="brand-powered">Powered by GreetingCardUniverse.com</p>
+        )}
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
             <span className="wallet-kicker">
@@ -2351,13 +2374,12 @@ function App() {
           {!isRecipientView && (
             <div className="panel-heading proof-heading">
               <div>
-                {showSendActions && !showEditor ? (
+                {showSendActions && !showEditor && (
                   <button className="secondary-button" type="button" onClick={replayAnimation}>
                     Watch the reveal again
                   </button>
-                ) : (
-                  <h2>{showEditor ? 'Revise your card' : 'Your card'}</h2>
                 )}
+                {showEditor && <h2>Revise your card</h2>}
               </div>
               {!isGenerating &&
                 card &&
@@ -2365,12 +2387,9 @@ function App() {
                   <button
                     className="secondary-button revise-top-button"
                     type="button"
-                    onClick={() => {
-                      setShowEditor(false)
-                      setShowPolishDialog(false)
-                    }}
+                    onClick={acceptEditorChanges}
                   >
-                    Close Editor
+                    Accept changes
                   </button>
                 ) : (
                   showReviseButton && (
@@ -2871,24 +2890,35 @@ function App() {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={
-                    isDelivering ||
-                    !accountSession ||
-                    !hasEnoughCreditsToSend ||
-                    (deliveryMethod === 'text' && !smsConsentConfirmed)
-                  }
+                  disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
                   aria-busy={isDelivering}
                 >
                   {isDelivering
                     ? 'Sending your card...'
                     : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${sendCreditCost} credits`}
                 </button>
-                {sharedCard && (
+                {sharedCard && isAdmin && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
                     Open shareable card link
                   </a>
                 )}
-                {deliveryNotice && <div className="delivery-notice">{deliveryNotice}</div>}
+                {deliveryNotice && (
+                  <div className="delivery-notice">
+                    <span>{deliveryNotice}</span>
+                    {!hasEnoughCreditsToSend && (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => {
+                          setShowCreditMenu(true)
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                        }}
+                      >
+                        Buy more credits
+                      </button>
+                    )}
+                  </div>
+                )}
                 {deliveryLogs.length > 0 && (
                   <div className="delivery-log-panel">
                     <h4>Delivery activity</h4>
@@ -3108,6 +3138,11 @@ function App() {
                           )}
                         </div>
                       )}
+                    </div>
+                    <div className="editor-accept-bar">
+                      <button className="primary-button" type="button" onClick={acceptEditorChanges}>
+                        Accept changes
+                      </button>
                     </div>
                   </div>
                 </div>

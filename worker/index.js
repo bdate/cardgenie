@@ -1826,7 +1826,7 @@ const handleVerifyAccountOtp = async (request, env) => {
       id: account?.id || existingUser?.id || crypto.randomUUID(),
       phoneE164,
       email: account?.email || existingUser?.email || '',
-      creditBalance: account?.creditBalance ?? existingUser?.creditBalance ?? 50,
+      creditBalance: account?.creditBalance ?? existingUser?.creditBalance ?? 5,
       createdAt: existingUser?.createdAt || Date.now(),
       lastLoginAt: Date.now(),
     }
@@ -1850,7 +1850,7 @@ const handleVerifyAccountOtp = async (request, env) => {
       token,
       phoneE164,
       email: user.email || '',
-      creditBalance: user.creditBalance ?? 0,
+      creditBalance: user.creditBalance ?? 5,
       message: existingUser || account?.isNew === false ? 'Welcome back.' : 'Your account is ready.',
     })
   } catch (error) {

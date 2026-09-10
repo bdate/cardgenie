@@ -48,6 +48,15 @@
   outline-offset: 6px;
 }
 
+.brand-powered {
+  margin: 10px auto 0;
+  max-width: 720px;
+  color: var(--gcu-grey);
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .hero-section h1 {
   margin: 18px auto 12px;
   max-width: 900px;
@@ -81,7 +90,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin: 24px auto 0;
+  margin: 18px auto 0;
   max-width: 720px;
   border: 1px solid rgba(143, 208, 201, 0.36);
   border-radius: 26px;
@@ -700,16 +709,16 @@ textarea:focus {
 }
 
 .loader-kicker {
-  display: inline-flex;
-  margin-bottom: 16px;
-  border: 1px solid rgba(245, 158, 51, 0.28);
-  border-radius: 999px;
-  padding: 8px 12px;
+  display: block;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   color: var(--gcu-dark-teal);
-  background: rgba(255, 255, 255, 0.72);
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   animation: kickerFlash 900ms ease-in-out infinite;
 }
@@ -2077,6 +2086,8 @@ textarea:focus {
 }
 
 .delivery-notice {
+  display: grid;
+  gap: 10px;
   border: 1px solid rgba(63, 155, 145, 0.24);
   border-radius: 16px;
   padding: 11px 13px;
@@ -2084,6 +2095,20 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.76);
   font-size: 0.9rem;
   font-weight: 750;
+}
+
+.delivery-notice .secondary-button {
+  justify-self: start;
+}
+
+.editor-accept-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.editor-accept-bar .primary-button {
+  width: min(280px, 100%);
 }
 
 .delivery-log-panel {
@@ -2974,6 +2999,17 @@ textarea:focus {
     grid-row: 2;
   }
 
+  .account-page .panel-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-page .account-back {
+    width: 100%;
+    margin-left: 0;
+    white-space: nowrap;
+  }
+
   .field-grid {
     grid-template-columns: 1fr;
   }
@@ -2985,21 +3021,34 @@ textarea:focus {
 
   .panel-heading {
     gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .panel-heading h2 {
+    font-size: 1.2rem;
+    line-height: 1.2;
   }
 
   .proof-heading {
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .proof-heading > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .proof-heading > div .secondary-button,
+  .revise-top-button {
+    width: 100%;
+    margin-left: 0;
+    white-space: nowrap;
   }
 
   .recipient-preview-panel .proof-heading {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .revise-top-button {
-    grid-column: 1 / -1;
-    width: 100%;
-    margin-left: 0;
   }
 
   .creative-loader,
@@ -3011,6 +3060,17 @@ textarea:focus {
   .creative-loader {
     min-height: 0;
     padding: 12px 18px 24px;
+  }
+
+  .creative-loader h3 {
+    max-width: 100%;
+    font-size: clamp(1.2rem, 5.2vw, 1.7rem);
+    line-height: 1.25;
+  }
+
+  .loader-kicker {
+    letter-spacing: 0.06em;
+    font-size: 0.72rem;
   }
 
   .envelope-scene {
@@ -3189,6 +3249,14 @@ textarea:focus {
 
   .hero-section h1 {
     font-size: clamp(1.35rem, 6.2vw, 1.85rem);
+  }
+
+  .panel-heading h2 {
+    font-size: 1.12rem;
+  }
+
+  .creative-loader h3 {
+    font-size: clamp(1.1rem, 5vw, 1.45rem);
   }
 
   .card-panel {
