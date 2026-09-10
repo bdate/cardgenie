@@ -818,6 +818,7 @@ function App() {
   const [copyRefinement, setCopyRefinement] = useState('')
   const [isRefiningImage, setIsRefiningImage] = useState(false)
   const [isRefiningCopy, setIsRefiningCopy] = useState(false)
+  const [refinementNotice, setRefinementNotice] = useState('')
   const [showEditor, setShowEditor] = useState(false)
   const [editorHasChanges, setEditorHasChanges] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
@@ -1357,6 +1358,7 @@ function App() {
     setShowCreditMenu(false)
     setCreditNotice(`Added ${pack.credits} credits for $${pack.price}. No payment was taken.`)
     setDeliveryNotice('')
+    setRefinementNotice('')
     void syncAccountCredits({ add: pack.credits, reason: 'demo_purchase' })
     return nextCredits
   }
@@ -1525,6 +1527,7 @@ function App() {
   const openEditor = () => {
     setShowEditor(true)
     setEditorHasChanges(false)
+    setRefinementNotice('')
     setEditorTab(step === 'inside' ? 'inside' : 'front')
   }
 
@@ -1589,15 +1592,41 @@ function App() {
     }, 80)
   }
 
+  const openCreditPurchase = () => {
+    setShowCreditMenu(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const promptNeedCredits = (message: string, where: 'send' | 'refine' = 'refine') => {
+    setCreditNotice(message)
+    if (where === 'send') {
+      setDeliveryNotice(message)
+    } else {
+      setRefinementNotice(message)
+    }
+  }
+
+  const renderCreditNeedNotice = (message: string) => (
+    <div className="delivery-notice">
+      <span>{message}</span>
+      <button className="secondary-button" type="button" onClick={openCreditPurchase}>
+        Buy more credits
+      </button>
+    </div>
+  )
+
   const refineImage = async () => {
     if (!card) {
       return
     }
 
     setError('')
+    setRefinementNotice('')
 
     if (!hasEnoughCreditsForCover) {
-      setCreditNotice(`You need ${coverRevisionCost} credit to revise the cover. Buy more credits to keep going.`)
+      promptNeedCredits(
+        `You need ${coverRevisionCost} credit to ${coverRefinementMode === 'revise' ? 'revise' : 'create'} the cover. You currently have ${credits}. Buy more credits to keep going.`,
+      )
       return
     }
 
@@ -1651,9 +1680,12 @@ function App() {
     }
 
     setError('')
+    setRefinementNotice('')
 
     if (!hasEnoughCreditsForAiCopy) {
-      setCreditNotice(`You need ${aiCopyCost} credit for an AI rewrite. Editing the message yourself is free.`)
+      promptNeedCredits(
+        `You need ${aiCopyCost} credit for an AI rewrite. You currently have ${credits}. Editing the message yourself is free.`,
+      )
       return
     }
 
@@ -1932,10 +1964,10 @@ function App() {
     }
 
     if (!hasEnoughCreditsToSend) {
-      setDeliveryNotice(
+      promptNeedCredits(
         `You need ${sendCreditCost} credits to send a card. You currently have ${credits}. Buy more credits to keep going.`,
+        'send',
       )
-      setShowCreditMenu(true)
       return
     }
 
@@ -2912,23 +2944,10 @@ function App() {
                     Open shareable card link
                   </a>
                 )}
-                {deliveryNotice && (
-                  <div className="delivery-notice">
-                    <span>{deliveryNotice}</span>
-                    {!hasEnoughCreditsToSend && (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => {
-                          setShowCreditMenu(true)
-                          window.scrollTo({ top: 0, behavior: 'smooth' })
-                        }}
-                      >
-                        Buy more credits
-                      </button>
-                    )}
-                  </div>
-                )}
+                {deliveryNotice &&
+                  (!hasEnoughCreditsToSend
+                    ? renderCreditNeedNotice(deliveryNotice)
+                    : <div className="delivery-notice">{deliveryNotice}</div>)}
                 {deliveryLogs.length > 0 && (
                   <div className="delivery-log-panel">
                     <h4>Delivery activity</h4>
@@ -3057,7 +3076,7 @@ function App() {
                           <button
                             className="primary-button cost-button"
                             type="button"
-                            disabled={isRefiningImage || !imageRefinement.trim() || !hasEnoughCreditsForCover}
+                            disabled={isRefiningImage || !imageRefinement.trim()}
                             aria-busy={isRefiningImage}
                             onClick={refineImage}
                           >
@@ -3072,6 +3091,7 @@ function App() {
                               </>
                             )}
                           </button>
+                          {refinementNotice && editorTab === 'front' && renderCreditNeedNotice(refinementNotice)}
                         </div>
                       ) : (
                         <div className="refinement-card inside-refinement-card">
@@ -3140,7 +3160,7 @@ function App() {
                               <button
                                 className="primary-button cost-button"
                                 type="button"
-                                disabled={isRefiningCopy || !copyRefinement.trim() || !hasEnoughCreditsForAiCopy}
+                                disabled={isRefiningCopy || !copyRefinement.trim()}
                                 aria-busy={isRefiningCopy}
                                 onClick={refineCopy}
                               >
@@ -3153,6 +3173,7 @@ function App() {
                                   </>
                                 )}
                               </button>
+                              {refinementNotice && editorTab === 'inside' && renderCreditNeedNotice(refinementNotice)}
                             </div>
                           )}
                         </div>
