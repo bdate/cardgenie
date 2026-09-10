@@ -48,11 +48,11 @@
   outline-offset: 6px;
 }
 
-.brand-powered {
+.hero-section .brand-powered {
   margin: 10px auto 0;
   max-width: 720px;
   color: var(--gcu-grey);
-  font-size: 0.84rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
