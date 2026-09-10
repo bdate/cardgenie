@@ -358,7 +358,7 @@ const getCreateCardValidationMessage = (field: Element | null) => {
   const label = field.closest('label')
   let labelText = ''
   if (label) {
-    for (const node of label.childNodes) {
+    for (const node of Array.from(label.childNodes)) {
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent?.trim()
         if (text) {
