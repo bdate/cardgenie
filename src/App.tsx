@@ -350,6 +350,44 @@ const cleanGeneratedMessage = (message: string) => {
   return unfenced.replace(/^["'`]+|["'`]+$/g, '').trim()
 }
 
+const getCreateCardValidationMessage = (field: Element | null) => {
+  if (!(field instanceof HTMLElement)) {
+    return 'Please complete the required fields, then try again.'
+  }
+
+  const label = field.closest('label')
+  let labelText = ''
+  if (label) {
+    for (const node of label.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.trim()
+        if (text) {
+          labelText = text
+          break
+        }
+      }
+    }
+  }
+
+  if (labelText === 'Personal details') {
+    return 'Please add a few personal details so we can create the card.'
+  }
+  if (labelText === 'From') {
+    return 'Please add who the card is from.'
+  }
+  if (labelText === 'Occasion') {
+    return 'Please add an occasion for the card.'
+  }
+  if (labelText === 'Relation') {
+    return 'Please add the relation (mom, friend, coworker, etc.).'
+  }
+  if (labelText) {
+    return `Please fill in ${labelText}.`
+  }
+
+  return 'Please complete the required fields, then try again.'
+}
+
 const splitMessageParts = (message: string, senderName: string) => {
   const senderPattern = senderName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   let cleanMessage = cleanGeneratedMessage(message)
@@ -871,6 +909,7 @@ function App() {
   const [accountHistoryError, setAccountHistoryError] = useState('')
   const [creditNotice, setCreditNotice] = useState('You have 5 starter credits.')
   const [error, setError] = useState('')
+  const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
@@ -1198,6 +1237,7 @@ function App() {
   }, [isRecipientView])
 
   const updateDetails = (field: keyof CardDetails, value: string) => {
+    setError('')
     setDetails((current) => ({
       ...current,
       [field]: value,
@@ -1432,6 +1472,22 @@ function App() {
 
   const generateCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const form = event.currentTarget
+
+    if (!form.checkValidity()) {
+      const firstInvalid = form.querySelector(':invalid')
+      setHighlightInvalidFields(true)
+      setError(getCreateCardValidationMessage(firstInvalid))
+      if (firstInvalid instanceof HTMLElement) {
+        firstInvalid.focus({ preventScroll: true })
+      }
+      window.setTimeout(() => {
+        form.querySelector('.error-message')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+      return
+    }
+
+    setHighlightInvalidFields(false)
     setError('')
 
     setIsGenerating(true)
@@ -2235,7 +2291,12 @@ function App() {
       )}
 
       <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage ? 'is-hidden' : ''}`.trim()}>
-        {!isRecipientView && <form className="card-panel form-panel" onSubmit={generateCard}>
+        {!isRecipientView && (
+          <form
+            className={`card-panel form-panel${highlightInvalidFields ? ' is-validated' : ''}`}
+            noValidate
+            onSubmit={generateCard}
+          >
           <div className="panel-heading">
             <div>
               <h2>Tell us about the card</h2>
@@ -2400,15 +2461,31 @@ function App() {
             {referencePhotoNotice && <div className="field-notice">{referencePhotoNotice}</div>}
           </div>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div className="error-message" role="alert">
+              {error}
+            </div>
+          )}
 
-          <button className="primary-button" disabled={isGenerating} aria-busy={isGenerating}>
-            {isGenerating ? 'Creating a little magic...' : card ? 'Create another card' : 'Create this card'}
-          </button>
+          {card ? (
+            <button
+              className="text-action-link"
+              type="submit"
+              disabled={isGenerating}
+              aria-busy={isGenerating}
+            >
+              {isGenerating ? 'Creating a little magic...' : 'Create another card'}
+            </button>
+          ) : (
+            <button className="primary-button" type="submit" disabled={isGenerating} aria-busy={isGenerating}>
+              {isGenerating ? 'Creating a little magic...' : 'Create this card'}
+            </button>
+          )}
           {isGenerating && (
             <p className="generate-scroll-hint">Your card is taking shape below.</p>
           )}
-        </form>}
+        </form>
+        )}
 
         {showProofPanel && <section ref={previewPanelRef} className={`card-panel preview-panel ${isRecipientView ? 'recipient-preview-panel' : ''}`}>
           {!isRecipientView && (

@@ -365,10 +365,19 @@ textarea {
   font: inherit;
   font-size: 0.92rem;
   outline: none;
+  scroll-margin-top: 96px;
+  scroll-margin-bottom: 120px;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     transform 160ms ease;
+}
+
+.form-panel.is-validated :invalid {
+  border-color: rgba(196, 47, 86, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 3px rgba(196, 47, 86, 0.14);
 }
 
 select {
@@ -481,6 +490,37 @@ textarea:focus {
   flex-direction: column;
   gap: 2px;
   line-height: 1.15;
+}
+
+.text-action-link {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  color: var(--gcu-dark-teal);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.text-action-link:hover,
+.text-action-link:focus-visible {
+  color: var(--gcu-ink);
+  outline: none;
+}
+
+.text-action-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.text-action-link[aria-busy='true'] {
+  cursor: wait;
+  text-decoration: none;
+  animation: kickerFlash 900ms ease-in-out infinite;
 }
 
 .button-points {
