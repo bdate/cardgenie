@@ -49,12 +49,21 @@
 }
 
 .hero-section .brand-powered {
+  display: block;
   margin: 10px auto 0;
   max-width: 720px;
   color: var(--gcu-grey);
   font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.hero-section .brand-powered:hover,
+.hero-section .brand-powered:focus-visible {
+  color: var(--gcu-dark-teal);
+  text-decoration: underline;
+  outline: none;
 }
 
 .hero-section h1 {

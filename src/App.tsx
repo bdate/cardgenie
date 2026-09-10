@@ -2102,7 +2102,14 @@ function App() {
         {isRecipientView ? (
           <h1>You received a card from {senderLabel}</h1>
         ) : (
-          <p className="brand-powered">Powered by GreetingCardUniverse.com</p>
+          <a
+            className="brand-powered"
+            href="https://www.greetingcarduniverse.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Powered by GreetingCardUniverse.com
+          </a>
         )}
         {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
           <div>
@@ -2397,7 +2404,7 @@ function App() {
             Personal details
             <textarea
               required
-              rows={6}
+              rows={9}
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
               placeholder={
