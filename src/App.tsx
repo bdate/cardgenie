@@ -819,6 +819,7 @@ function App() {
   const [isRefiningImage, setIsRefiningImage] = useState(false)
   const [isRefiningCopy, setIsRefiningCopy] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const [editorHasChanges, setEditorHasChanges] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
   const [showPolishDialog, setShowPolishDialog] = useState(false)
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
@@ -1523,15 +1524,18 @@ function App() {
 
   const openEditor = () => {
     setShowEditor(true)
+    setEditorHasChanges(false)
     setEditorTab(step === 'inside' ? 'inside' : 'front')
   }
 
   const updateCardMessage = (message: string) => {
     setCard((current) => (current ? { ...current, message } : current))
+    setEditorHasChanges(true)
   }
 
   const updateCardClosing = (closing: string) => {
     setCard((current) => (current ? { ...current, closing } : current))
+    setEditorHasChanges(true)
   }
 
   const saveImageToDevice = async (imageUrl: string, fileName: string, label: string) => {
@@ -1576,6 +1580,7 @@ function App() {
   const acceptEditorChanges = () => {
     setShowEditor(false)
     setShowPolishDialog(false)
+    setEditorHasChanges(false)
   }
 
   const scrollToCardPreview = () => {
@@ -1627,6 +1632,7 @@ function App() {
       setHasSentCurrentCard(false)
       setImageRefinement('')
       setStep('front')
+      setEditorHasChanges(true)
       const nextCredits = rememberCredits(credits - coverRevisionCost)
       setCreditNotice(`${coverRevisionCost} credit used to ${coverRefinementMode === 'revise' ? 'revise' : 'create'} the cover.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'cover_revise' })
@@ -1691,6 +1697,7 @@ function App() {
       setCopyRefinement('')
       setShowPolishDialog(false)
       setStep('inside')
+      setEditorHasChanges(true)
       const nextCredits = rememberCredits(credits - aiCopyCost)
       setCreditNotice(`${aiCopyCost} credit used for the AI rewrite. Editing the message yourself is free.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'ai_copy' })
@@ -2385,13 +2392,15 @@ function App() {
               {!isGenerating &&
                 card &&
                 (showEditor ? (
-                  <button
-                    className="secondary-button revise-top-button"
-                    type="button"
-                    onClick={acceptEditorChanges}
-                  >
-                    Accept changes
-                  </button>
+                  editorHasChanges && (
+                    <button
+                      className="secondary-button revise-top-button"
+                      type="button"
+                      onClick={acceptEditorChanges}
+                    >
+                      Accept changes
+                    </button>
+                  )
                 ) : (
                   showReviseButton && (
                     <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
@@ -3074,7 +3083,13 @@ function App() {
                           </div>
                           <label>
                             Greeting
-                            <input value={insideGreeting} onChange={(event) => setCardGreeting(event.target.value)} />
+                            <input
+                              value={insideGreeting}
+                              onChange={(event) => {
+                                setCardGreeting(event.target.value)
+                                setEditorHasChanges(true)
+                              }}
+                            />
                           </label>
                           <label>
                             Inside message
@@ -3096,7 +3111,10 @@ function App() {
                             Signature name
                             <input
                               value={cardSignatureLabel}
-                              onChange={(event) => setCardSignature(event.target.value)}
+                              onChange={(event) => {
+                                setCardSignature(event.target.value)
+                                setEditorHasChanges(true)
+                              }}
                             />
                           </label>
                           <button
@@ -3140,11 +3158,13 @@ function App() {
                         </div>
                       )}
                     </div>
-                    <div className="editor-accept-bar">
-                      <button className="primary-button" type="button" onClick={acceptEditorChanges}>
-                        Accept changes
-                      </button>
-                    </div>
+                    {editorHasChanges && (
+                      <div className="editor-accept-bar">
+                        <button className="primary-button" type="button" onClick={acceptEditorChanges}>
+                          Accept changes
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
