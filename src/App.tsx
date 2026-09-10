@@ -1355,6 +1355,7 @@ function App() {
     const nextCredits = rememberCredits(credits + pack.credits)
     setShowCreditMenu(false)
     setCreditNotice(`Added ${pack.credits} credits for $${pack.price}. No payment was taken.`)
+    setDeliveryNotice('')
     void syncAccountCredits({ add: pack.credits, reason: 'demo_purchase' })
     return nextCredits
   }
