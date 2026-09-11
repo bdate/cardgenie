@@ -907,7 +907,7 @@ function App() {
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
-  const [creditNotice, setCreditNotice] = useState('You have 5 starter credits.')
+  const [creditNotice, setCreditNotice] = useState('')
   const [error, setError] = useState('')
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -939,6 +939,8 @@ function App() {
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
   const previewPanelRef = useRef<HTMLElement | null>(null)
+  const createFormRef = useRef<HTMLFormElement | null>(null)
+  const restoreSentAfterFailedGenerateRef = useRef(false)
   const followGenerationJobRef = useRef<(jobId: string, signatureName: string) => Promise<void>>(
     async () => undefined,
   )
@@ -1419,6 +1421,7 @@ function App() {
     setCardGreeting('')
     setCardSignature(signatureName)
     setStep('envelope')
+    restoreSentAfterFailedGenerateRef.current = false
     setHasSentCurrentCard(false)
     setShowCompletionNote(true)
     setCreditNotice('Creating a card is free. Sending uses 3 credits.')
@@ -1460,6 +1463,10 @@ function App() {
       }
 
       setError(message)
+      if (restoreSentAfterFailedGenerateRef.current) {
+        setHasSentCurrentCard(true)
+        restoreSentAfterFailedGenerateRef.current = false
+      }
       setCreditNotice('Your credits are still in your account.')
     } finally {
       if (isCurrent()) {
@@ -1490,6 +1497,7 @@ function App() {
     setHighlightInvalidFields(false)
     setError('')
 
+    restoreSentAfterFailedGenerateRef.current = hasSentCurrentCard
     setIsGenerating(true)
     setShowCompletionNote(false)
     setActiveGenerationStep(0)
@@ -1549,6 +1557,10 @@ function App() {
       }
 
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
+      if (restoreSentAfterFailedGenerateRef.current) {
+        setHasSentCurrentCard(true)
+        restoreSentAfterFailedGenerateRef.current = false
+      }
       setCreditNotice('Your credits are still in your account.')
     } finally {
       if (!startedBackgroundJob) {
@@ -2111,53 +2123,58 @@ function App() {
             Powered by GreetingCardUniverse.com
           </a>
         )}
-        {!isRecipientView && <div className="credit-wallet" aria-label="Wish balance">
-          <div>
-            <span className="wallet-kicker">
-              {details.senderName.trim()
-                ? `Welcome back, ${details.senderName.trim()}. Ready to make another card?`
-                : 'Ready to make your next card?'}
-            </span>
-            <strong>{credits} credits in your account</strong>
-            <small>Creating a card is free. Sending uses 3 credits. Cover and AI text changes use 1 credit.</small>
-          </div>
-          <div className="credit-buy">
-            <div className="credit-buy-actions">
-              <button className="secondary-button" type="button" onClick={() => void openAccountPage()}>
-                My account
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                aria-expanded={showCreditMenu}
-                onClick={() => setShowCreditMenu((current) => !current)}
-              >
-                Buy more credits
-              </button>
-            </div>
-            {showCreditMenu && (
-              <div className="credit-menu" role="menu" aria-label="Credit packs">
-                {creditPacks.map((pack) => (
-                  <button key={pack.id} type="button" role="menuitem" onClick={() => buyCreditPack(pack)}>
-                    {pack.credits} credits — ${pack.price}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="credit-dev-links">
-              Set credits:
-              <button type="button" onClick={() => setCreditBalance(0)}>
-                0
-              </button>
-              <button type="button" onClick={() => setCreditBalance(1)}>
-                1
-              </button>
-              <button type="button" onClick={() => setCreditBalance(2)}>
-                2
-              </button>
+        {!isRecipientView && (
+          <div className="credit-wallet-block">
+            <p className="wallet-kicker">
+              {creditNotice ||
+                (details.senderName.trim()
+                  ? `Welcome back, ${details.senderName.trim()}. Ready to make another card?`
+                  : 'Ready to make your next card?')}
             </p>
+            <div className="credit-wallet" aria-label="Wish balance">
+              <div>
+                <strong>{credits} credits in your account</strong>
+                <small>Creating a card is free. Sending uses 3 credits. Cover and AI text changes use 1 credit.</small>
+              </div>
+              <div className="credit-buy">
+                <div className="credit-buy-actions">
+                  <button className="secondary-button" type="button" onClick={() => void openAccountPage()}>
+                    My account
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    aria-expanded={showCreditMenu}
+                    onClick={() => setShowCreditMenu((current) => !current)}
+                  >
+                    Buy more credits
+                  </button>
+                </div>
+                {showCreditMenu && (
+                  <div className="credit-menu" role="menu" aria-label="Credit packs">
+                    {creditPacks.map((pack) => (
+                      <button key={pack.id} type="button" role="menuitem" onClick={() => buyCreditPack(pack)}>
+                        {pack.credits} credits — ${pack.price}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="credit-dev-links">
+                  Set credits:
+                  <button type="button" onClick={() => setCreditBalance(0)}>
+                    0
+                  </button>
+                  <button type="button" onClick={() => setCreditBalance(1)}>
+                    1
+                  </button>
+                  <button type="button" onClick={() => setCreditBalance(2)}>
+                    2
+                  </button>
+                </p>
+              </div>
+            </div>
           </div>
-        </div>}
+        )}
       </section>
 
       {showAccountPage && !isRecipientView && (
@@ -2300,6 +2317,7 @@ function App() {
       <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage ? 'is-hidden' : ''}`.trim()}>
         {!isRecipientView && (
           <form
+            ref={createFormRef}
             className={`card-panel form-panel${highlightInvalidFields ? ' is-validated' : ''}`}
             noValidate
             onSubmit={generateCard}
@@ -2309,11 +2327,6 @@ function App() {
               <h2>Tell us about the card</h2>
               <p>Your details will help create both the image and message.</p>
             </div>
-          </div>
-
-          <div className="credit-callout">
-            <span>{creditNotice}</span>
-            <strong>{credits} credits</strong>
           </div>
 
           <div className="field-grid">
@@ -2470,16 +2483,7 @@ function App() {
             </div>
           )}
 
-          {card ? (
-            <button
-              className="text-action-link"
-              type="submit"
-              disabled={isGenerating}
-              aria-busy={isGenerating}
-            >
-              {isGenerating ? 'Creating a little magic...' : 'Create another card'}
-            </button>
-          ) : (
+          {!card && (
             <button className="primary-button" type="submit" disabled={isGenerating} aria-busy={isGenerating}>
               {isGenerating ? 'Creating a little magic...' : 'Create this card'}
             </button>
@@ -3027,7 +3031,20 @@ function App() {
                 {deliveryNotice &&
                   (!hasEnoughCreditsToSend
                     ? renderCreditNeedNotice(deliveryNotice)
-                    : <div className="delivery-notice">{deliveryNotice}</div>)}
+                    : (
+                      <div className="delivery-notice">
+                        <div>{deliveryNotice}</div>
+                        {hasSentCurrentCard && !isGenerating && (
+                          <button
+                            className="text-action-link"
+                            type="button"
+                            onClick={() => createFormRef.current?.requestSubmit()}
+                          >
+                            Create another card
+                          </button>
+                        )}
+                      </div>
+                    ))}
                 {deliveryLogs.length > 0 && (
                   <div className="delivery-log-panel">
                     <h4>Delivery activity</h4>
@@ -3274,15 +3291,19 @@ function App() {
         </section>}
       </section>
       <footer className="site-footer">
-        {!isRecipientView && (
-          <button type="button" onClick={() => void openAccountPage()}>
-            My account
-          </button>
-        )}
-        <a href={supportMailto}>Email us</a>
-        <a href="/faq/">FAQ</a>
-        <a href="/privacy/">Privacy</a>
-        <a href="/terms/">Terms</a>
+        <div className="footer-primary">
+          {!isRecipientView && (
+            <button type="button" onClick={() => void openAccountPage()}>
+              My account
+            </button>
+          )}
+          <a href={supportMailto}>Email us</a>
+          <a href="/faq/">FAQ</a>
+        </div>
+        <div className="footer-legal">
+          <a href="/privacy/">Privacy</a>
+          <a href="/terms/">Terms</a>
+        </div>
       </footer>
     </main>
   )
