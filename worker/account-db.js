@@ -164,7 +164,7 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
 
   const [events, cards, deliveries] = await Promise.all([
     env.ACCOUNT_DB.prepare(
-      `SELECT created_at, kind, reason, credits_delta, balance_after
+      `SELECT created_at, kind, reason, credits_delta, balance_after, note
        FROM credit_events
        WHERE user_id = ?
        ORDER BY created_at DESC
@@ -201,6 +201,7 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
       label: creditReasonLabel(row.reason),
       creditsDelta: row.credits_delta,
       balanceAfter: row.balance_after,
+      note: row.note || '',
     })),
     cards: (cards.results || []).map((row) => ({
       id: row.id,

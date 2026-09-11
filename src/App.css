@@ -2129,6 +2129,11 @@ textarea:focus {
   gap: 8px;
 }
 
+.account-more-link {
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
 .account-row {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.5fr) auto auto;

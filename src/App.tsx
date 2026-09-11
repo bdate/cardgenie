@@ -888,6 +888,7 @@ function App() {
       label: string
       creditsDelta: number
       balanceAfter: number
+      note?: string
     }>
     cards?: Array<{
       id: string
@@ -907,6 +908,8 @@ function App() {
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
+  const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
+  const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [creditNotice, setCreditNotice] = useState('')
   const [error, setError] = useState('')
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
@@ -1358,6 +1361,49 @@ function App() {
     return date.toLocaleString()
   }
 
+  const accountActivityPreviewLimit = 5
+
+  const creditEventDetail = (event: {
+    note?: string
+    balanceAfter?: number
+  }) => {
+    if (event.note?.trim()) {
+      return event.note.trim()
+    }
+    if (typeof event.balanceAfter === 'number') {
+      return `Balance ${event.balanceAfter}`
+    }
+    return 'Credit update'
+  }
+
+  const cardActivityItems = useMemo(() => {
+    if (!accountHistory) {
+      return []
+    }
+
+    const created = (accountHistory.cards || []).map((card) => ({
+      id: `card-${card.id}`,
+      createdAt: card.createdAt,
+      title: 'Created',
+      detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
+      status: card.status,
+    }))
+
+    const sent = (accountHistory.deliveries || []).map((delivery) => ({
+      id: `delivery-${delivery.id}`,
+      createdAt: delivery.createdAt,
+      title: `${delivery.isSenderCopy ? 'Copy to you' : 'Sent'} · ${
+        delivery.method === 'text' ? 'Text' : 'Email'
+      }`,
+      detail: delivery.destination,
+      status: delivery.status,
+    }))
+
+    return [...created, ...sent].sort((left, right) =>
+      String(right.createdAt).localeCompare(String(left.createdAt)),
+    )
+  }, [accountHistory])
+
   const loadAccountHistory = async (token: string) => {
     setIsLoadingAccountHistory(true)
     setAccountHistoryError('')
@@ -1385,6 +1431,8 @@ function App() {
     setShowAccountPage(true)
     setShowCreditMenu(false)
     setAccountHistoryError('')
+    setShowAllCreditEvents(false)
+    setShowAllCardActivity(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     if (!accountSession?.token) {
@@ -2258,51 +2306,71 @@ function App() {
                 </div>
               </div>
               <div className="account-block">
+                <h3>Cards and sends</h3>
+                {cardActivityItems.length === 0 ? (
+                  <p>No cards sent yet.</p>
+                ) : (
+                  <>
+                    <div className="account-list">
+                      {(showAllCardActivity
+                        ? cardActivityItems
+                        : cardActivityItems.slice(0, accountActivityPreviewLimit)
+                      ).map((item) => (
+                        <div className="account-row" key={item.id}>
+                          <span className="account-row-title">{item.title}</span>
+                          <span className="account-row-detail">{item.detail}</span>
+                          <span className="account-row-status">{item.status}</span>
+                          <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {cardActivityItems.length > accountActivityPreviewLimit && (
+                      <button
+                        className="text-action-link account-more-link"
+                        type="button"
+                        onClick={() => setShowAllCardActivity((current) => !current)}
+                      >
+                        {showAllCardActivity
+                          ? 'Show less'
+                          : `Show ${cardActivityItems.length - accountActivityPreviewLimit} more`}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="account-block">
                 <h3>Credit activity</h3>
                 {(accountHistory.creditEvents || []).length === 0 ? (
                   <p>No credit activity yet.</p>
                 ) : (
-                  <div className="account-list">
-                    {(accountHistory.creditEvents || []).map((event, index) => (
-                      <div className="account-row" key={`${event.createdAt}-${index}`}>
-                        <span className="account-row-title">{event.label}</span>
-                        <span className="account-row-amount">
-                          {event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}
-                        </span>
-                        <span className="account-row-date">{formatAccountDate(event.createdAt)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="account-block">
-                <h3>Cards and sends</h3>
-                {(accountHistory.deliveries || []).length === 0 && (accountHistory.cards || []).length === 0 ? (
-                  <p>No cards sent yet.</p>
-                ) : (
-                  <div className="account-list">
-                    {(accountHistory.cards || []).map((card) => (
-                      <div className="account-row" key={card.id}>
-                        <span className="account-row-title">Created</span>
-                        <span className="account-row-detail">
-                          {[card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card'}
-                        </span>
-                        <span className="account-row-status">{card.status}</span>
-                        <span className="account-row-date">{formatAccountDate(card.createdAt)}</span>
-                      </div>
-                    ))}
-                    {(accountHistory.deliveries || []).map((delivery) => (
-                      <div className="account-row" key={delivery.id}>
-                        <span className="account-row-title">
-                          {delivery.isSenderCopy ? 'Copy to you' : 'Sent'} ·{' '}
-                          {delivery.method === 'text' ? 'Text' : 'Email'}
-                        </span>
-                        <span className="account-row-detail">{delivery.destination}</span>
-                        <span className="account-row-status">{delivery.status}</span>
-                        <span className="account-row-date">{formatAccountDate(delivery.createdAt)}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="account-list">
+                      {(showAllCreditEvents
+                        ? accountHistory.creditEvents || []
+                        : (accountHistory.creditEvents || []).slice(0, accountActivityPreviewLimit)
+                      ).map((event, index) => (
+                        <div className="account-row" key={`${event.createdAt}-${index}`}>
+                          <span className="account-row-title">{event.label}</span>
+                          <span className="account-row-detail">{creditEventDetail(event)}</span>
+                          <span className="account-row-amount">
+                            {event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}
+                          </span>
+                          <span className="account-row-date">{formatAccountDate(event.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {(accountHistory.creditEvents || []).length > accountActivityPreviewLimit && (
+                      <button
+                        className="text-action-link account-more-link"
+                        type="button"
+                        onClick={() => setShowAllCreditEvents((current) => !current)}
+                      >
+                        {showAllCreditEvents
+                          ? 'Show less'
+                          : `Show ${(accountHistory.creditEvents || []).length - accountActivityPreviewLimit} more`}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
               <div className="account-block">
