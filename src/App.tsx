@@ -2755,9 +2755,8 @@ function App() {
                 !showEditor &&
                 (step === 'front' || step === 'inside' || step === 'opening' || step === 'cardOpening') && (
                 <p className="cover-watermark-note">
-                  A preview watermark is shown on the cover.
-                  <br />
-                  It will not appear on the card sent to your recipient.
+                  <span>A preview watermark is shown on the cover.</span>
+                  <span>It will not appear on the card sent to your recipient.</span>
                 </p>
               )}
               {isRecipientView && card && (step === 'front' || step === 'inside') && (
@@ -3110,9 +3109,8 @@ function App() {
                           </div>
                           {showCoverWatermark ? (
                             <span className="cover-watermark-note editor-watermark-note">
-                              A preview watermark is shown on the cover.
-                              <br />
-                              It will not appear on the card sent to your recipient.
+                              <span>A preview watermark is shown on the cover.</span>
+                              <span>It will not appear on the card sent to your recipient.</span>
                             </span>
                           ) : (
                             <span className="zoom-hint">Hover over the cover to enlarge</span>

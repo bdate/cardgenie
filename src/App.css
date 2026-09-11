@@ -1137,7 +1137,10 @@ textarea:focus {
 .card-reveal {
   display: grid;
   place-items: center;
+  justify-items: center;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 0;
   border-radius: 30px;
   padding: 96px 40px 24px;
@@ -1475,7 +1478,9 @@ textarea:focus {
 .card-cover-frame {
   position: relative;
   overflow: hidden;
-  width: min(450px, 92%);
+  width: min(450px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
   aspect-ratio: 5 / 7;
   border-radius: 0;
   box-shadow:
@@ -1505,7 +1510,11 @@ textarea:focus {
 }
 
 .cover-watermark-note {
-  max-width: 42rem;
+  display: grid;
+  gap: 0.35em;
+  width: 100%;
+  max-width: min(24rem, 100%);
+  box-sizing: border-box;
   margin: 12px auto 0;
   padding: 10px 14px;
   border: 1px solid rgba(245, 158, 51, 0.24);
@@ -1515,6 +1524,10 @@ textarea:focus {
   font-size: 0.86rem;
   line-height: 1.45;
   text-align: center;
+}
+
+.cover-watermark-note > span {
+  display: block;
 }
 
 .editor-watermark-note {
@@ -1560,7 +1573,8 @@ textarea:focus {
   gap: 0;
   align-items: stretch;
   overflow: hidden;
-  width: min(450px, 92%);
+  width: min(450px, 100%);
+  max-width: 100%;
   aspect-ratio: 5 / 7;
   margin: 0 auto;
   border: 1px solid rgba(63, 155, 145, 0.2);
@@ -1591,7 +1605,9 @@ textarea:focus {
 
 .card-open-stage {
   position: relative;
-  width: min(450px, 92%);
+  width: min(450px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
   aspect-ratio: 5 / 7;
   transform-style: preserve-3d;
   animation: openStageSettle 1.8s ease forwards;
@@ -2980,6 +2996,8 @@ textarea:focus {
     order: 2;
     min-height: auto;
     scroll-margin-top: 16px;
+    overflow-x: clip;
+    max-width: 100%;
   }
 
   .generate-scroll-hint {
@@ -3195,7 +3213,8 @@ textarea:focus {
   .front-reveal,
   .card-open-scene.is-static-inside {
     min-height: auto;
-    padding: 32px 14px 20px;
+    padding: 32px 10px 20px;
+    overflow: hidden;
   }
 
   .opening-stack {
@@ -3251,7 +3270,8 @@ textarea:focus {
   .card-cover-frame,
   .card-open-stage,
   .open-card {
-    width: min(340px, 88vw);
+    width: min(340px, 100%);
+    max-width: 100%;
   }
 
   .card-open-scene {
@@ -3379,7 +3399,8 @@ textarea:focus {
   .front-reveal,
   .card-open-scene.is-static-inside {
     min-height: auto;
-    padding: 28px 14px 20px;
+    padding: 28px 8px 20px;
+    overflow: hidden;
   }
 
   .opening-stack {
@@ -3401,7 +3422,11 @@ textarea:focus {
   .card-cover-frame,
   .card-open-stage,
   .open-card {
-    width: min(300px, 88vw);
+    width: min(300px, 100%);
+    max-width: 100%;
+    box-shadow:
+      0 24px 48px rgba(63, 155, 145, 0.22),
+      0 0 0 1px rgba(63, 155, 145, 0.12);
   }
 
   .open-card-message {
