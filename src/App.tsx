@@ -134,6 +134,24 @@ const staticPageRedirects: Record<string, string> = {
 const supportEmail = 'support@card-genie.com'
 const supportMailto = `mailto:${supportEmail}`
 const accountSessionStorageKey = 'cardGenieAccountSession'
+const thankYouPresets = [
+  { id: 'thank_you', label: 'Thank you for the beautiful card!' },
+  { id: 'made_my_day', label: 'This made my day.' },
+  { id: 'love_you', label: 'Love you — thank you.' },
+] as const
+
+const getThankYouCardPrefill = () => {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('thankYou') !== '1') {
+    return null
+  }
+
+  return {
+    senderName: params.get('from')?.trim() || '',
+    recipientName: params.get('to')?.trim() || '',
+    occasion: params.get('occasion')?.trim() || 'thank you',
+  }
+}
 
 const staticPageRedirect = staticPageRedirects[window.location.pathname]
 
@@ -905,11 +923,27 @@ function App() {
       isSenderCopy: boolean
       status: string
     }>
+    thankYous?: Array<{
+      id: string
+      cardId: string
+      createdAt: string
+      message: string
+      recipientName: string
+      status: string
+    }>
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
+  const [thankYouAvailable, setThankYouAvailable] = useState(false)
+  const [thankYouAlreadySent, setThankYouAlreadySent] = useState(false)
+  const [thankYouPresetsState, setThankYouPresetsState] = useState<Array<{ id: string; label: string }>>([
+    ...thankYouPresets,
+  ])
+  const [selectedThankYouPreset, setSelectedThankYouPreset] = useState<string>(thankYouPresets[0].id)
+  const [isSendingThankYou, setIsSendingThankYou] = useState(false)
+  const [thankYouNotice, setThankYouNotice] = useState('')
   const [creditNotice, setCreditNotice] = useState('')
   const [error, setError] = useState('')
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
@@ -957,6 +991,15 @@ function App() {
     [details.recipientName, details.recipientType],
   )
   const senderLabel = useMemo(() => details.senderName.trim() || 'Your Name', [details.senderName])
+  const thankYouCardHref = useMemo(() => {
+    const params = new URLSearchParams({
+      thankYou: '1',
+      from: recipientLabel,
+      to: senderLabel,
+      occasion: 'thank you',
+    })
+    return `/?${params.toString()}`
+  }, [recipientLabel, senderLabel])
   const envelopeAddress = `To ${envelopeLabel}`
   const envelopeAddressSize =
     envelopeAddress.length > 34 ? 'is-long' : envelopeAddress.length > 22 ? 'is-medium' : ''
@@ -1219,6 +1262,66 @@ function App() {
       return
     }
 
+    const prefill = getThankYouCardPrefill()
+    if (!prefill) {
+      return
+    }
+
+    setDetails((current) => ({
+      ...current,
+      senderName: prefill.senderName || current.senderName,
+      recipientName: prefill.recipientName || current.recipientName,
+      occasion: prefill.occasion || current.occasion,
+      recipientType: current.recipientType || 'friend',
+    }))
+    setCreditNotice('Starting a thank-you card for you.')
+  }, [isRecipientView])
+
+  useEffect(() => {
+    if (!isRecipientView || !sharedCardId || !card) {
+      return
+    }
+
+    if (!(step === 'front' || step === 'inside')) {
+      return
+    }
+
+    const loadThankYouStatus = async () => {
+      try {
+        const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(sharedCardId)}/thank-you`))
+        const data = await getApiJson(response, 'Unable to check thank-you options.')
+        if (!response.ok) {
+          setThankYouAvailable(false)
+          return
+        }
+
+        setThankYouAvailable(Boolean(data.available))
+        setThankYouAlreadySent(Boolean(data.alreadySent))
+        if (Array.isArray(data.presets) && data.presets.length > 0) {
+          setThankYouPresetsState(
+            data.presets.map((preset: { id: string; label: string }) => ({
+              id: preset.id,
+              label: preset.label,
+            })),
+          )
+          setSelectedThankYouPreset(data.presets[0].id)
+        }
+        if (data.alreadySent) {
+          setThankYouNotice('Your thank-you was already sent to the sender.')
+        }
+      } catch {
+        setThankYouAvailable(false)
+      }
+    }
+
+    void loadThankYouStatus()
+  }, [card, isRecipientView, sharedCardId, step])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
     const stored = readStoredGenerationJob()
     if (!stored?.jobId) {
       return
@@ -1399,7 +1502,17 @@ function App() {
       status: delivery.status,
     }))
 
-    return [...created, ...sent].sort((left, right) =>
+    const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
+      id: `thanks-${thankYou.id}`,
+      createdAt: thankYou.createdAt,
+      title: 'Thank-you received',
+      detail: thankYou.recipientName
+        ? `${thankYou.recipientName}: “${thankYou.message}”`
+        : `“${thankYou.message}”`,
+      status: thankYou.status || 'Sent',
+    }))
+
+    return [...created, ...sent, ...thanks].sort((left, right) =>
       String(right.createdAt).localeCompare(String(left.createdAt)),
     )
   }, [accountHistory])
@@ -1638,6 +1751,35 @@ function App() {
     setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
+  }
+
+  const sendThankYou = async () => {
+    if (!sharedCardId || isSendingThankYou || thankYouAlreadySent) {
+      return
+    }
+
+    setIsSendingThankYou(true)
+    setThankYouNotice('')
+
+    try {
+      const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(sharedCardId)}/thank-you`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ presetId: selectedThankYouPreset }),
+      })
+      const data = await getApiJson(response, 'Unable to send the thank-you.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to send the thank-you.')
+      }
+
+      setThankYouAlreadySent(true)
+      setThankYouAvailable(false)
+      setThankYouNotice(data.message || 'Your thank-you is on its way to the sender.')
+    } catch (caughtError) {
+      setThankYouNotice(getFriendlyErrorMessage(caughtError, 'Unable to send the thank-you.'))
+    } finally {
+      setIsSendingThankYou(false)
+    }
   }
 
   const openEditor = () => {
@@ -2856,11 +2998,58 @@ function App() {
                 </div>
               )}
               {isRecipientView && (step === 'front' || step === 'inside') && (
-                <aside className="recipient-invite" aria-label="Make a card of your own">
-                  <h3>Loved this card?</h3>
-                  <a className="primary-button" href="/">
-                    Create your own
-                  </a>
+                <aside className="recipient-invite" aria-label="Say thanks or make a card">
+                  <div className="recipient-thanks">
+                    <h3>Say thanks</h3>
+                    {thankYouAlreadySent ? (
+                      <p className="recipient-thanks-note" role="status">
+                        {thankYouNotice || 'Your thank-you was already sent to the sender.'}
+                      </p>
+                    ) : thankYouAvailable ? (
+                      <>
+                        <p>Send a short thank-you to {senderLabel}. It’s free, and you can only send one.</p>
+                        <div className="thank-you-presets" role="radiogroup" aria-label="Thank-you message">
+                          {thankYouPresetsState.map((preset) => (
+                            <label key={preset.id} className={selectedThankYouPreset === preset.id ? 'is-selected' : ''}>
+                              <input
+                                type="radio"
+                                name="thank-you-preset"
+                                value={preset.id}
+                                checked={selectedThankYouPreset === preset.id}
+                                onChange={() => setSelectedThankYouPreset(preset.id)}
+                              />
+                              <span>{preset.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={isSendingThankYou}
+                          aria-busy={isSendingThankYou}
+                          onClick={() => void sendThankYou()}
+                        >
+                          {isSendingThankYou ? 'Sending thank-you...' : 'Send thank-you'}
+                        </button>
+                        {thankYouNotice && (
+                          <p className="recipient-thanks-note" role="status">
+                            {thankYouNotice}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p>Want to go further? Make a thank-you card for {senderLabel}.</p>
+                    )}
+                    <a className="text-action-link" href={thankYouCardHref}>
+                      Send a thank-you card
+                    </a>
+                  </div>
+                  <div className="recipient-create">
+                    <h3>Loved this card?</h3>
+                    <a className="secondary-button" href="/">
+                      Create your own
+                    </a>
+                  </div>
                 </aside>
               )}
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>

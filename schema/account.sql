@@ -111,9 +111,22 @@ CREATE TABLE IF NOT EXISTS deliveries (
   provider_message_id TEXT
 );
 
+CREATE TABLE IF NOT EXISTS thank_yous (
+  card_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  preset_id TEXT NOT NULL,
+  message TEXT NOT NULL,
+  method TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  status TEXT NOT NULL,
+  recipient_name TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_credit_events_user_id ON credit_events (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_refunds_payment_id ON refunds (payment_id);
 CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_user_id ON deliveries (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_card_id ON deliveries (card_id);
+CREATE INDEX IF NOT EXISTS idx_thank_yous_user_id ON thank_yous (user_id, created_at);

@@ -1,11 +1,15 @@
 import OpenAI from 'openai'
 import {
+  accountDbReady,
   applyCreditChange,
   ensureAccountUser,
   getAccountForSession,
   getAccountHistory,
+  getSenderContactForCard,
+  getThankYouForCard,
   recordFailedDelivery,
   recordSuccessfulDelivery,
+  recordThankYou,
   upsertUserOnLogin,
 } from './account-db.js'
 
@@ -1618,6 +1622,149 @@ const handleGetCard = async (request, env, cardId) => {
   return jsonResponse(request, env, getCardSummary(record, request, env))
 }
 
+const thankYouPresets = [
+  {
+    id: 'thank_you',
+    label: 'Thank you for the beautiful card!',
+    message: 'Thank you for the beautiful card!',
+  },
+  {
+    id: 'made_my_day',
+    label: 'This made my day.',
+    message: 'This made my day. Thank you for the card!',
+  },
+  {
+    id: 'love_you',
+    label: 'Love you — thank you.',
+    message: 'Love you — thank you for the card!',
+  },
+]
+
+const getThankYouPreset = (presetId) => thankYouPresets.find((preset) => preset.id === presetId) || null
+
+const buildThankYouDeliveryCopy = ({ recipientName, senderName, message }) => {
+  const fromName = recipientName?.trim() || 'Someone'
+  const toName = senderName?.trim() || 'there'
+  const subject = `${fromName} said thank you for your card`
+  const text = `Hi ${toName},
+
+${fromName} opened your Card Genie card and wanted to say:
+
+"${message}"
+
+— Card Genie`
+  const html = `<p>Hi ${escapeHtml(toName)},</p>
+<p><strong>${escapeHtml(fromName)}</strong> opened your Card Genie card and wanted to say:</p>
+<p>“${escapeHtml(message)}”</p>
+<p>— Card Genie</p>`
+
+  return { subject, text, html }
+}
+
+const handleGetThankYouStatus = async (request, env, cardId) => {
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { available: false, alreadySent: false, presets: thankYouPresets })
+  }
+
+  const existing = await getThankYouForCard(env, cardId)
+  if (existing) {
+    return jsonResponse(request, env, {
+      available: false,
+      alreadySent: true,
+      presets: thankYouPresets,
+    })
+  }
+
+  const sender = await getSenderContactForCard(env, cardId)
+  return jsonResponse(request, env, {
+    available: Boolean(sender?.phoneE164 || sender?.email),
+    alreadySent: false,
+    presets: thankYouPresets,
+  })
+}
+
+const handleSendThankYou = async (request, env, cardId) => {
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Thank-you messaging is not available right now.' }, 503)
+  }
+
+  const body = (await readJson(request)) || {}
+  const preset = getThankYouPreset(body.presetId)
+  if (!preset) {
+    return jsonResponse(request, env, { error: 'Choose a thank-you message.' }, 400)
+  }
+
+  const existing = await getThankYouForCard(env, cardId)
+  if (existing) {
+    return jsonResponse(request, env, { error: 'A thank-you was already sent for this card.' }, 409)
+  }
+
+  const kvCard = await getCardRecord(env, cardId)
+  const sender = await getSenderContactForCard(env, cardId)
+  if (!sender) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'This card can’t receive a thank-you yet. The sender may only have shared a link.' },
+      400,
+    )
+  }
+
+  const recipientName =
+    kvCard?.details?.recipientName?.trim() ||
+    sender.recipientName ||
+    kvCard?.signature ||
+    'Someone'
+  const senderName = kvCard?.details?.senderName?.trim() || sender.senderName || 'there'
+  const copy = buildThankYouDeliveryCopy({
+    recipientName,
+    senderName,
+    message: preset.message,
+  })
+
+  try {
+    let method = 'text'
+    let destination = sender.phoneE164
+
+    if (sender.phoneE164) {
+      destination = await sendTextDelivery({ env, to: sender.phoneE164, copy })
+      method = 'text'
+    } else if (sender.email) {
+      destination = await sendEmailDelivery({ env, to: normalizeEmailAddress(sender.email), copy })
+      method = 'email'
+    } else {
+      return jsonResponse(request, env, { error: 'The sender has no contact method on file.' }, 400)
+    }
+
+    await recordThankYou(env, {
+      cardId,
+      userId: sender.userId,
+      presetId: preset.id,
+      message: preset.message,
+      method,
+      destination,
+      recipientName,
+    })
+
+    return jsonResponse(request, env, {
+      ok: true,
+      method,
+      message: 'Your thank-you is on its way to the sender.',
+    })
+  } catch (error) {
+    if (error?.code === 'already_sent') {
+      return jsonResponse(request, env, { error: error.message }, 409)
+    }
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to send the thank-you right now.' },
+      400,
+    )
+  }
+}
+
 const handleSharePreview = async (request, env, cardId) => {
   const record = await getCardRecord(env, cardId)
 
@@ -2269,6 +2416,17 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/cards') {
     return handleSaveCard(request, env)
+  }
+
+  const thankYouMatch = url.pathname.match(/^\/api\/cards\/([^/]+)\/thank-you$/)
+  if (thankYouMatch) {
+    const thankYouCardId = decodeURIComponent(thankYouMatch[1])
+    if (request.method === 'GET') {
+      return handleGetThankYouStatus(request, env, thankYouCardId)
+    }
+    if (request.method === 'POST') {
+      return handleSendThankYou(request, env, thankYouCardId)
+    }
   }
 
   if (request.method === 'GET' && url.pathname.startsWith('/api/cards/')) {

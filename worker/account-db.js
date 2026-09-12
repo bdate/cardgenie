@@ -192,6 +192,21 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
       .all(),
   ])
 
+  let thankYous = { results: [] }
+  try {
+    thankYous = await env.ACCOUNT_DB.prepare(
+      `SELECT card_id, created_at, preset_id, message, method, status, recipient_name
+       FROM thank_yous
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+      .bind(userId)
+      .all()
+  } catch {
+    thankYous = { results: [] }
+  }
+
   return {
     account: mapUser(user),
     creditEvents: (events.results || []).map((row) => ({
@@ -220,7 +235,104 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
       isSenderCopy: Boolean(row.is_sender_copy),
       status: row.status,
     })),
+    thankYous: (thankYous.results || []).map((row) => ({
+      id: row.card_id,
+      cardId: row.card_id,
+      createdAt: row.created_at,
+      presetId: row.preset_id,
+      message: row.message || '',
+      method: row.method,
+      status: row.status,
+      recipientName: row.recipient_name || '',
+    })),
   }
+}
+
+export const getThankYouForCard = async (env, cardId) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return null
+  }
+
+  return env.ACCOUNT_DB.prepare('SELECT * FROM thank_yous WHERE card_id = ?').bind(cardId).first()
+}
+
+export const getSenderContactForCard = async (env, cardId) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return null
+  }
+
+  const card = await env.ACCOUNT_DB.prepare(
+    `SELECT id, user_id, recipient_name, sender_name, status
+     FROM cards
+     WHERE id = ?`,
+  )
+    .bind(cardId)
+    .first()
+
+  if (!card?.user_id) {
+    return null
+  }
+
+  const user = await getUserById(env.ACCOUNT_DB, card.user_id)
+  if (!user) {
+    return null
+  }
+
+  const senderCopy = await env.ACCOUNT_DB.prepare(
+    `SELECT destination
+     FROM deliveries
+     WHERE card_id = ? AND is_sender_copy = 1 AND status = 'sent'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+  )
+    .bind(cardId)
+    .first()
+
+  const phoneE164 = user.phone_e164 || ''
+  const email = user.email || senderCopy?.destination || ''
+
+  if (!phoneE164 && !email) {
+    return null
+  }
+
+  return {
+    cardId: card.id,
+    userId: user.id,
+    recipientName: card.recipient_name || '',
+    senderName: card.sender_name || '',
+    phoneE164,
+    email,
+  }
+}
+
+export const recordThankYou = async (
+  env,
+  { cardId, userId, presetId, message, method, destination, recipientName },
+) => {
+  if (!env.ACCOUNT_DB || !cardId || !userId) {
+    return null
+  }
+
+  const now = isoNow()
+  try {
+    await env.ACCOUNT_DB.prepare(
+      `INSERT INTO thank_yous (
+        card_id, user_id, created_at, preset_id, message, method, destination, status, recipient_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?)`,
+    )
+      .bind(cardId, userId, now, presetId, message, method, destination, recipientName || '')
+      .run()
+  } catch (error) {
+    const existing = await getThankYouForCard(env, cardId)
+    if (existing) {
+      const conflict = new Error('A thank-you was already sent for this card.')
+      conflict.code = 'already_sent'
+      throw conflict
+    }
+    throw error
+  }
+
+  return { cardId, createdAt: now }
 }
 
 export const getAccountForSession = async (env, userId) => {
