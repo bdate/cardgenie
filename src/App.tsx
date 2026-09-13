@@ -1005,6 +1005,9 @@ function App() {
   const envelopeAddress = `To ${envelopeLabel}`
   const envelopeAddressSize =
     envelopeAddress.length > 34 ? 'is-long' : envelopeAddress.length > 22 ? 'is-medium' : ''
+  const recipientHeadline = `You received a card from ${senderLabel}`
+  const recipientHeadlineSize =
+    recipientHeadline.length > 42 ? 'is-long' : recipientHeadline.length > 32 ? 'is-medium' : ''
   const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
   const defaultGreeting = ''
   const insideGreeting = cardGreeting ?? defaultGreeting
@@ -2321,7 +2324,9 @@ function App() {
           <span className="brand-wordmark">Card Genie</span>
         </a>
         {isRecipientView ? (
-          <h1>You received a card from {senderLabel}</h1>
+          <h1 className={`recipient-headline ${recipientHeadlineSize}`.trim()}>
+            You received a card from {senderLabel}
+          </h1>
         ) : (
           <a
             className="brand-powered"
@@ -2736,23 +2741,16 @@ function App() {
               </div>
               {!isGenerating &&
                 card &&
-                (showEditor ? (
-                  editorHasChanges && (
-                    <button
-                      className="secondary-button revise-top-button"
-                      type="button"
-                      onClick={acceptEditorChanges}
-                    >
-                      Accept changes
-                    </button>
-                  )
-                ) : (
-                  showReviseButton && (
-                    <button className="primary-button revise-top-button" type="button" onClick={openEditor}>
-                      Revise card
-                    </button>
-                  )
-                ))}
+                showEditor &&
+                editorHasChanges && (
+                  <button
+                    className="secondary-button revise-top-button"
+                    type="button"
+                    onClick={acceptEditorChanges}
+                  >
+                    Accept changes
+                  </button>
+                )}
             </div>
           )}
 
@@ -3085,6 +3083,13 @@ function App() {
                     </a>
                   </div>
                 </aside>
+              )}
+              {showSendActions && !isRecipientView && !showEditor && showReviseButton && (
+                <div className="proof-actions revise-actions">
+                  <button className="primary-button" type="button" onClick={openEditor}>
+                    Revise card
+                  </button>
+                </div>
               )}
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
