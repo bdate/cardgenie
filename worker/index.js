@@ -1634,13 +1634,36 @@ const thankYouPresets = [
     message: 'This made my day. Thank you for the card!',
   },
   {
-    id: 'love_you',
-    label: 'Love you — thank you.',
-    message: 'Love you — thank you for the card!',
+    id: 'custom',
+    label: 'Write your own',
+    message: '',
+    allowsCustom: true,
   },
 ]
 
+const thankYouCustomMaxLength = 180
+
 const getThankYouPreset = (presetId) => thankYouPresets.find((preset) => preset.id === presetId) || null
+
+const normalizeThankYouMessage = (value = '') =>
+  String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const resolveThankYouMessage = (preset, customMessage) => {
+  if (preset.allowsCustom) {
+    const message = normalizeThankYouMessage(customMessage)
+    if (!message) {
+      throw new Error('Write a short thank-you message.')
+    }
+    if (message.length > thankYouCustomMaxLength) {
+      throw new Error(`Keep your thank-you under ${thankYouCustomMaxLength} characters.`)
+    }
+    return message
+  }
+
+  return preset.message
+}
 
 const buildThankYouDeliveryCopy = ({ recipientName, senderName, message }) => {
   const fromName = recipientName?.trim() || 'Someone'
@@ -1694,6 +1717,13 @@ const handleSendThankYou = async (request, env, cardId) => {
     return jsonResponse(request, env, { error: 'Choose a thank-you message.' }, 400)
   }
 
+  let message = ''
+  try {
+    message = resolveThankYouMessage(preset, body.message)
+  } catch (error) {
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Choose a thank-you message.' }, 400)
+  }
+
   const existing = await getThankYouForCard(env, cardId)
   if (existing) {
     return jsonResponse(request, env, { error: 'A thank-you was already sent for this card.' }, 409)
@@ -1719,7 +1749,7 @@ const handleSendThankYou = async (request, env, cardId) => {
   const copy = buildThankYouDeliveryCopy({
     recipientName,
     senderName,
-    message: preset.message,
+    message,
   })
 
   try {
@@ -1740,7 +1770,7 @@ const handleSendThankYou = async (request, env, cardId) => {
       cardId,
       userId: sender.userId,
       presetId: preset.id,
-      message: preset.message,
+      message,
       method,
       destination,
       recipientName,

@@ -1930,6 +1930,27 @@ textarea:focus {
   line-height: 1.35;
 }
 
+.thank-you-custom {
+  display: grid;
+  gap: 6px;
+  width: min(360px, 100%);
+  text-align: left;
+  color: var(--gcu-ink);
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.thank-you-custom textarea {
+  min-height: 88px;
+}
+
+.thank-you-custom small {
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+  font-weight: 600;
+  justify-self: end;
+}
+
 .recipient-invite .primary-button,
 .recipient-invite .secondary-button {
   display: inline-flex;

@@ -137,8 +137,9 @@ const accountSessionStorageKey = 'cardGenieAccountSession'
 const thankYouPresets = [
   { id: 'thank_you', label: 'Thank you for the beautiful card!' },
   { id: 'made_my_day', label: 'This made my day.' },
-  { id: 'love_you', label: 'Love you — thank you.' },
+  { id: 'custom', label: 'Write your own', allowsCustom: true },
 ] as const
+const thankYouCustomMaxLength = 180
 
 const getThankYouCardPrefill = () => {
   const params = new URLSearchParams(window.location.search)
@@ -938,10 +939,11 @@ function App() {
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [thankYouAvailable, setThankYouAvailable] = useState(false)
   const [thankYouAlreadySent, setThankYouAlreadySent] = useState(false)
-  const [thankYouPresetsState, setThankYouPresetsState] = useState<Array<{ id: string; label: string }>>([
-    ...thankYouPresets,
-  ])
+  const [thankYouPresetsState, setThankYouPresetsState] = useState<
+    Array<{ id: string; label: string; allowsCustom?: boolean }>
+  >([...thankYouPresets])
   const [selectedThankYouPreset, setSelectedThankYouPreset] = useState<string>(thankYouPresets[0].id)
+  const [customThankYouMessage, setCustomThankYouMessage] = useState('')
   const [isSendingThankYou, setIsSendingThankYou] = useState(false)
   const [thankYouNotice, setThankYouNotice] = useState('')
   const [creditNotice, setCreditNotice] = useState('')
@@ -1299,9 +1301,10 @@ function App() {
         setThankYouAlreadySent(Boolean(data.alreadySent))
         if (Array.isArray(data.presets) && data.presets.length > 0) {
           setThankYouPresetsState(
-            data.presets.map((preset: { id: string; label: string }) => ({
+            data.presets.map((preset: { id: string; label: string; allowsCustom?: boolean }) => ({
               id: preset.id,
               label: preset.label,
+              allowsCustom: Boolean(preset.allowsCustom),
             })),
           )
           setSelectedThankYouPreset(data.presets[0].id)
@@ -1758,6 +1761,19 @@ function App() {
       return
     }
 
+    const selectedPreset = thankYouPresetsState.find((preset) => preset.id === selectedThankYouPreset)
+    const customMessage = customThankYouMessage.replace(/\s+/g, ' ').trim()
+    if (selectedPreset?.allowsCustom) {
+      if (!customMessage) {
+        setThankYouNotice('Write a short thank-you message.')
+        return
+      }
+      if (customMessage.length > thankYouCustomMaxLength) {
+        setThankYouNotice(`Keep your thank-you under ${thankYouCustomMaxLength} characters.`)
+        return
+      }
+    }
+
     setIsSendingThankYou(true)
     setThankYouNotice('')
 
@@ -1765,7 +1781,10 @@ function App() {
       const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(sharedCardId)}/thank-you`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ presetId: selectedThankYouPreset }),
+        body: JSON.stringify({
+          presetId: selectedThankYouPreset,
+          message: selectedPreset?.allowsCustom ? customMessage : undefined,
+        }),
       })
       const data = await getApiJson(response, 'Unable to send the thank-you.')
       if (!response.ok) {
@@ -2785,7 +2804,7 @@ function App() {
               </div>
               <span className="loader-kicker">Creating a little magic</span>
               <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
-              <p className="loader-note">This could take up to a minute. You can leave and come back. We will keep working, and the card will be waiting when you come back.</p>
+              <p className="loader-note">This could take up to a minute. You can leave and come back, the card will be waiting for you.</p>
             </div>
           )}
 
@@ -3022,6 +3041,21 @@ function App() {
                             </label>
                           ))}
                         </div>
+                        {thankYouPresetsState.find((preset) => preset.id === selectedThankYouPreset)?.allowsCustom && (
+                          <label className="thank-you-custom">
+                            Your message
+                            <textarea
+                              rows={3}
+                              maxLength={thankYouCustomMaxLength}
+                              value={customThankYouMessage}
+                              onChange={(event) => setCustomThankYouMessage(event.target.value)}
+                              placeholder="Example: Thank you so much — this meant a lot to me."
+                            />
+                            <small>
+                              {customThankYouMessage.trim().length}/{thankYouCustomMaxLength}
+                            </small>
+                          </label>
+                        )}
                         <button
                           className="primary-button"
                           type="button"
