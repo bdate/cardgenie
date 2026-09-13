@@ -68,7 +68,7 @@
 .hero-section .brand-powered:link,
 .hero-section .brand-powered:visited {
   display: block;
-  margin: 10px auto 0;
+  margin: 2px auto 0;
   max-width: 720px;
   color: var(--gcu-grey);
   font-size: 0.79rem;
@@ -3099,7 +3099,7 @@ textarea:focus {
   }
 
   .hero-section .brand-powered {
-    margin-top: 3px;
+    margin-top: 1px;
     font-size: 0.68rem;
   }
 
