@@ -3082,9 +3082,9 @@ function App() {
                     </a>
                   </div>
                   <div className="recipient-create">
-                    <h3>Loved this card?</h3>
-                    <a className="secondary-button" href="/">
-                      Create your own
+                    <a className="secondary-button recipient-create-button" href="/">
+                      <span className="recipient-create-kicker">Loved this card?</span>
+                      <span className="recipient-create-label">Create your own</span>
                     </a>
                   </div>
                 </aside>

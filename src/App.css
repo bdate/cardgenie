@@ -1907,7 +1907,7 @@ textarea:focus {
 }
 
 .recipient-create {
-  gap: 8px;
+  gap: 0;
 }
 
 .recipient-invite h3 {
@@ -1916,10 +1916,23 @@ textarea:focus {
   font-size: 1.2rem;
 }
 
-.recipient-create h3 {
+.recipient-invite .recipient-create-button {
+  flex-direction: column;
+  gap: 1px;
+  padding-block: 10px 12px;
+  line-height: 1.1;
+}
+
+.recipient-create-kicker {
   color: var(--gcu-grey);
-  font-size: 0.95rem;
+  font-size: 0.78rem;
   font-weight: 650;
+}
+
+.recipient-create-label {
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .recipient-invite p {
