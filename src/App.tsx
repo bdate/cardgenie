@@ -2319,23 +2319,28 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero-section">
-        <a className="brand" href="/" aria-label="Card Genie home">
-          <img className="brand-mark" src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
-          <span className="brand-wordmark">Card Genie</span>
+        <a className="brand brand-lockup-link" href="/" aria-label="Card Genie home">
+          <img
+            className="brand-lockup"
+            src={`${import.meta.env.BASE_URL}logo-lockup.png`}
+            srcSet={`${import.meta.env.BASE_URL}logo-lockup.png 1x, ${import.meta.env.BASE_URL}logo-lockup@2x.png 2x`}
+            width={320}
+            height={75}
+            alt="Card Genie"
+          />
         </a>
-        {isRecipientView ? (
+        <a
+          className="brand-powered"
+          href="https://www.greetingcarduniverse.com"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Powered by GreetingCardUniverse.com
+        </a>
+        {isRecipientView && (
           <h1 className={`recipient-headline ${recipientHeadlineSize}`.trim()}>
             You received a card from {senderLabel}
           </h1>
-        ) : (
-          <a
-            className="brand-powered"
-            href="https://www.greetingcarduniverse.com"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Powered by GreetingCardUniverse.com
-          </a>
         )}
         {!isRecipientView && (
           <div className="credit-wallet-block">

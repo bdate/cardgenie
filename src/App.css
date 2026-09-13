@@ -20,6 +20,22 @@
   border-radius: 22px;
 }
 
+.brand-lockup-link {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.brand-lockup {
+  display: block;
+  width: 320px;
+  height: 75px;
+  max-width: min(320px, 92vw);
+  height: auto;
+  object-fit: contain;
+}
+
 .brand-mark {
   display: block;
   width: 72px;
@@ -48,7 +64,9 @@
   outline-offset: 6px;
 }
 
-.hero-section .brand-powered {
+.hero-section .brand-powered,
+.hero-section .brand-powered:link,
+.hero-section .brand-powered:visited {
   display: block;
   margin: 10px auto 0;
   max-width: 720px;
