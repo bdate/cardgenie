@@ -2238,6 +2238,24 @@ textarea:focus {
   gap: 12px;
 }
 
+.admin-links h3 {
+  margin: 0 0 8px;
+}
+
+.admin-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.admin-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 14px;
+}
+
 .admin-analytics-heading {
   display: flex;
   align-items: baseline;

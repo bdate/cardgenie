@@ -895,6 +895,7 @@ function App() {
   })
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
+  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | null>(null)
   const [accountHistory, setAccountHistory] = useState<{
     phoneE164?: string
     account?: {
@@ -1579,10 +1580,6 @@ function App() {
       if (serverBalance !== null) {
         rememberCredits(serverBalance)
       }
-      if (adminPhoneNumbers.has(String(data.phoneE164 || accountSession?.phoneE164 || ''))) {
-        void loadAdminMetrics(token)
-        void loadPendingReviews(token)
-      }
     } catch (caughtError) {
       setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
     } finally {
@@ -1663,6 +1660,7 @@ function App() {
 
   const openAccountPage = async () => {
     setShowAccountPage(true)
+    setAdminView(null)
     setShowCreditMenu(false)
     setAccountHistoryError('')
     setShowAllCreditEvents(false)
@@ -1675,6 +1673,34 @@ function App() {
     }
 
     await loadAccountHistory(accountSession.token)
+  }
+
+  const openAdminAnalytics = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('analytics')
+    setShowCreditMenu(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadAdminMetrics(accountSession.token)
+  }
+
+  const openAdminReviews = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('reviews')
+    setShowCreditMenu(false)
+    setPendingReviewNotice('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadPendingReviews(accountSession.token)
+  }
+
+  const closeAdminView = () => {
+    setAdminView(null)
+    void openAccountPage()
   }
 
   const buyCreditPack = (pack: (typeof creditPacks)[number]) => {
@@ -2781,161 +2807,16 @@ function App() {
           {accountSession && accountHistory && (
             <>
               {isAdmin && (
-                <div className="account-block admin-analytics">
-                  <div className="admin-analytics-heading">
-                    <h3>Site analytics</h3>
-                    <button
-                      className="text-action-link"
-                      type="button"
-                      disabled={isLoadingAdminMetrics || !accountSession.token}
-                      onClick={() => void loadAdminMetrics(accountSession.token)}
-                    >
-                      {isLoadingAdminMetrics ? 'Refreshing...' : 'Refresh'}
+                <div className="account-block admin-links">
+                  <h3>Admin</h3>
+                  <div className="admin-link-row">
+                    <button className="text-action-link" type="button" onClick={() => void openAdminAnalytics()}>
+                      Analytics
+                    </button>
+                    <button className="text-action-link" type="button" onClick={() => void openAdminReviews()}>
+                      Reviews
                     </button>
                   </div>
-                  {adminMetricsError && <div className="field-notice">{adminMetricsError}</div>}
-                  {isLoadingAdminMetrics && !adminMetrics && <p>Loading site analytics...</p>}
-                  {adminMetrics && (
-                    <>
-                      <p className="admin-analytics-note">
-                        Today ({adminMetrics.today}) and all-time totals. Cards are recorded when first sent.
-                      </p>
-                      <div className="admin-stat-grid">
-                        <div>
-                          <span>Accounts today</span>
-                          <strong>{adminMetrics.todayStats?.accounts ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.accounts ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Sends today</span>
-                          <strong>{adminMetrics.todayStats?.sends ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.sends ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Cards today</span>
-                          <strong>{adminMetrics.todayStats?.cards ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.cards ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Logins today</span>
-                          <strong>{adminMetrics.todayStats?.logins ?? 0}</strong>
-                          <small>Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Thank-yous today</span>
-                          <strong>{adminMetrics.todayStats?.thankYous ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.thankYous ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Reviews today</span>
-                          <strong>{adminMetrics.todayStats?.testimonials ?? 0}</strong>
-                          <small>
-                            Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
-                            {adminMetrics.totals?.testimonials ?? 0}
-                          </small>
-                        </div>
-                        <div>
-                          <span>Credits spent today</span>
-                          <strong>{adminMetrics.todayStats?.creditsSpent ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Credits bought today</span>
-                          <strong>{adminMetrics.todayStats?.creditsPurchased ?? 0}</strong>
-                          <small>Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
-                        </div>
-                        <div>
-                          <span>Failed sends</span>
-                          <strong>{adminMetrics.totals?.failedSends ?? 0}</strong>
-                          <small>All time</small>
-                        </div>
-                        <div>
-                          <span>Active 30 days</span>
-                          <strong>{adminMetrics.totals?.activeUsers30 ?? 0}</strong>
-                          <small>Accounts with recent use</small>
-                        </div>
-                      </div>
-                      <div className="admin-daily-table-wrap">
-                        <table className="admin-daily-table">
-                          <thead>
-                            <tr>
-                              <th>Day</th>
-                              <th>Accounts</th>
-                              <th>Sends</th>
-                              <th>Logins</th>
-                              <th>Thanks</th>
-                              <th>Reviews</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(adminMetrics.daily?.sends || []).map((row, index) => (
-                              <tr key={row.day}>
-                                <td>{row.day.slice(5)}</td>
-                                <td>{adminMetrics.daily?.accounts?.[index]?.count ?? 0}</td>
-                                <td>{row.count}</td>
-                                <td>{adminMetrics.daily?.logins?.[index]?.count ?? 0}</td>
-                                <td>{adminMetrics.daily?.thankYous?.[index]?.count ?? 0}</td>
-                                <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="admin-reviews">
-                        <div className="admin-analytics-heading">
-                          <h4>Pending reviews</h4>
-                          <button
-                            className="text-action-link"
-                            type="button"
-                            disabled={isLoadingPendingReviews || !accountSession.token}
-                            onClick={() => void loadPendingReviews(accountSession.token)}
-                          >
-                            {isLoadingPendingReviews ? 'Refreshing...' : 'Refresh'}
-                          </button>
-                        </div>
-                        {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
-                        {isLoadingPendingReviews && pendingReviews.length === 0 ? (
-                          <p>Loading pending reviews...</p>
-                        ) : pendingReviews.length === 0 ? (
-                          <p>No reviews waiting for approval.</p>
-                        ) : (
-                          <div className="admin-review-list">
-                            {pendingReviews.map((review) => (
-                              <div className="admin-review-card" key={review.id}>
-                                <div className="admin-review-meta">
-                                  <strong>{review.name?.trim() || 'Anonymous'}</strong>
-                                  <span>
-                                    {review.rating ? `${review.rating}/5 · ` : ''}
-                                    {formatAccountDate(review.createdAt)}
-                                    {review.source ? ` · ${review.source}` : ''}
-                                  </span>
-                                </div>
-                                <p>{review.comment}</p>
-                                <div className="feedback-actions">
-                                  <button
-                                    className="primary-button"
-                                    type="button"
-                                    disabled={updatingReviewId === review.id}
-                                    onClick={() => void updatePendingReview(review.id, 'approved')}
-                                  >
-                                    {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
-                                  </button>
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    disabled={updatingReviewId === review.id}
-                                    onClick={() => void updatePendingReview(review.id, 'rejected')}
-                                  >
-                                    Hide
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
                 </div>
               )}
               <div className="account-summary">
@@ -3034,7 +2915,187 @@ function App() {
         </section>
       )}
 
-      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage ? 'is-hidden' : ''}`.trim()}>
+      {adminView === 'analytics' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="Site analytics">
+          <div className="panel-heading">
+            <div>
+              <h2>Analytics</h2>
+              <p>Today and all-time site activity.</p>
+            </div>
+            <div className="admin-page-actions">
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={isLoadingAdminMetrics || !accountSession?.token}
+                onClick={() => accountSession?.token && void loadAdminMetrics(accountSession.token)}
+              >
+                {isLoadingAdminMetrics ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          {adminMetricsError && <div className="field-notice">{adminMetricsError}</div>}
+          {isLoadingAdminMetrics && !adminMetrics && <p>Loading site analytics...</p>}
+          {adminMetrics && (
+            <div className="account-block admin-analytics">
+              <p className="admin-analytics-note">
+                Today ({adminMetrics.today}). Cards are recorded when first sent.
+              </p>
+              <div className="admin-stat-grid">
+                <div>
+                  <span>Accounts today</span>
+                  <strong>{adminMetrics.todayStats?.accounts ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.accounts ?? 0}</small>
+                </div>
+                <div>
+                  <span>Sends today</span>
+                  <strong>{adminMetrics.todayStats?.sends ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.sends ?? 0}</small>
+                </div>
+                <div>
+                  <span>Cards today</span>
+                  <strong>{adminMetrics.todayStats?.cards ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.cards ?? 0}</small>
+                </div>
+                <div>
+                  <span>Logins today</span>
+                  <strong>{adminMetrics.todayStats?.logins ?? 0}</strong>
+                  <small>Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
+                </div>
+                <div>
+                  <span>Thank-yous today</span>
+                  <strong>{adminMetrics.todayStats?.thankYous ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.thankYous ?? 0}</small>
+                </div>
+                <div>
+                  <span>Reviews today</span>
+                  <strong>{adminMetrics.todayStats?.testimonials ?? 0}</strong>
+                  <small>
+                    Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
+                    {adminMetrics.totals?.testimonials ?? 0}
+                  </small>
+                </div>
+                <div>
+                  <span>Credits spent today</span>
+                  <strong>{adminMetrics.todayStats?.creditsSpent ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
+                </div>
+                <div>
+                  <span>Credits bought today</span>
+                  <strong>{adminMetrics.todayStats?.creditsPurchased ?? 0}</strong>
+                  <small>Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
+                </div>
+                <div>
+                  <span>Failed sends</span>
+                  <strong>{adminMetrics.totals?.failedSends ?? 0}</strong>
+                  <small>All time</small>
+                </div>
+                <div>
+                  <span>Active 30 days</span>
+                  <strong>{adminMetrics.totals?.activeUsers30 ?? 0}</strong>
+                  <small>Accounts with recent use</small>
+                </div>
+              </div>
+              <div className="admin-daily-table-wrap">
+                <table className="admin-daily-table">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Accounts</th>
+                      <th>Sends</th>
+                      <th>Logins</th>
+                      <th>Thanks</th>
+                      <th>Reviews</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(adminMetrics.daily?.sends || []).map((row, index) => (
+                      <tr key={row.day}>
+                        <td>{row.day.slice(5)}</td>
+                        <td>{adminMetrics.daily?.accounts?.[index]?.count ?? 0}</td>
+                        <td>{row.count}</td>
+                        <td>{adminMetrics.daily?.logins?.[index]?.count ?? 0}</td>
+                        <td>{adminMetrics.daily?.thankYous?.[index]?.count ?? 0}</td>
+                        <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {adminView === 'reviews' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="Pending reviews">
+          <div className="panel-heading">
+            <div>
+              <h2>Reviews</h2>
+              <p>Approve reviews to show later, or hide ones you don’t want.</p>
+            </div>
+            <div className="admin-page-actions">
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={isLoadingPendingReviews || !accountSession?.token}
+                onClick={() => accountSession?.token && void loadPendingReviews(accountSession.token)}
+              >
+                {isLoadingPendingReviews ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          <div className="account-block admin-reviews">
+            {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
+            {isLoadingPendingReviews && pendingReviews.length === 0 ? (
+              <p>Loading pending reviews...</p>
+            ) : pendingReviews.length === 0 ? (
+              <p>No reviews waiting for approval.</p>
+            ) : (
+              <div className="admin-review-list">
+                {pendingReviews.map((review) => (
+                  <div className="admin-review-card" key={review.id}>
+                    <div className="admin-review-meta">
+                      <strong>{review.name?.trim() || 'Anonymous'}</strong>
+                      <span>
+                        {review.rating ? `${review.rating}/5 · ` : ''}
+                        {formatAccountDate(review.createdAt)}
+                        {review.source ? ` · ${review.source}` : ''}
+                      </span>
+                    </div>
+                    <p>{review.comment}</p>
+                    <div className="feedback-actions">
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={updatingReviewId === review.id}
+                        onClick={() => void updatePendingReview(review.id, 'approved')}
+                      >
+                        {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={updatingReviewId === review.id}
+                        onClick={() => void updatePendingReview(review.id, 'rejected')}
+                      >
+                        Hide
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage || adminView ? 'is-hidden' : ''}`.trim()}>
         {!isRecipientView && (
           <form
             ref={createFormRef}
