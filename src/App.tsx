@@ -78,7 +78,7 @@ const styleOptions = [
   'Bold graphic poster art',
   'Vintage greeting card illustration',
 ]
-const initialCreditBalance = 5
+const initialCreditBalance = 2
 const creditStorageKey = 'cardGenieCredits'
 const sendCreditCost = 3
 const coverRevisionCost = 1
