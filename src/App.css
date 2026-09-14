@@ -2238,6 +2238,136 @@ textarea:focus {
   gap: 12px;
 }
 
+.admin-analytics-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-analytics-note {
+  margin: 0 0 12px;
+  color: var(--gcu-grey);
+  font-size: 0.9rem;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-stat-grid div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(63, 155, 145, 0.18);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.admin-stat-grid span {
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-stat-grid strong {
+  color: var(--gcu-ink);
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.admin-stat-grid small {
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+}
+
+.admin-daily-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(63, 155, 145, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.admin-daily-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.admin-daily-table th,
+.admin-daily-table td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid rgba(63, 155, 145, 0.12);
+}
+
+.admin-daily-table th:first-child,
+.admin-daily-table td:first-child {
+  text-align: left;
+}
+
+.admin-daily-table th {
+  color: var(--gcu-grey);
+  font-weight: 750;
+}
+
+.admin-daily-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-reviews {
+  margin-top: 18px;
+}
+
+.admin-reviews h4 {
+  margin: 0;
+  color: var(--gcu-dark-teal);
+  font-size: 1.05rem;
+}
+
+.admin-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-review-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(63, 155, 145, 0.18);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.admin-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.admin-review-meta span {
+  color: var(--gcu-grey);
+  font-size: 0.82rem;
+}
+
+.admin-review-card p {
+  margin: 0;
+  color: var(--gcu-ink);
+  line-height: 1.45;
+}
+
+.admin-review-card .feedback-actions .primary-button,
+.admin-review-card .feedback-actions .secondary-button {
+  min-width: 0;
+  width: auto;
+  padding: 10px 14px;
+}
+
 .account-summary div,
 .account-block {
   display: grid;

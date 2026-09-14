@@ -6,11 +6,15 @@ import {
   ensureAccountUser,
   getAccountForSession,
   getAccountHistory,
+  getAdminMetrics,
   getSenderContactForCard,
   getThankYouForCard,
+  isAdminPhone,
+  listTestimonials,
   recordFailedDelivery,
   recordSuccessfulDelivery,
   recordThankYou,
+  updateTestimonialStatus,
   upsertUserOnLogin,
 } from './account-db.js'
 
@@ -2105,6 +2109,76 @@ const handleGetAccount = async (request, env) => {
   })
 }
 
+const isAdminRequest = async (request, env) => {
+  const secret = String(env.ADMIN_SECRET || '').trim()
+  const token = readAccountToken(request)
+  if (secret && token && token === secret) {
+    return true
+  }
+
+  const url = new URL(request.url)
+  const querySecret = url.searchParams.get('secret')
+  if (secret && querySecret && querySecret === secret) {
+    return true
+  }
+
+  const session = await getAccountSession(env, token)
+  return Boolean(session?.phoneE164 && isAdminPhone(session.phoneE164))
+}
+
+const handleGetAdminMetrics = async (request, env) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  const url = new URL(request.url)
+  const days = Number(url.searchParams.get('days') || 14)
+  const metrics = await getAdminMetrics(env, { days })
+  if (!metrics) {
+    return jsonResponse(request, env, { error: 'Unable to load admin metrics.' }, 500)
+  }
+
+  return jsonResponse(request, env, { ok: true, ...metrics })
+}
+
+const handleListAdminTestimonials = async (request, env) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  const url = new URL(request.url)
+  const status = url.searchParams.get('status') || 'pending'
+  const testimonials = await listTestimonials(env, { status, limit: 50 })
+  return jsonResponse(request, env, { ok: true, status, testimonials })
+}
+
+const handleUpdateAdminTestimonial = async (request, env, testimonialId) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  const body = (await readJson(request)) || {}
+  const status = String(body.status || '').trim()
+  const updated = await updateTestimonialStatus(env, { id: testimonialId, status })
+  if (!updated) {
+    return jsonResponse(request, env, { error: 'Unable to update that review.' }, 400)
+  }
+
+  return jsonResponse(request, env, { ok: true, ...updated })
+}
+
 const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
 const feedbackSources = new Set(['post_send', 'account'])
@@ -2558,6 +2632,22 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account/history') {
     return handleGetAccountHistory(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/metrics') {
+    return handleGetAdminMetrics(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/testimonials') {
+    return handleListAdminTestimonials(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname.startsWith('/api/admin/testimonials/')) {
+    return handleUpdateAdminTestimonial(
+      request,
+      env,
+      decodeURIComponent(url.pathname.replace('/api/admin/testimonials/', '')),
+    )
   }
 
   if (request.method === 'POST' && url.pathname === '/api/account/credits') {

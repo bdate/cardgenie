@@ -987,6 +987,29 @@ function App() {
   const [feedbackNotice, setFeedbackNotice] = useState('')
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [adminMetrics, setAdminMetrics] = useState<{
+    today?: string
+    days?: number
+    totals?: Record<string, number>
+    todayStats?: Record<string, number>
+    daily?: Record<string, Array<{ day: string; count: number }>>
+  } | null>(null)
+  const [isLoadingAdminMetrics, setIsLoadingAdminMetrics] = useState(false)
+  const [adminMetricsError, setAdminMetricsError] = useState('')
+  const [pendingReviews, setPendingReviews] = useState<
+    Array<{
+      id: string
+      createdAt: string
+      name?: string
+      rating?: number | null
+      comment: string
+      source?: string
+      status?: string
+    }>
+  >([])
+  const [isLoadingPendingReviews, setIsLoadingPendingReviews] = useState(false)
+  const [pendingReviewNotice, setPendingReviewNotice] = useState('')
+  const [updatingReviewId, setUpdatingReviewId] = useState('')
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
@@ -1556,10 +1579,85 @@ function App() {
       if (serverBalance !== null) {
         rememberCredits(serverBalance)
       }
+      if (adminPhoneNumbers.has(String(data.phoneE164 || accountSession?.phoneE164 || ''))) {
+        void loadAdminMetrics(token)
+        void loadPendingReviews(token)
+      }
     } catch (caughtError) {
       setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
     } finally {
       setIsLoadingAccountHistory(false)
+    }
+  }
+
+  const loadAdminMetrics = async (token: string) => {
+    setIsLoadingAdminMetrics(true)
+    setAdminMetricsError('')
+    try {
+      const response = await fetch(apiUrl('/api/admin/metrics?days=14'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load site analytics.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load site analytics.')
+      }
+      setAdminMetrics(data)
+    } catch (caughtError) {
+      setAdminMetrics(null)
+      setAdminMetricsError(caughtError instanceof Error ? caughtError.message : 'Unable to load site analytics.')
+    } finally {
+      setIsLoadingAdminMetrics(false)
+    }
+  }
+
+  const loadPendingReviews = async (token: string) => {
+    setIsLoadingPendingReviews(true)
+    setPendingReviewNotice('')
+    try {
+      const response = await fetch(apiUrl('/api/admin/testimonials?status=pending'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load pending reviews.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load pending reviews.')
+      }
+      setPendingReviews(Array.isArray(data.testimonials) ? data.testimonials : [])
+    } catch (caughtError) {
+      setPendingReviews([])
+      setPendingReviewNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to load pending reviews.',
+      )
+    } finally {
+      setIsLoadingPendingReviews(false)
+    }
+  }
+
+  const updatePendingReview = async (id: string, status: 'approved' | 'rejected') => {
+    if (!accountSession?.token) {
+      return
+    }
+    setUpdatingReviewId(id)
+    setPendingReviewNotice('')
+    try {
+      const response = await fetch(apiUrl(`/api/admin/testimonials/${encodeURIComponent(id)}`), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accountSession.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      })
+      const data = await getApiJson(response, 'Unable to update that review.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to update that review.')
+      }
+      setPendingReviews((current) => current.filter((review) => review.id !== id))
+      setPendingReviewNotice(status === 'approved' ? 'Review approved.' : 'Review hidden.')
+      void loadAdminMetrics(accountSession.token)
+    } catch (caughtError) {
+      setPendingReviewNotice(caughtError instanceof Error ? caughtError.message : 'Unable to update that review.')
+    } finally {
+      setUpdatingReviewId('')
     }
   }
 
@@ -2682,6 +2780,164 @@ function App() {
           {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
           {accountSession && accountHistory && (
             <>
+              {isAdmin && (
+                <div className="account-block admin-analytics">
+                  <div className="admin-analytics-heading">
+                    <h3>Site analytics</h3>
+                    <button
+                      className="text-action-link"
+                      type="button"
+                      disabled={isLoadingAdminMetrics || !accountSession.token}
+                      onClick={() => void loadAdminMetrics(accountSession.token)}
+                    >
+                      {isLoadingAdminMetrics ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
+                  {adminMetricsError && <div className="field-notice">{adminMetricsError}</div>}
+                  {isLoadingAdminMetrics && !adminMetrics && <p>Loading site analytics...</p>}
+                  {adminMetrics && (
+                    <>
+                      <p className="admin-analytics-note">
+                        Today ({adminMetrics.today}) and all-time totals. Cards are recorded when first sent.
+                      </p>
+                      <div className="admin-stat-grid">
+                        <div>
+                          <span>Accounts today</span>
+                          <strong>{adminMetrics.todayStats?.accounts ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.accounts ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Sends today</span>
+                          <strong>{adminMetrics.todayStats?.sends ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.sends ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Cards today</span>
+                          <strong>{adminMetrics.todayStats?.cards ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.cards ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Logins today</span>
+                          <strong>{adminMetrics.todayStats?.logins ?? 0}</strong>
+                          <small>Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Thank-yous today</span>
+                          <strong>{adminMetrics.todayStats?.thankYous ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.thankYous ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Reviews today</span>
+                          <strong>{adminMetrics.todayStats?.testimonials ?? 0}</strong>
+                          <small>
+                            Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
+                            {adminMetrics.totals?.testimonials ?? 0}
+                          </small>
+                        </div>
+                        <div>
+                          <span>Credits spent today</span>
+                          <strong>{adminMetrics.todayStats?.creditsSpent ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Credits bought today</span>
+                          <strong>{adminMetrics.todayStats?.creditsPurchased ?? 0}</strong>
+                          <small>Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
+                        </div>
+                        <div>
+                          <span>Failed sends</span>
+                          <strong>{adminMetrics.totals?.failedSends ?? 0}</strong>
+                          <small>All time</small>
+                        </div>
+                        <div>
+                          <span>Active 30 days</span>
+                          <strong>{adminMetrics.totals?.activeUsers30 ?? 0}</strong>
+                          <small>Accounts with recent use</small>
+                        </div>
+                      </div>
+                      <div className="admin-daily-table-wrap">
+                        <table className="admin-daily-table">
+                          <thead>
+                            <tr>
+                              <th>Day</th>
+                              <th>Accounts</th>
+                              <th>Sends</th>
+                              <th>Logins</th>
+                              <th>Thanks</th>
+                              <th>Reviews</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(adminMetrics.daily?.sends || []).map((row, index) => (
+                              <tr key={row.day}>
+                                <td>{row.day.slice(5)}</td>
+                                <td>{adminMetrics.daily?.accounts?.[index]?.count ?? 0}</td>
+                                <td>{row.count}</td>
+                                <td>{adminMetrics.daily?.logins?.[index]?.count ?? 0}</td>
+                                <td>{adminMetrics.daily?.thankYous?.[index]?.count ?? 0}</td>
+                                <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="admin-reviews">
+                        <div className="admin-analytics-heading">
+                          <h4>Pending reviews</h4>
+                          <button
+                            className="text-action-link"
+                            type="button"
+                            disabled={isLoadingPendingReviews || !accountSession.token}
+                            onClick={() => void loadPendingReviews(accountSession.token)}
+                          >
+                            {isLoadingPendingReviews ? 'Refreshing...' : 'Refresh'}
+                          </button>
+                        </div>
+                        {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
+                        {isLoadingPendingReviews && pendingReviews.length === 0 ? (
+                          <p>Loading pending reviews...</p>
+                        ) : pendingReviews.length === 0 ? (
+                          <p>No reviews waiting for approval.</p>
+                        ) : (
+                          <div className="admin-review-list">
+                            {pendingReviews.map((review) => (
+                              <div className="admin-review-card" key={review.id}>
+                                <div className="admin-review-meta">
+                                  <strong>{review.name?.trim() || 'Anonymous'}</strong>
+                                  <span>
+                                    {review.rating ? `${review.rating}/5 · ` : ''}
+                                    {formatAccountDate(review.createdAt)}
+                                    {review.source ? ` · ${review.source}` : ''}
+                                  </span>
+                                </div>
+                                <p>{review.comment}</p>
+                                <div className="feedback-actions">
+                                  <button
+                                    className="primary-button"
+                                    type="button"
+                                    disabled={updatingReviewId === review.id}
+                                    onClick={() => void updatePendingReview(review.id, 'approved')}
+                                  >
+                                    {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
+                                  </button>
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    disabled={updatingReviewId === review.id}
+                                    onClick={() => void updatePendingReview(review.id, 'rejected')}
+                                  >
+                                    Hide
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="account-summary">
                 <div>
                   <span>Credits now</span>

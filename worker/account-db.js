@@ -569,3 +569,273 @@ export const recordFailedDelivery = async (env, { userId, cardId, method, destin
 
   await env.ACCOUNT_DB.batch(statements)
 }
+
+const adminPhoneNumbers = new Set(['+19259637453'])
+
+export const isAdminPhone = (phoneE164) => Boolean(phoneE164 && adminPhoneNumbers.has(phoneE164))
+
+const dayKey = (iso) => String(iso || '').slice(0, 10)
+
+const buildDayRange = (days) => {
+  const keys = []
+  const now = new Date()
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i))
+    keys.push(d.toISOString().slice(0, 10))
+  }
+  return keys
+}
+
+const countByDay = (rows) => {
+  const map = new Map()
+  for (const row of rows || []) {
+    const key = dayKey(row.day || row.created_at)
+    if (!key) continue
+    map.set(key, Number(row.n || row.count || 0))
+  }
+  return map
+}
+
+const seriesFromMap = (dayKeys, map) => dayKeys.map((day) => ({ day, count: map.get(day) || 0 }))
+
+const safeCount = async (db, sql, binds = []) => {
+  try {
+    const row = await db.prepare(sql).bind(...binds).first()
+    return Number(row?.n || 0)
+  } catch {
+    return 0
+  }
+}
+
+const safeAll = async (db, sql, binds = []) => {
+  try {
+    const result = await db.prepare(sql).bind(...binds).all()
+    return result?.results || []
+  } catch {
+    return []
+  }
+}
+
+export const getAdminMetrics = async (env, { days = 14 } = {}) => {
+  if (!env.ACCOUNT_DB) {
+    return null
+  }
+
+  const dayCount = Math.min(Math.max(Number(days) || 14, 7), 90)
+  const dayKeys = buildDayRange(dayCount)
+  const today = dayKeys[dayKeys.length - 1]
+  const since = `${dayKeys[0]}T00:00:00.000Z`
+  const db = env.ACCOUNT_DB
+
+  const [
+    accountsTotal,
+    accountsToday,
+    cardsTotal,
+    cardsToday,
+    sendsTotal,
+    sendsToday,
+    failedSendsTotal,
+    thankYousTotal,
+    thankYousToday,
+    testimonialsTotal,
+    testimonialsPending,
+    testimonialsToday,
+    activeUsers7,
+    activeUsers30,
+    loginsToday,
+    creditsPurchasedTotal,
+    creditsSpentTotal,
+    creditsPurchasedToday,
+    creditsSpentToday,
+    dailyAccounts,
+    dailySends,
+    dailyThankYous,
+    dailyLogins,
+    dailyTestimonials,
+  ] = await Promise.all([
+    safeCount(db, `SELECT COUNT(*) AS n FROM users`),
+    safeCount(db, `SELECT COUNT(*) AS n FROM users WHERE substr(created_at, 1, 10) = ?`, [today]),
+    safeCount(db, `SELECT COUNT(*) AS n FROM cards`),
+    safeCount(db, `SELECT COUNT(*) AS n FROM cards WHERE substr(created_at, 1, 10) = ?`, [today]),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM deliveries WHERE is_sender_copy = 0 AND status = 'sent'`,
+    ),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM deliveries
+       WHERE is_sender_copy = 0 AND status = 'sent' AND substr(created_at, 1, 10) = ?`,
+      [today],
+    ),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM deliveries WHERE is_sender_copy = 0 AND status = 'failed'`,
+    ),
+    safeCount(db, `SELECT COUNT(*) AS n FROM thank_yous`),
+    safeCount(db, `SELECT COUNT(*) AS n FROM thank_yous WHERE substr(created_at, 1, 10) = ?`, [today]),
+    safeCount(db, `SELECT COUNT(*) AS n FROM testimonials`),
+    safeCount(db, `SELECT COUNT(*) AS n FROM testimonials WHERE status = 'pending'`),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM testimonials WHERE substr(created_at, 1, 10) = ?`,
+      [today],
+    ),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM users WHERE last_used_at >= ?`,
+      [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()],
+    ),
+    safeCount(
+      db,
+      `SELECT COUNT(*) AS n FROM users WHERE last_used_at >= ?`,
+      [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()],
+    ),
+    safeCount(db, `SELECT COUNT(*) AS n FROM users WHERE substr(last_login_at, 1, 10) = ?`, [today]),
+    safeCount(
+      db,
+      `SELECT COALESCE(SUM(CASE WHEN credits_delta > 0 AND kind = 'purchase' THEN credits_delta ELSE 0 END), 0) AS n
+       FROM credit_events`,
+    ),
+    safeCount(
+      db,
+      `SELECT COALESCE(SUM(CASE WHEN credits_delta < 0 THEN ABS(credits_delta) ELSE 0 END), 0) AS n
+       FROM credit_events`,
+    ),
+    safeCount(
+      db,
+      `SELECT COALESCE(SUM(CASE WHEN credits_delta > 0 AND kind = 'purchase' THEN credits_delta ELSE 0 END), 0) AS n
+       FROM credit_events WHERE substr(created_at, 1, 10) = ?`,
+      [today],
+    ),
+    safeCount(
+      db,
+      `SELECT COALESCE(SUM(CASE WHEN credits_delta < 0 THEN ABS(credits_delta) ELSE 0 END), 0) AS n
+       FROM credit_events WHERE substr(created_at, 1, 10) = ?`,
+      [today],
+    ),
+    safeAll(
+      db,
+      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+       FROM users WHERE created_at >= ? GROUP BY day`,
+      [since],
+    ),
+    safeAll(
+      db,
+      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+       FROM deliveries
+       WHERE is_sender_copy = 0 AND status = 'sent' AND created_at >= ?
+       GROUP BY day`,
+      [since],
+    ),
+    safeAll(
+      db,
+      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+       FROM thank_yous WHERE created_at >= ? GROUP BY day`,
+      [since],
+    ),
+    safeAll(
+      db,
+      `SELECT substr(last_login_at, 1, 10) AS day, COUNT(*) AS n
+       FROM users WHERE last_login_at >= ? GROUP BY day`,
+      [since],
+    ),
+    safeAll(
+      db,
+      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+       FROM testimonials WHERE created_at >= ? GROUP BY day`,
+      [since],
+    ),
+  ])
+
+  return {
+    generatedAt: isoNow(),
+    today,
+    days: dayCount,
+    totals: {
+      accounts: accountsTotal,
+      cards: cardsTotal,
+      sends: sendsTotal,
+      failedSends: failedSendsTotal,
+      thankYous: thankYousTotal,
+      testimonials: testimonialsTotal,
+      testimonialsPending,
+      activeUsers7,
+      activeUsers30,
+      creditsPurchased: creditsPurchasedTotal,
+      creditsSpent: creditsSpentTotal,
+    },
+    todayStats: {
+      accounts: accountsToday,
+      cards: cardsToday,
+      sends: sendsToday,
+      thankYous: thankYousToday,
+      testimonials: testimonialsToday,
+      logins: loginsToday,
+      creditsPurchased: creditsPurchasedToday,
+      creditsSpent: creditsSpentToday,
+    },
+    daily: {
+      accounts: seriesFromMap(dayKeys, countByDay(dailyAccounts)),
+      sends: seriesFromMap(dayKeys, countByDay(dailySends)),
+      thankYous: seriesFromMap(dayKeys, countByDay(dailyThankYous)),
+      logins: seriesFromMap(dayKeys, countByDay(dailyLogins)),
+      testimonials: seriesFromMap(dayKeys, countByDay(dailyTestimonials)),
+    },
+  }
+}
+
+export const listTestimonials = async (env, { status = 'pending', limit = 50 } = {}) => {
+  if (!env.ACCOUNT_DB) {
+    return []
+  }
+
+  const allowed = new Set(['pending', 'approved', 'rejected'])
+  const cleanStatus = allowed.has(status) ? status : 'pending'
+  const cleanLimit = Math.min(Math.max(Number(limit) || 50, 1), 100)
+
+  try {
+    const result = await env.ACCOUNT_DB.prepare(
+      `SELECT id, created_at, name, rating, comment, status, source, phone_e164
+       FROM testimonials
+       WHERE status = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+      .bind(cleanStatus, cleanLimit)
+      .all()
+
+    return (result?.results || []).map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      name: row.name || '',
+      rating: row.rating == null ? null : Number(row.rating),
+      comment: row.comment || '',
+      status: row.status,
+      source: row.source || '',
+      phoneE164: row.phone_e164 || '',
+    }))
+  } catch {
+    return []
+  }
+}
+
+export const updateTestimonialStatus = async (env, { id, status }) => {
+  if (!env.ACCOUNT_DB || !id) {
+    return null
+  }
+
+  const allowed = new Set(['pending', 'approved', 'rejected'])
+  if (!allowed.has(status)) {
+    return null
+  }
+
+  const existing = await env.ACCOUNT_DB.prepare(`SELECT id, status FROM testimonials WHERE id = ?`)
+    .bind(id)
+    .first()
+  if (!existing) {
+    return null
+  }
+
+  await env.ACCOUNT_DB.prepare(`UPDATE testimonials SET status = ? WHERE id = ?`).bind(status, id).run()
+  return { id, status }
+}
