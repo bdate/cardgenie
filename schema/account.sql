@@ -123,6 +123,18 @@ CREATE TABLE IF NOT EXISTS thank_yous (
   recipient_name TEXT
 );
 
+CREATE TABLE IF NOT EXISTS testimonials (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  name TEXT,
+  rating INTEGER,
+  comment TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  user_id TEXT,
+  phone_e164 TEXT,
+  source TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_credit_events_user_id ON credit_events (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_refunds_payment_id ON refunds (payment_id);
@@ -130,3 +142,5 @@ CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_user_id ON deliveries (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_card_id ON deliveries (card_id);
 CREATE INDEX IF NOT EXISTS idx_thank_yous_user_id ON thank_yous (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_testimonials_status ON testimonials (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_testimonials_user_id ON testimonials (user_id, created_at);

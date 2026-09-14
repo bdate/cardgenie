@@ -511,6 +511,36 @@ export const applyCreditChange = async (env, { userId, phoneE164, balance, delta
   return nextBalance
 }
 
+export const createTestimonial = async (
+  env,
+  { name, rating, comment, source, userId, phoneE164 },
+) => {
+  if (!env.ACCOUNT_DB || !comment) {
+    return null
+  }
+
+  const id = crypto.randomUUID()
+  const now = isoNow()
+  await env.ACCOUNT_DB.prepare(
+    `INSERT INTO testimonials (
+      id, created_at, name, rating, comment, status, user_id, phone_e164, source
+    ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+  )
+    .bind(
+      id,
+      now,
+      name || null,
+      rating == null ? null : rating,
+      comment,
+      userId || null,
+      phoneE164 || null,
+      source,
+    )
+    .run()
+
+  return { id, createdAt: now, status: 'pending' }
+}
+
 export const recordFailedDelivery = async (env, { userId, cardId, method, destination, error }) => {
   if (!env.ACCOUNT_DB || !userId) {
     return

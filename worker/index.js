@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import {
   accountDbReady,
   applyCreditChange,
+  createTestimonial,
   ensureAccountUser,
   getAccountForSession,
   getAccountHistory,
@@ -2104,6 +2105,79 @@ const handleGetAccount = async (request, env) => {
   })
 }
 
+const feedbackCommentMaxLength = 280
+const feedbackNameMaxLength = 80
+const feedbackSources = new Set(['post_send', 'account'])
+
+const handleCreateTestimonial = async (request, env) => {
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Feedback storage is not available right now.' }, 503)
+  }
+
+  try {
+    const body = (await readJson(request)) || {}
+    const name = String(body.name || '')
+      .trim()
+      .slice(0, feedbackNameMaxLength)
+    const comment = String(body.comment || '').trim()
+    const source = String(body.source || '').trim()
+    const rawRating = body.rating
+    let rating = null
+
+    if (rawRating !== undefined && rawRating !== null && rawRating !== '') {
+      const parsed = Number(rawRating)
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+        return jsonResponse(request, env, { error: 'Choose a rating from 1 to 5 stars, or leave it blank.' }, 400)
+      }
+      rating = parsed
+    }
+
+    if (!comment) {
+      return jsonResponse(request, env, { error: 'Write a short note before sending.' }, 400)
+    }
+
+    if (comment.length > feedbackCommentMaxLength) {
+      return jsonResponse(
+        request,
+        env,
+        { error: `Keep your note under ${feedbackCommentMaxLength} characters.` },
+        400,
+      )
+    }
+
+    if (!feedbackSources.has(source)) {
+      return jsonResponse(request, env, { error: 'Unable to save that feedback.' }, 400)
+    }
+
+    const session = await getAccountSession(env, readAccountToken(request))
+    const saved = await createTestimonial(env, {
+      name: name || null,
+      rating,
+      comment,
+      source,
+      userId: session?.userId || null,
+      phoneE164: session?.phoneE164 || null,
+    })
+
+    if (!saved) {
+      return jsonResponse(request, env, { error: 'Unable to save your note right now.' }, 500)
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      id: saved.id,
+      message: 'Thanks for sharing — that means a lot.',
+    })
+  } catch (error) {
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to save your note right now.' },
+      400,
+    )
+  }
+}
+
 const handleDeliverCard = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -2488,6 +2562,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/account/credits') {
     return handleAdjustAccountCredits(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/testimonials') {
+    return handleCreateTestimonial(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/deliver-card') {

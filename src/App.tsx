@@ -134,6 +134,8 @@ const staticPageRedirects: Record<string, string> = {
 const supportEmail = 'support@card-genie.com'
 const supportMailto = `mailto:${supportEmail}`
 const accountSessionStorageKey = 'cardGenieAccountSession'
+const feedbackDismissStorageKey = 'cardGenieFeedbackDismissed'
+const feedbackCommentMaxLength = 280
 const thankYouPresets = [
   { id: 'thank_you', label: 'Thank you for the beautiful card!' },
   { id: 'made_my_day', label: 'This made my day.' },
@@ -970,6 +972,21 @@ function App() {
   const [isVerifyingAccountCode, setIsVerifyingAccountCode] = useState(false)
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
   const [hasSentCurrentCard, setHasSentCurrentCard] = useState(false)
+  const [feedbackDismissed, setFeedbackDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem(feedbackDismissStorageKey) === '1'
+    } catch {
+      return false
+    }
+  })
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false)
+  const [feedbackSource, setFeedbackSource] = useState<'post_send' | 'account'>('post_send')
+  const [feedbackName, setFeedbackName] = useState('')
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null)
+  const [feedbackComment, setFeedbackComment] = useState('')
+  const [feedbackNotice, setFeedbackNotice] = useState('')
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
@@ -1895,6 +1912,187 @@ function App() {
     </div>
   )
 
+  const dismissFeedbackPrompt = () => {
+    try {
+      window.localStorage.setItem(feedbackDismissStorageKey, '1')
+    } catch {
+      // Ignore storage failures; in-memory dismiss still stops nagging this session.
+    }
+    setFeedbackDismissed(true)
+    setFeedbackSubmitted(false)
+    setShowFeedbackForm(false)
+    setFeedbackNotice('')
+  }
+
+  const openFeedbackForm = (source: 'post_send' | 'account') => {
+    setFeedbackSource(source)
+    setShowFeedbackForm(true)
+    setFeedbackNotice('')
+  }
+
+  const submitFeedback = async () => {
+    const comment = feedbackComment.trim()
+    if (!comment) {
+      setFeedbackNotice('Write a short note before sending.')
+      return
+    }
+    if (comment.length > feedbackCommentMaxLength) {
+      setFeedbackNotice(`Keep your note under ${feedbackCommentMaxLength} characters.`)
+      return
+    }
+
+    setIsSubmittingFeedback(true)
+    setFeedbackNotice('')
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (accountSession?.token) {
+        headers.Authorization = `Bearer ${accountSession.token}`
+      }
+
+      const response = await fetch(apiUrl('/api/testimonials'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: feedbackName.trim() || undefined,
+          rating: feedbackRating ?? undefined,
+          comment,
+          source: feedbackSource,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to save your note right now.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save your note right now.')
+      }
+
+      setFeedbackSubmitted(true)
+      setShowFeedbackForm(false)
+      setFeedbackComment('')
+      setFeedbackName('')
+      setFeedbackRating(null)
+      setFeedbackNotice(data.message || 'Thanks for sharing — that means a lot.')
+      try {
+        window.localStorage.setItem(feedbackDismissStorageKey, '1')
+      } catch {
+        // Ignore storage failures.
+      }
+      setFeedbackDismissed(true)
+    } catch (caughtError) {
+      setFeedbackNotice(getFriendlyErrorMessage(caughtError, 'Unable to save your note right now.'))
+    } finally {
+      setIsSubmittingFeedback(false)
+    }
+  }
+
+  const renderFeedbackPrompt = (source: 'post_send' | 'account') => {
+    if (feedbackDismissed && !feedbackSubmitted) {
+      return null
+    }
+
+    if (feedbackSubmitted) {
+      if (source !== feedbackSource) {
+        return null
+      }
+      return (
+        <div className="feedback-prompt">
+          <p>{feedbackNotice || 'Thanks for sharing — that means a lot.'}</p>
+          <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
+            Close
+          </button>
+        </div>
+      )
+    }
+
+    if (!showFeedbackForm || feedbackSource !== source) {
+      return (
+        <div className="feedback-prompt">
+          <p>Enjoying Card Genie? Share a short note about your experience — it helps us improve.</p>
+          <div className="feedback-actions">
+            <button className="secondary-button" type="button" onClick={() => openFeedbackForm(source)}>
+              Share a note
+            </button>
+            <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="feedback-prompt feedback-form">
+        <p>Share a short note about Card Genie. Optional name and stars are welcome.</p>
+        <label>
+          Name <span className="field-optional">(optional)</span>
+          <input
+            value={feedbackName}
+            onChange={(event) => setFeedbackName(event.target.value)}
+            placeholder="Your name"
+            maxLength={80}
+            autoComplete="name"
+          />
+        </label>
+        <fieldset className="feedback-rating">
+          <legend>
+            Stars <span className="field-optional">(optional)</span>
+          </legend>
+          <div className="feedback-stars" role="group" aria-label="Star rating">
+            {[1, 2, 3, 4, 5].map((value) => {
+              const selected = feedbackRating !== null && value <= feedbackRating
+              return (
+                <button
+                  key={value}
+                  className={`feedback-star${selected ? ' is-selected' : ''}`}
+                  type="button"
+                  aria-label={`${value} star${value === 1 ? '' : 's'}`}
+                  aria-pressed={feedbackRating === value}
+                  onClick={() => setFeedbackRating(value)}
+                >
+                  ★
+                </button>
+              )
+            })}
+            {feedbackRating !== null && (
+              <button className="text-action-link" type="button" onClick={() => setFeedbackRating(null)}>
+                Clear
+              </button>
+            )}
+          </div>
+        </fieldset>
+        <label>
+          Your note
+          <textarea
+            value={feedbackComment}
+            onChange={(event) => setFeedbackComment(event.target.value.slice(0, feedbackCommentMaxLength))}
+            placeholder="What worked well? What could be better?"
+            rows={3}
+            maxLength={feedbackCommentMaxLength}
+          />
+          <small>
+            {feedbackComment.length}/{feedbackCommentMaxLength}
+          </small>
+        </label>
+        {feedbackNotice && <div className="field-notice">{feedbackNotice}</div>}
+        <div className="feedback-actions">
+          <button
+            className="primary-button"
+            type="button"
+            disabled={isSubmittingFeedback}
+            aria-busy={isSubmittingFeedback}
+            onClick={() => void submitFeedback()}
+          >
+            {isSubmittingFeedback ? 'Sending...' : 'Send note'}
+          </button>
+          <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
+            Not now
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const refineImage = async () => {
     if (!card) {
       return
@@ -2561,6 +2759,7 @@ function App() {
                 <h3>Printed cards</h3>
                 <p>A mailing address will be saved here when printed cards are offered.</p>
               </div>
+              {renderFeedbackPrompt('account')}
             </>
           )}
         </section>
@@ -3357,6 +3556,7 @@ function App() {
                             Create another card
                           </button>
                         )}
+                        {hasSentCurrentCard && !isGenerating && renderFeedbackPrompt('post_send')}
                       </div>
                     ))}
                 {deliveryLogs.length > 0 && (
