@@ -2133,20 +2133,20 @@ const handleCreateTestimonial = async (request, env) => {
     }
 
     if (!comment) {
-      return jsonResponse(request, env, { error: 'Write a short note before sending.' }, 400)
+      return jsonResponse(request, env, { error: 'Write a short review before sending.' }, 400)
     }
 
     if (comment.length > feedbackCommentMaxLength) {
       return jsonResponse(
         request,
         env,
-        { error: `Keep your note under ${feedbackCommentMaxLength} characters.` },
+        { error: `Keep your review under ${feedbackCommentMaxLength} characters.` },
         400,
       )
     }
 
     if (!feedbackSources.has(source)) {
-      return jsonResponse(request, env, { error: 'Unable to save that feedback.' }, 400)
+      return jsonResponse(request, env, { error: 'Unable to save that review.' }, 400)
     }
 
     const session = await getAccountSession(env, readAccountToken(request))
@@ -2160,19 +2160,19 @@ const handleCreateTestimonial = async (request, env) => {
     })
 
     if (!saved) {
-      return jsonResponse(request, env, { error: 'Unable to save your note right now.' }, 500)
+      return jsonResponse(request, env, { error: 'Unable to save your review right now.' }, 500)
     }
 
     return jsonResponse(request, env, {
       ok: true,
       id: saved.id,
-      message: 'Thanks for sharing — that means a lot.',
+      message: 'Thanks for your review — that means a lot.',
     })
   } catch (error) {
     return jsonResponse(
       request,
       env,
-      { error: error instanceof Error ? error.message : 'Unable to save your note right now.' },
+      { error: error instanceof Error ? error.message : 'Unable to save your review right now.' },
       400,
     )
   }

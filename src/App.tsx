@@ -1913,18 +1913,21 @@ function App() {
   )
 
   const dismissFeedbackPrompt = () => {
-    try {
-      window.localStorage.setItem(feedbackDismissStorageKey, '1')
-    } catch {
-      // Ignore storage failures; in-memory dismiss still stops nagging this session.
-    }
+    // Session-only hide — do not permanently lock people out of sharing feedback.
     setFeedbackDismissed(true)
     setFeedbackSubmitted(false)
     setShowFeedbackForm(false)
     setFeedbackNotice('')
   }
 
+  const cancelFeedbackForm = () => {
+    setShowFeedbackForm(false)
+    setFeedbackNotice('')
+  }
+
   const openFeedbackForm = (source: 'post_send' | 'account') => {
+    setFeedbackDismissed(false)
+    setFeedbackSubmitted(false)
     setFeedbackSource(source)
     setShowFeedbackForm(true)
     setFeedbackNotice('')
@@ -1933,11 +1936,11 @@ function App() {
   const submitFeedback = async () => {
     const comment = feedbackComment.trim()
     if (!comment) {
-      setFeedbackNotice('Write a short note before sending.')
+      setFeedbackNotice('Write a short review before sending.')
       return
     }
     if (comment.length > feedbackCommentMaxLength) {
-      setFeedbackNotice(`Keep your note under ${feedbackCommentMaxLength} characters.`)
+      setFeedbackNotice(`Keep your review under ${feedbackCommentMaxLength} characters.`)
       return
     }
 
@@ -1962,9 +1965,9 @@ function App() {
           source: feedbackSource,
         }),
       })
-      const data = await getApiJson(response, 'Unable to save your note right now.')
+      const data = await getApiJson(response, 'Unable to save your review right now.')
       if (!response.ok) {
-        throw new Error(data.error || 'Unable to save your note right now.')
+        throw new Error(data.error || 'Unable to save your review right now.')
       }
 
       setFeedbackSubmitted(true)
@@ -1972,7 +1975,7 @@ function App() {
       setFeedbackComment('')
       setFeedbackName('')
       setFeedbackRating(null)
-      setFeedbackNotice(data.message || 'Thanks for sharing — that means a lot.')
+      setFeedbackNotice(data.message || 'Thanks for your review — that means a lot.')
       try {
         window.localStorage.setItem(feedbackDismissStorageKey, '1')
       } catch {
@@ -1980,26 +1983,36 @@ function App() {
       }
       setFeedbackDismissed(true)
     } catch (caughtError) {
-      setFeedbackNotice(getFriendlyErrorMessage(caughtError, 'Unable to save your note right now.'))
+      setFeedbackNotice(getFriendlyErrorMessage(caughtError, 'Unable to save your review right now.'))
     } finally {
       setIsSubmittingFeedback(false)
     }
   }
 
   const renderFeedbackPrompt = (source: 'post_send' | 'account') => {
-    if (feedbackDismissed && !feedbackSubmitted) {
-      return null
-    }
-
     if (feedbackSubmitted) {
       if (source !== feedbackSource) {
         return null
       }
       return (
         <div className="feedback-prompt">
-          <p>{feedbackNotice || 'Thanks for sharing — that means a lot.'}</p>
+          <p>{feedbackNotice || 'Thanks for your review — that means a lot.'}</p>
           <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
             Close
+          </button>
+        </div>
+      )
+    }
+
+    // After a soft dismiss, keep a quiet re-entry on My account only.
+    if (feedbackDismissed && !showFeedbackForm) {
+      if (source !== 'account') {
+        return null
+      }
+      return (
+        <div className="feedback-prompt">
+          <button className="text-action-link" type="button" onClick={() => openFeedbackForm('account')}>
+            Leave a review
           </button>
         </div>
       )
@@ -2008,10 +2021,10 @@ function App() {
     if (!showFeedbackForm || feedbackSource !== source) {
       return (
         <div className="feedback-prompt">
-          <p>Enjoying Card Genie? Share a short note about your experience — it helps us improve.</p>
+          <p>Please share your feedback.</p>
           <div className="feedback-actions">
             <button className="secondary-button" type="button" onClick={() => openFeedbackForm(source)}>
-              Share a note
+              Leave a review
             </button>
             <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
               Not now
@@ -2023,7 +2036,7 @@ function App() {
 
     return (
       <div className="feedback-prompt feedback-form">
-        <p>Share a short note about Card Genie. Optional name and stars are welcome.</p>
+        <p>Please share your feedback.</p>
         <label>
           Name <span className="field-optional">(optional)</span>
           <input
@@ -2062,7 +2075,7 @@ function App() {
           </div>
         </fieldset>
         <label>
-          Your note
+          Your review
           <textarea
             value={feedbackComment}
             onChange={(event) => setFeedbackComment(event.target.value.slice(0, feedbackCommentMaxLength))}
@@ -2083,10 +2096,10 @@ function App() {
             aria-busy={isSubmittingFeedback}
             onClick={() => void submitFeedback()}
           >
-            {isSubmittingFeedback ? 'Sending...' : 'Send note'}
+            {isSubmittingFeedback ? 'Sending...' : 'Send review'}
           </button>
-          <button className="text-action-link" type="button" onClick={dismissFeedbackPrompt}>
-            Not now
+          <button className="text-action-link" type="button" onClick={cancelFeedbackForm}>
+            Cancel
           </button>
         </div>
       </div>
