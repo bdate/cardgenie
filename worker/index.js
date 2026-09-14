@@ -2028,7 +2028,14 @@ const handleVerifyAccountOtp = async (request, env) => {
       phoneE164,
       email: user.email || '',
       creditBalance: user.creditBalance ?? 2,
-      message: existingUser || account?.isNew === false ? 'Welcome back.' : 'Your account is ready.',
+      isNew: account?.isNew === true,
+      phoneVerifyBonusCredits: account?.isNew ? account.phoneVerifyBonusCredits || 2 : 0,
+      message:
+        account?.isNew === true
+          ? 'Your number is confirmed. We added 2 credits for registering.'
+          : existingUser || account?.isNew === false
+            ? 'Welcome back.'
+            : 'Your account is ready.',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to confirm that code.'

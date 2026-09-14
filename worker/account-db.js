@@ -1,4 +1,6 @@
 const starterCredits = 2
+const phoneVerifyBonusCredits = 2
+const newAccountCredits = starterCredits + phoneVerifyBonusCredits
 
 const isoNow = () => new Date().toISOString()
 
@@ -67,12 +69,23 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
         id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
         credit_balance, credits_granted, last_client, updated_at
       ) VALUES (?, ?, ?, ?, ?, 'active', 'web', ?, ?, ?, ?)`,
-    ).bind(userId, phoneE164, now, now, now, starterCredits, starterCredits, client, now),
+    ).bind(userId, phoneE164, now, now, now, newAccountCredits, newAccountCredits, client, now),
     env.ACCOUNT_DB.prepare(
       `INSERT INTO credit_events (
         id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
       ) VALUES (?, ?, ?, 'grant', 'signup_starter', ?, ?, 'system', 'Starter credits')`,
     ).bind(crypto.randomUUID(), userId, now, starterCredits, starterCredits),
+    env.ACCOUNT_DB.prepare(
+      `INSERT INTO credit_events (
+        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
+      ) VALUES (?, ?, ?, 'grant', 'phone_verify_bonus', ?, ?, 'system', 'Bonus for confirming your mobile number')`,
+    ).bind(
+      crypto.randomUUID(),
+      userId,
+      now,
+      phoneVerifyBonusCredits,
+      newAccountCredits,
+    ),
   ])
 
   return {
@@ -80,12 +93,16 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
       id: userId,
       phone_e164: phoneE164,
       email: '',
-      credit_balance: starterCredits,
+      credit_balance: newAccountCredits,
+      credits_granted: newAccountCredits,
+      credits_purchased: 0,
+      credits_spent: 0,
       status: 'active',
       created_at: now,
       last_used_at: now,
     }),
     isNew: true,
+    phoneVerifyBonusCredits,
   }
 }
 
@@ -138,6 +155,7 @@ export const ensureAccountUser = async (env, { userId, phoneE164 }) => {
 const creditReasonLabel = (reason) => {
   const labels = {
     signup_starter: 'Starter credits',
+    phone_verify_bonus: 'Phone confirmation bonus',
     demo_purchase: 'Credit purchase',
     balance_sync: 'Credits added',
     cover_revise: 'Cover change',

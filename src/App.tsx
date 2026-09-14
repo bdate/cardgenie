@@ -2169,11 +2169,20 @@ function App() {
         rememberCredits(parseCreditBalance(data.creditBalance) as number)
       }
       setAccountCode('')
+      const bonusCredits = Number(data.phoneVerifyBonusCredits) || 0
+      const registrationMessage =
+        data.isNew && bonusCredits > 0
+          ? `Your number is confirmed. We added ${bonusCredits} credits for registering.`
+          : data.message || 'Your number is confirmed. You can send the card.'
       if (signingInFromAccount) {
         setAccountHistoryError('')
+        setCreditNotice(registrationMessage)
         await loadAccountHistory(token)
       } else {
-        setDeliveryNotice(data.message || 'Your number is confirmed. You can send the card.')
+        setDeliveryNotice(registrationMessage)
+        if (data.isNew && bonusCredits > 0) {
+          setCreditNotice(`+${bonusCredits} credits for confirming your mobile number.`)
+        }
       }
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Unable to confirm that code.'
@@ -2353,7 +2362,10 @@ function App() {
             <div className="credit-wallet" aria-label="Wish balance">
               <div>
                 <strong>{credits} credits in your account</strong>
-                <small>Creating a card is free. Sending uses 3 credits. Cover and AI text changes use 1 credit.</small>
+                <small>
+                  Creating a card is free. You start with 2 credits. Confirm your mobile number to get 2 more.
+                  Sending uses 3 credits. Cover and AI text changes use 1 credit.
+                </small>
               </div>
               <div className="credit-buy">
                 <div className="credit-buy-actions">
@@ -2411,7 +2423,8 @@ function App() {
             <div className="account-gate">
               <span className="field-title">Sign in</span>
               <p className="field-help">
-                Enter your mobile number. We’ll text a one-time code so you can open this account.
+                Enter your mobile number. We’ll text a one-time code so you can open this account. New accounts get 2
+                extra credits when you confirm.
               </p>
               <label>
                 Mobile number
@@ -3268,7 +3281,8 @@ function App() {
                       <div className="account-gate">
                         <span className="field-title">Your mobile number</span>
                         <p className="field-help">
-                          Confirm your number to send. We’ll text a one-time code. Recipients will not see this number.
+                          Confirm your number to send. We’ll text a one-time code. New accounts get 2 extra credits when
+                          you confirm. Recipients will not see this number.
                         </p>
                         <label>
                           Mobile number
