@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import Stripe from 'stripe'
 import {
   accountDbReady,
   applyCreditChange,
@@ -12,6 +13,7 @@ import {
   isAdminPhone,
   listTestimonials,
   recordFailedDelivery,
+  recordStripeCreditPurchase,
   recordSuccessfulDelivery,
   recordThankYou,
   updateTestimonialStatus,
@@ -21,6 +23,30 @@ import {
 const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 const fallbackCardStore = new Map()
+
+/** Test/sandbox Stripe Price IDs for credit packs. */
+const creditPacks = [
+  { id: '10', credits: 10, price: 5, priceId: 'price_1UFijH1RZZjTCXXgDfrxCCmr' },
+  { id: '25', credits: 25, price: 10, priceId: 'price_1UFikM1RZZjTCXXgOI3yQ5Rd' },
+  { id: '60', credits: 60, price: 20, priceId: 'price_1UFil01RZZjTCXXgmSMtDFmF' },
+]
+
+const creditPackById = new Map(creditPacks.map((pack) => [pack.id, pack]))
+const creditPackByPriceId = new Map(creditPacks.map((pack) => [pack.priceId, pack]))
+
+const stripeApiVersion = '2026-08-26.dahlia'
+
+const getStripe = (env) => {
+  const secretKey = String(env.STRIPE_SECRET_KEY || '').trim()
+  if (!secretKey) {
+    return null
+  }
+
+  return new Stripe(secretKey, {
+    apiVersion: stripeApiVersion,
+    httpClient: Stripe.createFetchHttpClient(),
+  })
+}
 
 const buildCopyPrompt = (details, refinement = '', messageKeyDetails) => {
   const personalDetails =
@@ -778,6 +804,14 @@ const createCardId = () => crypto.randomUUID()
 const getPublicAppUrl = (request, env) => {
   const requestUrl = new URL(request.url)
   return (env.PUBLIC_APP_URL || request.headers.get('Origin') || requestUrl.origin).replace(/\/$/, '')
+}
+
+const getCheckoutReturnBaseUrl = (request, env) => {
+  const origin = request.headers.get('Origin')
+  if (origin && getAllowedOrigins(env).includes(origin)) {
+    return origin.replace(/\/$/, '')
+  }
+  return getPublicAppUrl(request, env)
 }
 
 const getShareBaseUrl = (request, env) =>
@@ -2055,14 +2089,22 @@ const handleAdjustAccountCredits = async (request, env) => {
   }
 
   const { balance, add, reason } = (await readJson(request)) || {}
+  const reasonKey = String(reason || 'adjustment')
+  const addAmount = Number(add)
+  const isPurchaseGrant = Number.isFinite(addAmount) && addAmount > 0
+  const isDevSet = reasonKey === 'dev_set' || reasonKey === 'demo_purchase'
+  if ((isPurchaseGrant || isDevSet) && !isAdminPhone(session.phoneE164)) {
+    return jsonResponse(request, env, { error: 'Use Buy more credits to purchase a pack.' }, 403)
+  }
+
   const nextBalance = await applyCreditChange(env, {
     userId: session.userId,
     phoneE164: session.phoneE164,
     balance: Number.isFinite(Number(balance)) ? Number(balance) : undefined,
-    delta: Number.isFinite(Number(add)) ? Number(add) : undefined,
-    reason: String(reason || 'adjustment'),
-    kind: Number(add) > 0 ? 'purchase' : 'adjustment',
-    note: 'Demo credit change. No payment was taken.',
+    delta: Number.isFinite(addAmount) ? addAmount : undefined,
+    reason: reasonKey,
+    kind: isPurchaseGrant ? 'purchase' : 'adjustment',
+    note: isDevSet ? 'Demo credit change. No payment was taken.' : '',
   })
 
   if (nextBalance === null) {
@@ -2070,6 +2112,167 @@ const handleAdjustAccountCredits = async (request, env) => {
   }
 
   return jsonResponse(request, env, { ok: true, creditBalance: nextBalance })
+}
+
+const resolveCreditPack = ({ packId, priceId } = {}) => {
+  if (priceId && creditPackByPriceId.has(String(priceId))) {
+    return creditPackByPriceId.get(String(priceId))
+  }
+  if (packId && creditPackById.has(String(packId))) {
+    return creditPackById.get(String(packId))
+  }
+  return null
+}
+
+const handleCreateCheckoutSession = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number before buying credits.' }, 401)
+  }
+
+  const stripe = getStripe(env)
+  if (!stripe) {
+    return jsonResponse(request, env, { error: 'Checkout is not configured yet.' }, 503)
+  }
+
+  const body = (await readJson(request)) || {}
+  const pack = resolveCreditPack(body)
+  if (!pack) {
+    return jsonResponse(request, env, { error: 'Choose a valid credit pack.' }, 400)
+  }
+
+  const appUrl = getCheckoutReturnBaseUrl(request, env)
+  const integrationSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+
+  try {
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price: pack.priceId, quantity: 1 }],
+      success_url: `${appUrl}/?billing=success`,
+      cancel_url: `${appUrl}/?billing=cancel`,
+      client_reference_id: session.userId,
+      metadata: {
+        userId: session.userId,
+        phoneE164: session.phoneE164 || '',
+        credits: String(pack.credits),
+        packId: pack.id,
+        priceId: pack.priceId,
+      },
+      integration_identifier: `card-genie-credits-${integrationSuffix}`,
+    })
+
+    if (!checkoutSession.url) {
+      return jsonResponse(request, env, { error: 'Unable to start Stripe Checkout.' }, 500)
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      url: checkoutSession.url,
+      sessionId: checkoutSession.id,
+    })
+  } catch (error) {
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to start Stripe Checkout.' },
+      500,
+    )
+  }
+}
+
+const grantCreditsFromCheckoutSession = async (env, checkoutSession) => {
+  const metadata = checkoutSession?.metadata || {}
+  const pack =
+    resolveCreditPack({
+      packId: metadata.packId,
+      priceId: metadata.priceId || checkoutSession?.metadata?.priceId,
+    }) ||
+    resolveCreditPack({
+      priceId: checkoutSession?.line_items?.data?.[0]?.price?.id,
+    })
+
+  const userId = String(metadata.userId || checkoutSession.client_reference_id || '').trim()
+  const phoneE164 = String(metadata.phoneE164 || '').trim()
+  const credits = Number(metadata.credits) || pack?.credits || 0
+  const stripeCheckoutId = checkoutSession.id
+
+  if (!userId || !credits || !stripeCheckoutId) {
+    console.error('Stripe checkout completed without grantable metadata.', {
+      userId,
+      credits,
+      stripeCheckoutId,
+    })
+    return { ok: false, error: 'missing_metadata' }
+  }
+
+  const paymentIntent =
+    typeof checkoutSession.payment_intent === 'string'
+      ? checkoutSession.payment_intent
+      : checkoutSession.payment_intent?.id || null
+  const customer =
+    typeof checkoutSession.customer === 'string'
+      ? checkoutSession.customer
+      : checkoutSession.customer?.id || null
+
+  const result = await recordStripeCreditPurchase(env, {
+    userId,
+    phoneE164,
+    credits,
+    amountCents: checkoutSession.amount_total ?? (pack ? pack.price * 100 : 0),
+    currency: checkoutSession.currency || 'usd',
+    stripeCheckoutId,
+    stripePaymentIntentId: paymentIntent,
+    stripeCustomerId: customer,
+    receiptEmail: checkoutSession.customer_details?.email || checkoutSession.customer_email || null,
+    packId: pack?.id || metadata.packId || '',
+    priceId: pack?.priceId || metadata.priceId || '',
+  })
+
+  return { ok: true, ...result }
+}
+
+const handleStripeWebhook = async (request, env) => {
+  const stripe = getStripe(env)
+  const webhookSecret = String(env.STRIPE_WEBHOOK_SECRET || '').trim()
+  if (!stripe || !webhookSecret) {
+    return jsonResponse(request, env, { error: 'Webhook is not configured.' }, 503)
+  }
+
+  const signature = request.headers.get('stripe-signature')
+  if (!signature) {
+    return jsonResponse(request, env, { error: 'Missing Stripe signature.' }, 400)
+  }
+
+  const rawBody = await request.text()
+  let event
+  try {
+    event = await stripe.webhooks.constructEventAsync(
+      rawBody,
+      signature,
+      webhookSecret,
+      undefined,
+      Stripe.createSubtleCryptoProvider(),
+    )
+  } catch (error) {
+    console.error('Stripe webhook signature verification failed.', error)
+    return jsonResponse(request, env, { error: 'Invalid Stripe signature.' }, 400)
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      const checkoutSession = event.data.object
+      const paymentStatus = checkoutSession.payment_status
+      if (paymentStatus === 'paid' || paymentStatus === 'no_payment_required' || event.type === 'checkout.session.async_payment_succeeded') {
+        await grantCreditsFromCheckoutSession(env, checkoutSession)
+      }
+    }
+  } catch (error) {
+    console.error('Stripe webhook processing failed.', error)
+    return jsonResponse(request, env, { error: 'Unable to process webhook.' }, 500)
+  }
+
+  return jsonResponse(request, env, { received: true })
 }
 
 const handleGetAccountHistory = async (request, env) => {
@@ -2652,6 +2855,14 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/account/credits') {
     return handleAdjustAccountCredits(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/billing/checkout-session') {
+    return handleCreateCheckoutSession(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/billing/webhook') {
+    return handleStripeWebhook(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/testimonials') {

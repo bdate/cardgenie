@@ -29,6 +29,19 @@ npx wrangler secret put TWILIO_API_KEY_SECRET
 npx wrangler secret put TWILIO_FROM_NUMBER
 ```
 
+For Stripe Checkout credit packs:
+
+```bash
+npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put STRIPE_WEBHOOK_SECRET
+```
+
+In the Stripe Dashboard (test mode), add a webhook endpoint for `checkout.session.completed` (and optionally `checkout.session.async_payment_succeeded`) pointing at:
+
+```text
+https://cardgenie-api.<your-cloudflare-subdomain>.workers.dev/api/billing/webhook
+```
+
 Email delivery uses Twilio SendGrid when `SENDGRID_API_KEY` is configured. Postmark can still be used as an optional fallback with `POSTMARK_SERVER_TOKEN`.
 
 Set `PUBLIC_APP_URL` to the production frontend URL so email and text links point at the app:

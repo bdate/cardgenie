@@ -85,9 +85,9 @@ const coverRevisionCost = 1
 const aiCopyCost = 1
 const adminPhoneNumbers = new Set(['+19259637453'])
 const creditPacks = [
-  { id: '10', credits: 10, price: 5 },
-  { id: '25', credits: 25, price: 10 },
-  { id: '60', credits: 60, price: 20 },
+  { id: '10', credits: 10, price: 5, priceId: 'price_1UFijH1RZZjTCXXgDfrxCCmr' },
+  { id: '25', credits: 25, price: 10, priceId: 'price_1UFikM1RZZjTCXXgOI3yQ5Rd' },
+  { id: '60', credits: 60, price: 20, priceId: 'price_1UFil01RZZjTCXXgmSMtDFmF' },
 ] as const
 
 const parseCreditBalance = (value: unknown) => {
@@ -1148,6 +1148,76 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const billing = params.get('billing')
+    if (!billing) {
+      return
+    }
+
+    const clearBillingParam = () => {
+      params.delete('billing')
+      const nextQuery = params.toString()
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`
+      window.history.replaceState({}, '', nextUrl)
+    }
+
+    if (billing === 'cancel') {
+      setCreditNotice('Checkout canceled. No payment was taken.')
+      setShowCreditMenu(false)
+      clearBillingParam()
+      return
+    }
+
+    if (billing !== 'success') {
+      clearBillingParam()
+      return
+    }
+
+    setCreditNotice('Payment received. Updating your credits…')
+    setShowCreditMenu(false)
+    clearBillingParam()
+
+    const refreshAfterPurchase = async () => {
+      const raw = window.localStorage.getItem(accountSessionStorageKey)
+      let token = ''
+      try {
+        token = raw ? String(JSON.parse(raw)?.token || '') : ''
+      } catch {
+        token = ''
+      }
+      if (!token) {
+        setCreditNotice('Payment received. Confirm your mobile number to see your updated credits.')
+        return
+      }
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          const response = await fetch(apiUrl('/api/account'), {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (response.ok) {
+            const data = await getApiJson(response, 'Unable to refresh credits.')
+            const accountCredits = parseCreditBalance(data.creditBalance)
+            if (accountCredits !== null) {
+              setCredits(accountCredits)
+              window.localStorage.setItem(creditStorageKey, String(accountCredits))
+              setCreditNotice('Thanks! Your credits are updated.')
+              return
+            }
+          }
+        } catch {
+          // Retry while the webhook may still be settling.
+        }
+        await sleep(1200)
+      }
+
+      setCreditNotice('Payment received. Refresh the page if your credits are not updated yet.')
+    }
+
+    void refreshAfterPurchase()
+  }, [])
+
+  useEffect(() => {
     if (step === 'front') {
       setHasViewedFront(true)
     }
@@ -1703,14 +1773,39 @@ function App() {
     void openAccountPage()
   }
 
-  const buyCreditPack = (pack: (typeof creditPacks)[number]) => {
-    const nextCredits = rememberCredits(credits + pack.credits)
+  const buyCreditPack = async (pack: (typeof creditPacks)[number]) => {
+    if (!accountSession?.token) {
+      setShowCreditMenu(false)
+      setCreditNotice('Confirm your mobile number to buy credits.')
+      setDeliveryNotice('')
+      setRefinementNotice('')
+      void openAccountPage()
+      return
+    }
+
     setShowCreditMenu(false)
-    setCreditNotice(`Added ${pack.credits} credits for $${pack.price}. No payment was taken.`)
+    setCreditNotice('Opening secure checkout…')
     setDeliveryNotice('')
     setRefinementNotice('')
-    void syncAccountCredits({ add: pack.credits, reason: 'demo_purchase' })
-    return nextCredits
+
+    try {
+      const response = await fetch(apiUrl('/api/billing/checkout-session'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accountSession.token}`,
+        },
+        body: JSON.stringify({ packId: pack.id, priceId: pack.priceId }),
+      })
+      const data = await getApiJson(response, 'Unable to start checkout.')
+      if (!response.ok || !data.url) {
+        setCreditNotice(String(data.error || 'Unable to start checkout.'))
+        return
+      }
+      window.location.assign(String(data.url))
+    } catch (caughtError) {
+      setCreditNotice(caughtError instanceof Error ? caughtError.message : 'Unable to start checkout.')
+    }
   }
 
   const setCreditBalance = (balance: number) => {
@@ -2719,24 +2814,31 @@ function App() {
                 {showCreditMenu && (
                   <div className="credit-menu" role="menu" aria-label="Credit packs">
                     {creditPacks.map((pack) => (
-                      <button key={pack.id} type="button" role="menuitem" onClick={() => buyCreditPack(pack)}>
+                      <button
+                        key={pack.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void buyCreditPack(pack)}
+                      >
                         {pack.credits} credits — ${pack.price}
                       </button>
                     ))}
                   </div>
                 )}
-                <p className="credit-dev-links">
-                  Set credits:
-                  <button type="button" onClick={() => setCreditBalance(0)}>
-                    0
-                  </button>
-                  <button type="button" onClick={() => setCreditBalance(1)}>
-                    1
-                  </button>
-                  <button type="button" onClick={() => setCreditBalance(2)}>
-                    2
-                  </button>
-                </p>
+                {isAdmin && (
+                  <p className="credit-dev-links">
+                    Set credits:
+                    <button type="button" onClick={() => setCreditBalance(0)}>
+                      0
+                    </button>
+                    <button type="button" onClick={() => setCreditBalance(1)}>
+                      1
+                    </button>
+                    <button type="button" onClick={() => setCreditBalance(2)}>
+                      2
+                    </button>
+                  </p>
+                )}
               </div>
             </div>
           </div>

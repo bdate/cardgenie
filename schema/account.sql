@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS testimonials (
 
 CREATE INDEX IF NOT EXISTS idx_credit_events_user_id ON credit_events (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments (user_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_stripe_checkout_id ON payments (stripe_checkout_id);
 CREATE INDEX IF NOT EXISTS idx_refunds_payment_id ON refunds (payment_id);
 CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_user_id ON deliveries (user_id, created_at);

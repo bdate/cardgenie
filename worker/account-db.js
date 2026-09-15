@@ -157,6 +157,7 @@ const creditReasonLabel = (reason) => {
     signup_starter: 'Starter credits',
     phone_verify_bonus: 'Phone confirmation bonus',
     demo_purchase: 'Credit purchase',
+    stripe_purchase: 'Credit purchase',
     balance_sync: 'Credits added',
     cover_revise: 'Cover change',
     ai_copy: 'AI text change',
@@ -465,7 +466,10 @@ export const recordSuccessfulDelivery = async (env, { userId, phoneE164, record,
   await env.ACCOUNT_DB.batch(statements)
 }
 
-export const applyCreditChange = async (env, { userId, phoneE164, balance, delta, reason, kind, note }) => {
+export const applyCreditChange = async (
+  env,
+  { userId, phoneE164, balance, delta, reason, kind, note, paymentId, amountPaidCents },
+) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
   }
@@ -481,6 +485,9 @@ export const applyCreditChange = async (env, { userId, phoneE164, balance, delta
   const creditsDelta = nextBalance - current
   const now = isoNow()
   const eventKind = kind || (creditsDelta >= 0 ? 'grant' : 'adjustment')
+  const paidCents = Number.isFinite(Number(amountPaidCents)) ? Math.max(0, Math.floor(Number(amountPaidCents))) : 0
+  const isPurchase = eventKind === 'purchase' || reason === 'stripe_purchase' || reason === 'balance_sync'
+  const markPurchase = isPurchase && creditsDelta > 0 ? 1 : 0
 
   await env.ACCOUNT_DB.batch([
     env.ACCOUNT_DB.prepare(
@@ -489,26 +496,138 @@ export const applyCreditChange = async (env, { userId, phoneE164, balance, delta
            credits_granted = credits_granted + ?,
            credits_purchased = credits_purchased + ?,
            credits_spent = credits_spent + ?,
+           amount_paid_cents = amount_paid_cents + ?,
+           first_purchase_at = CASE WHEN ? = 1 THEN COALESCE(first_purchase_at, ?) ELSE first_purchase_at END,
+           last_purchase_at = CASE WHEN ? = 1 THEN ? ELSE last_purchase_at END,
            last_used_at = ?,
            updated_at = ?
        WHERE id = ?`,
     ).bind(
       nextBalance,
-      creditsDelta > 0 && eventKind !== 'purchase' ? creditsDelta : 0,
-      creditsDelta > 0 && (eventKind === 'purchase' || reason === 'balance_sync') ? creditsDelta : 0,
+      creditsDelta > 0 && !isPurchase ? creditsDelta : 0,
+      creditsDelta > 0 && isPurchase ? creditsDelta : 0,
       creditsDelta < 0 ? Math.abs(creditsDelta) : 0,
+      markPurchase ? paidCents : 0,
+      markPurchase,
+      now,
+      markPurchase,
+      now,
       now,
       now,
       userId,
     ),
     env.ACCOUNT_DB.prepare(
       `INSERT INTO credit_events (
-        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?)`,
-    ).bind(crypto.randomUUID(), userId, now, eventKind, reason || 'adjustment', creditsDelta, nextBalance, note || ''),
+        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, payment_id, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?, ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      userId,
+      now,
+      eventKind,
+      reason || 'adjustment',
+      creditsDelta,
+      nextBalance,
+      paymentId || null,
+      note || '',
+    ),
   ])
 
   return nextBalance
+}
+
+export const findPaymentByStripeCheckoutId = async (env, stripeCheckoutId) => {
+  if (!env.ACCOUNT_DB || !stripeCheckoutId) {
+    return null
+  }
+
+  return (
+    (await env.ACCOUNT_DB.prepare(
+      `SELECT id, status, credits_purchased, user_id
+       FROM payments
+       WHERE stripe_checkout_id = ?
+       LIMIT 1`,
+    )
+      .bind(stripeCheckoutId)
+      .first()) || null
+  )
+}
+
+export const recordStripeCreditPurchase = async (
+  env,
+  {
+    userId,
+    phoneE164,
+    credits,
+    amountCents,
+    currency = 'usd',
+    stripeCheckoutId,
+    stripePaymentIntentId,
+    stripeCustomerId,
+    receiptEmail,
+    packId,
+    priceId,
+  },
+) => {
+  if (!env.ACCOUNT_DB || !userId || !stripeCheckoutId) {
+    return null
+  }
+
+  const existing = await findPaymentByStripeCheckoutId(env, stripeCheckoutId)
+  if (existing) {
+    return { alreadyProcessed: true, paymentId: existing.id, creditBalance: null }
+  }
+
+  const paymentId = crypto.randomUUID()
+  const now = isoNow()
+  const creditAmount = Math.max(0, Math.floor(Number(credits) || 0))
+  const paidCents = Math.max(0, Math.floor(Number(amountCents) || 0))
+
+  try {
+    await env.ACCOUNT_DB.prepare(
+      `INSERT INTO payments (
+        id, user_id, created_at, paid_at, status, credits_purchased, amount_cents,
+        amount_refunded_cents, currency, stripe_checkout_id, stripe_payment_intent_id,
+        stripe_customer_id, receipt_email, failure_code
+      ) VALUES (?, ?, ?, ?, 'paid', ?, ?, 0, ?, ?, ?, ?, ?, NULL)`,
+    )
+      .bind(
+        paymentId,
+        userId,
+        now,
+        now,
+        creditAmount,
+        paidCents,
+        currency || 'usd',
+        stripeCheckoutId,
+        stripePaymentIntentId || null,
+        stripeCustomerId || null,
+        receiptEmail || null,
+      )
+      .run()
+  } catch (error) {
+    const raced = await findPaymentByStripeCheckoutId(env, stripeCheckoutId)
+    if (raced) {
+      return { alreadyProcessed: true, paymentId: raced.id, creditBalance: null }
+    }
+    throw error
+  }
+
+  const note = `Stripe checkout ${stripeCheckoutId}${packId ? ` · pack ${packId}` : ''}${
+    priceId ? ` · ${priceId}` : ''
+  }`
+  const creditBalance = await applyCreditChange(env, {
+    userId,
+    phoneE164,
+    delta: creditAmount,
+    reason: 'stripe_purchase',
+    kind: 'purchase',
+    note,
+    paymentId,
+    amountPaidCents: paidCents,
+  })
+
+  return { alreadyProcessed: false, paymentId, creditBalance }
 }
 
 export const createTestimonial = async (
