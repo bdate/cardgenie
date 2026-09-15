@@ -361,6 +361,17 @@ label {
   font-size: 0.78rem;
   font-weight: 650;
   letter-spacing: 0.02em;
+  transition: color 160ms ease;
+}
+
+label:focus-within {
+  color: #c97816;
+}
+
+label.sms-consent:focus-within,
+label.sender-copy:focus-within,
+.thank-you-presets label:focus-within {
+  color: inherit;
 }
 
 .style-field {
@@ -377,6 +388,11 @@ label {
 
 .style-field-header label {
   margin: 0;
+  transition: color 160ms ease;
+}
+
+.style-field:focus-within .style-field-header label {
+  color: #c97816;
 }
 
 .style-lookbook-link {
@@ -596,11 +612,16 @@ textarea:focus {
   gap: 3px;
 }
 
+.reference-photos-field:focus-within .field-title {
+  color: #c97816;
+}
+
 .field-title {
   color: var(--gcu-ink);
   font-size: 0.78rem;
   font-weight: 650;
   letter-spacing: 0.02em;
+  transition: color 160ms ease;
 }
 
 .field-help {
