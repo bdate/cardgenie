@@ -613,9 +613,14 @@ export const recordStripeCreditPurchase = async (
     throw error
   }
 
-  const note = `Stripe checkout ${stripeCheckoutId}${packId ? ` · pack ${packId}` : ''}${
-    priceId ? ` · ${priceId}` : ''
-  }`
+  const dollars = (paidCents / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: (currency || 'usd').toUpperCase(),
+  })
+  const note =
+    creditAmount > 0
+      ? `${creditAmount} credit pack · ${dollars}`
+      : `Credit pack · ${dollars}`
   const creditBalance = await applyCreditChange(env, {
     userId,
     phoneE164,

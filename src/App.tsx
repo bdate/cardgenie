@@ -1585,10 +1585,19 @@ function App() {
 
   const creditEventDetail = (event: {
     note?: string
+    label?: string
+    creditsDelta?: number
     balanceAfter?: number
   }) => {
-    if (event.note?.trim()) {
-      return event.note.trim()
+    const note = event.note?.trim() || ''
+    if (note) {
+      // Soften older Stripe notes that stored raw session/price IDs.
+      const stripeMatch = note.match(/^Stripe checkout\s+\S+(?:\s·\s*pack\s+(\d+))?/i)
+      if (stripeMatch) {
+        const packCredits = stripeMatch[1] || (event.creditsDelta && event.creditsDelta > 0 ? String(event.creditsDelta) : '')
+        return packCredits ? `${packCredits} credit pack` : 'Credit pack purchase'
+      }
+      return note
     }
     if (typeof event.balanceAfter === 'number') {
       return `Balance ${event.balanceAfter}`
