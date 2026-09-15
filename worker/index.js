@@ -24,11 +24,11 @@ const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 const fallbackCardStore = new Map()
 
-/** Test/sandbox Stripe Price IDs for credit packs. */
+/** Live Stripe Price IDs for credit packs. */
 const creditPacks = [
-  { id: '10', credits: 10, price: 5, priceId: 'price_1UFijH1RZZjTCXXgDfrxCCmr' },
-  { id: '25', credits: 25, price: 10, priceId: 'price_1UFikM1RZZjTCXXgOI3yQ5Rd' },
-  { id: '60', credits: 60, price: 20, priceId: 'price_1UFil01RZZjTCXXgmSMtDFmF' },
+  { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
+  { id: '25', credits: 25, price: 10, priceId: 'price_1UFlL11GfvmAXQBhBGbdzji0' },
+  { id: '60', credits: 60, price: 20, priceId: 'price_1UFlKl1GfvmAXQBho0xWW6JO' },
 ]
 
 const creditPackById = new Map(creditPacks.map((pack) => [pack.id, pack]))

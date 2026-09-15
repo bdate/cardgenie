@@ -85,9 +85,9 @@ const coverRevisionCost = 1
 const aiCopyCost = 1
 const adminPhoneNumbers = new Set(['+19259637453'])
 const creditPacks = [
-  { id: '10', credits: 10, price: 5, priceId: 'price_1UFijH1RZZjTCXXgDfrxCCmr' },
-  { id: '25', credits: 25, price: 10, priceId: 'price_1UFikM1RZZjTCXXgOI3yQ5Rd' },
-  { id: '60', credits: 60, price: 20, priceId: 'price_1UFil01RZZjTCXXgmSMtDFmF' },
+  { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
+  { id: '25', credits: 25, price: 10, priceId: 'price_1UFlL11GfvmAXQBhBGbdzji0' },
+  { id: '60', credits: 60, price: 20, priceId: 'price_1UFlKl1GfvmAXQBho0xWW6JO' },
 ] as const
 
 const parseCreditBalance = (value: unknown) => {
