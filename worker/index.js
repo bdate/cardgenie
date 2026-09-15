@@ -1527,7 +1527,7 @@ const generateImage = async (
   }
 
   const imageResponse = await openai.images.generate({
-    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     prompt,
     size: '1024x1536',
     quality: 'medium',
@@ -1574,7 +1574,7 @@ const referenceImagesToFiles = (referenceImages) =>
 
 const editImageWithFiles = async (openai, env, prompt, imageFiles) => {
   const imageResponse = await openai.images.edit({
-    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     image: imageFiles,
     prompt,
     size: '1024x1536',

@@ -870,7 +870,7 @@ If a likeness brief is provided, you may use it to know who the card is about, b
 
 const generateImageFromPrompt = async (openai, prompt) => {
   const imageResponse = await openai.images.generate({
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     prompt,
     size: '1024x1536',
     quality: 'medium',
@@ -940,7 +940,7 @@ const referenceImagesToFiles = (referenceImages) =>
 
 const editImageWithFiles = async (openai, prompt, imageFiles) => {
   const imageResponse = await openai.images.edit({
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
+    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     image: imageFiles,
     prompt,
     size: '1024x1536',
