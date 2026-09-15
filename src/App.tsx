@@ -1008,6 +1008,7 @@ function App() {
       status?: string
     }>
   >([])
+  const [adminReviewStatus, setAdminReviewStatus] = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [isLoadingPendingReviews, setIsLoadingPendingReviews] = useState(false)
   const [pendingReviewNotice, setPendingReviewNotice] = useState('')
   const [updatingReviewId, setUpdatingReviewId] = useState('')
@@ -1686,29 +1687,38 @@ function App() {
     }
   }
 
-  const loadPendingReviews = async (token: string) => {
+  const loadAdminReviews = async (
+    token: string,
+    status: 'pending' | 'approved' | 'rejected' = adminReviewStatus,
+  ) => {
     setIsLoadingPendingReviews(true)
     setPendingReviewNotice('')
     try {
-      const response = await fetch(apiUrl('/api/admin/testimonials?status=pending'), {
+      const response = await fetch(apiUrl(`/api/admin/testimonials?status=${encodeURIComponent(status)}`), {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const data = await getApiJson(response, 'Unable to load pending reviews.')
+      const data = await getApiJson(response, 'Unable to load reviews.')
       if (!response.ok) {
-        throw new Error(data.error || 'Unable to load pending reviews.')
+        throw new Error(data.error || 'Unable to load reviews.')
       }
       setPendingReviews(Array.isArray(data.testimonials) ? data.testimonials : [])
     } catch (caughtError) {
       setPendingReviews([])
-      setPendingReviewNotice(
-        caughtError instanceof Error ? caughtError.message : 'Unable to load pending reviews.',
-      )
+      setPendingReviewNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load reviews.')
     } finally {
       setIsLoadingPendingReviews(false)
     }
   }
 
-  const updatePendingReview = async (id: string, status: 'approved' | 'rejected') => {
+  const selectAdminReviewStatus = async (status: 'pending' | 'approved' | 'rejected') => {
+    setAdminReviewStatus(status)
+    if (!accountSession?.token) {
+      return
+    }
+    await loadAdminReviews(accountSession.token, status)
+  }
+
+  const updatePendingReview = async (id: string, status: 'pending' | 'approved' | 'rejected') => {
     if (!accountSession?.token) {
       return
     }
@@ -1728,7 +1738,9 @@ function App() {
         throw new Error(data.error || 'Unable to update that review.')
       }
       setPendingReviews((current) => current.filter((review) => review.id !== id))
-      setPendingReviewNotice(status === 'approved' ? 'Review approved.' : 'Review hidden.')
+      const notice =
+        status === 'approved' ? 'Review approved.' : status === 'rejected' ? 'Review hidden.' : 'Review moved to pending.'
+      setPendingReviewNotice(notice)
       void loadAdminMetrics(accountSession.token)
     } catch (caughtError) {
       setPendingReviewNotice(caughtError instanceof Error ? caughtError.message : 'Unable to update that review.')
@@ -1773,8 +1785,9 @@ function App() {
     setAdminView('reviews')
     setShowCreditMenu(false)
     setPendingReviewNotice('')
+    setAdminReviewStatus('pending')
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    await loadPendingReviews(accountSession.token)
+    await loadAdminReviews(accountSession.token, 'pending')
   }
 
   const closeAdminView = () => {
@@ -3141,7 +3154,7 @@ function App() {
       )}
 
       {adminView === 'reviews' && isAdmin && !isRecipientView && (
-        <section className="account-page admin-page" aria-label="Pending reviews">
+        <section className="account-page admin-page" aria-label="Reviews">
           <div className="panel-heading">
             <div>
               <h2>Reviews</h2>
@@ -3152,7 +3165,7 @@ function App() {
                 className="text-action-link"
                 type="button"
                 disabled={isLoadingPendingReviews || !accountSession?.token}
-                onClick={() => accountSession?.token && void loadPendingReviews(accountSession.token)}
+                onClick={() => accountSession?.token && void loadAdminReviews(accountSession.token)}
               >
                 {isLoadingPendingReviews ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -3161,12 +3174,39 @@ function App() {
               </button>
             </div>
           </div>
+          <div className="mode-toggle admin-review-filters" role="tablist" aria-label="Review status">
+            {(
+              [
+                { id: 'pending', label: 'Pending' },
+                { id: 'approved', label: 'Approved' },
+                { id: 'rejected', label: 'Hidden' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                className={adminReviewStatus === tab.id ? 'is-selected' : ''}
+                type="button"
+                role="tab"
+                aria-selected={adminReviewStatus === tab.id}
+                disabled={isLoadingPendingReviews || !accountSession?.token}
+                onClick={() => void selectAdminReviewStatus(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           <div className="account-block admin-reviews">
             {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
             {isLoadingPendingReviews && pendingReviews.length === 0 ? (
-              <p>Loading pending reviews...</p>
+              <p>Loading reviews...</p>
             ) : pendingReviews.length === 0 ? (
-              <p>No reviews waiting for approval.</p>
+              <p>
+                {adminReviewStatus === 'pending'
+                  ? 'No reviews waiting for approval.'
+                  : adminReviewStatus === 'approved'
+                    ? 'No approved reviews yet.'
+                    : 'No hidden reviews.'}
+              </p>
             ) : (
               <div className="admin-review-list">
                 {pendingReviews.map((review) => (
@@ -3181,22 +3221,36 @@ function App() {
                     </div>
                     <p>{review.comment}</p>
                     <div className="feedback-actions">
-                      <button
-                        className="primary-button"
-                        type="button"
-                        disabled={updatingReviewId === review.id}
-                        onClick={() => void updatePendingReview(review.id, 'approved')}
-                      >
-                        {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
-                      </button>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={updatingReviewId === review.id}
-                        onClick={() => void updatePendingReview(review.id, 'rejected')}
-                      >
-                        Hide
-                      </button>
+                      {adminReviewStatus !== 'approved' && (
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={updatingReviewId === review.id}
+                          onClick={() => void updatePendingReview(review.id, 'approved')}
+                        >
+                          {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
+                        </button>
+                      )}
+                      {adminReviewStatus !== 'rejected' && (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={updatingReviewId === review.id}
+                          onClick={() => void updatePendingReview(review.id, 'rejected')}
+                        >
+                          Hide
+                        </button>
+                      )}
+                      {adminReviewStatus !== 'pending' && (
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          disabled={updatingReviewId === review.id}
+                          onClick={() => void updatePendingReview(review.id, 'pending')}
+                        >
+                          Move to pending
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

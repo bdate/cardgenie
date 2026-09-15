@@ -2277,6 +2277,11 @@ textarea:focus {
   gap: 10px 14px;
 }
 
+.admin-review-filters {
+  max-width: 420px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .admin-analytics-heading {
   display: flex;
   align-items: baseline;
