@@ -698,24 +698,75 @@ const adminPhoneNumbers = new Set(['+19259637453'])
 
 export const isAdminPhone = (phoneE164) => Boolean(phoneE164 && adminPhoneNumbers.has(phoneE164))
 
-const dayKey = (iso) => String(iso || '').slice(0, 10)
+const METRICS_TIME_ZONE = 'America/Los_Angeles'
 
-const buildDayRange = (days) => {
+const pacificDayKeyFromDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value || '').slice(0, 10)
+  }
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: METRICS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+const buildDayRangeEndingOn = (endDayKey, dayCount) => {
+  const count = Math.max(1, Number(dayCount) || 1)
+  const [year, month, day] = String(endDayKey)
+    .split('-')
+    .map((part) => Number(part))
+  if (!year || !month || !day) {
+    return [pacificDayKeyFromDate()]
+  }
+
   const keys = []
-  const now = new Date()
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i))
-    keys.push(d.toISOString().slice(0, 10))
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(Date.UTC(year, month - 1, day - offset))
+    keys.push(date.toISOString().slice(0, 10))
   }
   return keys
 }
 
-const countByDay = (rows) => {
+const resolveMetricsPeriod = (period) => {
+  const today = pacificDayKeyFromDate()
+  const [year, month, day] = today.split('-').map((part) => Number(part))
+  const normalized = String(period || '7d').trim().toLowerCase()
+
+  if (normalized === 'today') {
+    return { period: 'today', today, dayKeys: buildDayRangeEndingOn(today, 1) }
+  }
+  if (normalized === '30d') {
+    return { period: '30d', today, dayKeys: buildDayRangeEndingOn(today, 30) }
+  }
+  if (normalized === 'ytd') {
+    const start = Date.UTC(year, 0, 1)
+    const end = Date.UTC(year, month - 1, day)
+    const days = Math.floor((end - start) / 86400000) + 1
+    return { period: 'ytd', today, dayKeys: buildDayRangeEndingOn(today, days) }
+  }
+  return { period: '7d', today, dayKeys: buildDayRangeEndingOn(today, 7) }
+}
+
+const querySinceIso = (firstDayKey) => {
+  const [year, month, day] = String(firstDayKey)
+    .split('-')
+    .map((part) => Number(part))
+  // Pull a small buffer so Pacific-day edges near UTC midnight are included.
+  return new Date(Date.UTC(year, month - 1, day - 2, 0, 0, 0)).toISOString()
+}
+
+const countByPacificDay = (rows, timestampField = 'created_at') => {
   const map = new Map()
   for (const row of rows || []) {
-    const key = dayKey(row.day || row.created_at)
+    const raw = row[timestampField] || row.day || row.created_at
+    if (!raw) continue
+    const key = String(raw).includes('T') ? pacificDayKeyFromDate(raw) : String(raw).slice(0, 10)
     if (!key) continue
-    map.set(key, Number(row.n || row.count || 0))
+    const amount = Number(row.n ?? row.count ?? row.amount ?? 1)
+    map.set(key, (map.get(key) || 0) + (Number.isFinite(amount) ? amount : 0))
   }
   return map
 }
@@ -740,70 +791,54 @@ const safeAll = async (db, sql, binds = []) => {
   }
 }
 
-export const getAdminMetrics = async (env, { days = 14 } = {}) => {
+const sumMapDay = (map, day) => Number(map.get(day) || 0)
+
+export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
   if (!env.ACCOUNT_DB) {
     return null
   }
 
-  const dayCount = Math.min(Math.max(Number(days) || 14, 7), 90)
-  const dayKeys = buildDayRange(dayCount)
-  const today = dayKeys[dayKeys.length - 1]
-  const since = `${dayKeys[0]}T00:00:00.000Z`
+  const resolved = resolveMetricsPeriod(period)
+  const dayKeysOldestFirst = resolved.dayKeys
+  const dayKeys = dayKeysOldestFirst.slice().reverse()
+  const today = resolved.today
+  const since = querySinceIso(dayKeysOldestFirst[0])
   const db = env.ACCOUNT_DB
 
   const [
     accountsTotal,
-    accountsToday,
     cardsTotal,
-    cardsToday,
     sendsTotal,
-    sendsToday,
     failedSendsTotal,
     thankYousTotal,
-    thankYousToday,
     testimonialsTotal,
     testimonialsPending,
-    testimonialsToday,
     activeUsers7,
     activeUsers30,
-    loginsToday,
     creditsPurchasedTotal,
     creditsSpentTotal,
-    creditsPurchasedToday,
-    creditsSpentToday,
-    dailyAccounts,
-    dailySends,
-    dailyThankYous,
-    dailyLogins,
-    dailyTestimonials,
+    accountRows,
+    cardRows,
+    sendRows,
+    thankYouRows,
+    loginRows,
+    testimonialRows,
+    creditPurchaseRows,
+    creditSpendRows,
   ] = await Promise.all([
     safeCount(db, `SELECT COUNT(*) AS n FROM users`),
-    safeCount(db, `SELECT COUNT(*) AS n FROM users WHERE substr(created_at, 1, 10) = ?`, [today]),
     safeCount(db, `SELECT COUNT(*) AS n FROM cards`),
-    safeCount(db, `SELECT COUNT(*) AS n FROM cards WHERE substr(created_at, 1, 10) = ?`, [today]),
     safeCount(
       db,
       `SELECT COUNT(*) AS n FROM deliveries WHERE is_sender_copy = 0 AND status = 'sent'`,
     ),
     safeCount(
       db,
-      `SELECT COUNT(*) AS n FROM deliveries
-       WHERE is_sender_copy = 0 AND status = 'sent' AND substr(created_at, 1, 10) = ?`,
-      [today],
-    ),
-    safeCount(
-      db,
       `SELECT COUNT(*) AS n FROM deliveries WHERE is_sender_copy = 0 AND status = 'failed'`,
     ),
     safeCount(db, `SELECT COUNT(*) AS n FROM thank_yous`),
-    safeCount(db, `SELECT COUNT(*) AS n FROM thank_yous WHERE substr(created_at, 1, 10) = ?`, [today]),
     safeCount(db, `SELECT COUNT(*) AS n FROM testimonials`),
     safeCount(db, `SELECT COUNT(*) AS n FROM testimonials WHERE status = 'pending'`),
-    safeCount(
-      db,
-      `SELECT COUNT(*) AS n FROM testimonials WHERE substr(created_at, 1, 10) = ?`,
-      [today],
-    ),
     safeCount(
       db,
       `SELECT COUNT(*) AS n FROM users WHERE last_used_at >= ?`,
@@ -814,7 +849,6 @@ export const getAdminMetrics = async (env, { days = 14 } = {}) => {
       `SELECT COUNT(*) AS n FROM users WHERE last_used_at >= ?`,
       [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()],
     ),
-    safeCount(db, `SELECT COUNT(*) AS n FROM users WHERE substr(last_login_at, 1, 10) = ?`, [today]),
     safeCount(
       db,
       `SELECT COALESCE(SUM(CASE WHEN credits_delta > 0 AND kind = 'purchase' THEN credits_delta ELSE 0 END), 0) AS n
@@ -825,56 +859,48 @@ export const getAdminMetrics = async (env, { days = 14 } = {}) => {
       `SELECT COALESCE(SUM(CASE WHEN credits_delta < 0 THEN ABS(credits_delta) ELSE 0 END), 0) AS n
        FROM credit_events`,
     ),
-    safeCount(
-      db,
-      `SELECT COALESCE(SUM(CASE WHEN credits_delta > 0 AND kind = 'purchase' THEN credits_delta ELSE 0 END), 0) AS n
-       FROM credit_events WHERE substr(created_at, 1, 10) = ?`,
-      [today],
-    ),
-    safeCount(
-      db,
-      `SELECT COALESCE(SUM(CASE WHEN credits_delta < 0 THEN ABS(credits_delta) ELSE 0 END), 0) AS n
-       FROM credit_events WHERE substr(created_at, 1, 10) = ?`,
-      [today],
-    ),
+    safeAll(db, `SELECT created_at FROM users WHERE created_at >= ?`, [since]),
+    safeAll(db, `SELECT created_at FROM cards WHERE created_at >= ?`, [since]),
     safeAll(
       db,
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
-       FROM users WHERE created_at >= ? GROUP BY day`,
+      `SELECT created_at FROM deliveries
+       WHERE is_sender_copy = 0 AND status = 'sent' AND created_at >= ?`,
+      [since],
+    ),
+    safeAll(db, `SELECT created_at FROM thank_yous WHERE created_at >= ?`, [since]),
+    safeAll(db, `SELECT last_login_at AS created_at FROM users WHERE last_login_at >= ?`, [since]),
+    safeAll(db, `SELECT created_at FROM testimonials WHERE created_at >= ?`, [since]),
+    safeAll(
+      db,
+      `SELECT created_at, credits_delta AS amount FROM credit_events
+       WHERE created_at >= ? AND credits_delta > 0 AND kind = 'purchase'`,
       [since],
     ),
     safeAll(
       db,
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
-       FROM deliveries
-       WHERE is_sender_copy = 0 AND status = 'sent' AND created_at >= ?
-       GROUP BY day`,
-      [since],
-    ),
-    safeAll(
-      db,
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
-       FROM thank_yous WHERE created_at >= ? GROUP BY day`,
-      [since],
-    ),
-    safeAll(
-      db,
-      `SELECT substr(last_login_at, 1, 10) AS day, COUNT(*) AS n
-       FROM users WHERE last_login_at >= ? GROUP BY day`,
-      [since],
-    ),
-    safeAll(
-      db,
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
-       FROM testimonials WHERE created_at >= ? GROUP BY day`,
+      `SELECT created_at, ABS(credits_delta) AS amount FROM credit_events
+       WHERE created_at >= ? AND credits_delta < 0`,
       [since],
     ),
   ])
 
+  const accountsByDay = countByPacificDay(accountRows)
+  const cardsByDay = countByPacificDay(cardRows)
+  const sendsByDay = countByPacificDay(sendRows)
+  const thankYousByDay = countByPacificDay(thankYouRows)
+  const loginsByDay = countByPacificDay(loginRows)
+  const testimonialsByDay = countByPacificDay(testimonialRows)
+  const creditsPurchasedByDay = countByPacificDay(creditPurchaseRows)
+  const creditsSpentByDay = countByPacificDay(creditSpendRows)
+
   return {
     generatedAt: isoNow(),
     today,
-    days: dayCount,
+    period: resolved.period,
+    timezone: METRICS_TIME_ZONE,
+    days: dayKeysOldestFirst.length,
+    rangeStart: dayKeysOldestFirst[0],
+    rangeEnd: today,
     totals: {
       accounts: accountsTotal,
       cards: cardsTotal,
@@ -889,21 +915,24 @@ export const getAdminMetrics = async (env, { days = 14 } = {}) => {
       creditsSpent: creditsSpentTotal,
     },
     todayStats: {
-      accounts: accountsToday,
-      cards: cardsToday,
-      sends: sendsToday,
-      thankYous: thankYousToday,
-      testimonials: testimonialsToday,
-      logins: loginsToday,
-      creditsPurchased: creditsPurchasedToday,
-      creditsSpent: creditsSpentToday,
+      accounts: sumMapDay(accountsByDay, today),
+      cards: sumMapDay(cardsByDay, today),
+      sends: sumMapDay(sendsByDay, today),
+      thankYous: sumMapDay(thankYousByDay, today),
+      testimonials: sumMapDay(testimonialsByDay, today),
+      logins: sumMapDay(loginsByDay, today),
+      creditsPurchased: sumMapDay(creditsPurchasedByDay, today),
+      creditsSpent: sumMapDay(creditsSpentByDay, today),
     },
     daily: {
-      accounts: seriesFromMap(dayKeys, countByDay(dailyAccounts)),
-      sends: seriesFromMap(dayKeys, countByDay(dailySends)),
-      thankYous: seriesFromMap(dayKeys, countByDay(dailyThankYous)),
-      logins: seriesFromMap(dayKeys, countByDay(dailyLogins)),
-      testimonials: seriesFromMap(dayKeys, countByDay(dailyTestimonials)),
+      accounts: seriesFromMap(dayKeys, accountsByDay),
+      cards: seriesFromMap(dayKeys, cardsByDay),
+      sends: seriesFromMap(dayKeys, sendsByDay),
+      thankYous: seriesFromMap(dayKeys, thankYousByDay),
+      logins: seriesFromMap(dayKeys, loginsByDay),
+      testimonials: seriesFromMap(dayKeys, testimonialsByDay),
+      creditsPurchased: seriesFromMap(dayKeys, creditsPurchasedByDay),
+      creditsSpent: seriesFromMap(dayKeys, creditsSpentByDay),
     },
   }
 }

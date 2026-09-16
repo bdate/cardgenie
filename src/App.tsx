@@ -990,11 +990,16 @@ function App() {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [adminMetrics, setAdminMetrics] = useState<{
     today?: string
+    period?: string
+    rangeStart?: string
+    rangeEnd?: string
     days?: number
+    timezone?: string
     totals?: Record<string, number>
     todayStats?: Record<string, number>
     daily?: Record<string, Array<{ day: string; count: number }>>
   } | null>(null)
+  const [adminMetricsPeriod, setAdminMetricsPeriod] = useState<'today' | '7d' | '30d' | 'ytd'>('7d')
   const [isLoadingAdminMetrics, setIsLoadingAdminMetrics] = useState(false)
   const [adminMetricsError, setAdminMetricsError] = useState('')
   const [pendingReviews, setPendingReviews] = useState<
@@ -1667,11 +1672,14 @@ function App() {
     }
   }
 
-  const loadAdminMetrics = async (token: string) => {
+  const loadAdminMetrics = async (
+    token: string,
+    period: 'today' | '7d' | '30d' | 'ytd' = adminMetricsPeriod,
+  ) => {
     setIsLoadingAdminMetrics(true)
     setAdminMetricsError('')
     try {
-      const response = await fetch(apiUrl('/api/admin/metrics?days=14'), {
+      const response = await fetch(apiUrl(`/api/admin/metrics?period=${encodeURIComponent(period)}`), {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await getApiJson(response, 'Unable to load site analytics.')
@@ -1685,6 +1693,14 @@ function App() {
     } finally {
       setIsLoadingAdminMetrics(false)
     }
+  }
+
+  const selectAdminMetricsPeriod = async (period: 'today' | '7d' | '30d' | 'ytd') => {
+    setAdminMetricsPeriod(period)
+    if (!accountSession?.token) {
+      return
+    }
+    await loadAdminMetrics(accountSession.token, period)
   }
 
   const loadAdminReviews = async (
@@ -1773,8 +1789,9 @@ function App() {
     setShowAccountPage(false)
     setAdminView('analytics')
     setShowCreditMenu(false)
+    setAdminMetricsPeriod('7d')
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    await loadAdminMetrics(accountSession.token)
+    await loadAdminMetrics(accountSession.token, '7d')
   }
 
   const openAdminReviews = async () => {
@@ -3060,12 +3077,39 @@ function App() {
               </button>
             </div>
           </div>
+          <div className="mode-toggle admin-metrics-periods" role="tablist" aria-label="Analytics period">
+            {(
+              [
+                { id: 'today', label: 'Today' },
+                { id: '7d', label: 'Last 7 days' },
+                { id: '30d', label: 'Last 30 days' },
+                { id: 'ytd', label: 'YTD' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                className={adminMetricsPeriod === tab.id ? 'is-selected' : ''}
+                type="button"
+                role="tab"
+                aria-selected={adminMetricsPeriod === tab.id}
+                disabled={isLoadingAdminMetrics || !accountSession?.token}
+                onClick={() => void selectAdminMetricsPeriod(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {adminMetricsError && <div className="field-notice">{adminMetricsError}</div>}
           {isLoadingAdminMetrics && !adminMetrics && <p>Loading site analytics...</p>}
           {adminMetrics && (
             <div className="account-block admin-analytics">
               <p className="admin-analytics-note">
-                Today ({adminMetrics.today}). Cards are recorded when first sent.
+                {adminMetricsPeriod === 'today'
+                  ? `Today (${adminMetrics.today}, Pacific).`
+                  : adminMetricsPeriod === 'ytd'
+                    ? `Year to date (${adminMetrics.rangeStart} – ${adminMetrics.rangeEnd}, Pacific).`
+                    : `${adminMetrics.rangeStart} – ${adminMetrics.rangeEnd} (Pacific).`}{' '}
+                Cards are recorded when first sent.
               </p>
               <div className="admin-stat-grid">
                 <div>
@@ -3132,6 +3176,8 @@ function App() {
                       <th>Logins</th>
                       <th>Thanks</th>
                       <th>Reviews</th>
+                      <th>Credits purchased</th>
+                      <th>Credits spent</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3143,6 +3189,8 @@ function App() {
                         <td>{adminMetrics.daily?.logins?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.thankYous?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>
+                        <td>{adminMetrics.daily?.creditsPurchased?.[index]?.count ?? 0}</td>
+                        <td>{adminMetrics.daily?.creditsSpent?.[index]?.count ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>

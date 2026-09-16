@@ -2339,8 +2339,8 @@ const handleGetAdminMetrics = async (request, env) => {
   }
 
   const url = new URL(request.url)
-  const days = Number(url.searchParams.get('days') || 14)
-  const metrics = await getAdminMetrics(env, { days })
+  const period = url.searchParams.get('period') || url.searchParams.get('range') || '7d'
+  const metrics = await getAdminMetrics(env, { period })
   if (!metrics) {
     return jsonResponse(request, env, { error: 'Unable to load admin metrics.' }, 500)
   }

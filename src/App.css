@@ -2282,6 +2282,11 @@ textarea:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.admin-metrics-periods {
+  max-width: 560px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .admin-analytics-heading {
   display: flex;
   align-items: baseline;
