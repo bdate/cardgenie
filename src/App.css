@@ -1167,20 +1167,6 @@ textarea:focus {
   font-size: 1.5rem;
 }
 
-.open-card-message span {
-  color: var(--gcu-ink);
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(0.98rem, 1.32vw, 1.18rem);
-  font-weight: 400;
-  line-height: 1.35;
-}
-
-.open-card-message p {
-  margin: 18px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(1.2rem, 2vw, 1.65rem);
-  line-height: 1.45;
-}
 
 .envelope-scene,
 .card-reveal {
@@ -1618,6 +1604,8 @@ textarea:focus {
 }
 
 .open-card {
+  container-type: inline-size;
+  container-name: card-inside;
   display: grid;
   grid-template-columns: 1fr;
   gap: 0;
@@ -1654,6 +1642,8 @@ textarea:focus {
 }
 
 .card-open-stage {
+  container-type: inline-size;
+  container-name: card-inside;
   position: relative;
   width: min(450px, 100%);
   max-width: 100%;
@@ -1706,7 +1696,7 @@ textarea:focus {
   grid-template-rows: auto 1fr auto auto;
   align-content: stretch;
   overflow: hidden;
-  padding: 48px 42px 42px;
+  padding: 10.7cqi 9.3cqi 9.3cqi;
   color: var(--gcu-ink);
   background:
     linear-gradient(90deg, rgba(63, 155, 145, 0.08), transparent 18%),
@@ -1715,48 +1705,57 @@ textarea:focus {
   text-align: center;
 }
 
+.open-card-message span {
+  color: var(--gcu-ink);
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 400;
+  line-height: 1.35;
+  font-size: clamp(0.75rem, 3.4cqi, 1.18rem);
+}
+
 .message-paragraphs {
   display: grid;
   align-content: start;
-  gap: 14px;
-  margin-top: 8px;
+  gap: 3.1cqi;
+  margin-top: 1.8cqi;
 }
 
 .message-paragraphs p {
   margin: 0;
-  font-size: clamp(0.98rem, 1.32vw, 1.18rem);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(0.78rem, 3.5cqi, 1.18rem);
   line-height: 1.35;
 }
 
 .open-card-message.is-medium .message-paragraphs p {
-  font-size: clamp(0.9rem, 1.18vw, 1.04rem);
+  font-size: clamp(0.72rem, 3.1cqi, 1.04rem);
   line-height: 1.3;
 }
 
 .open-card-message.is-long .message-paragraphs {
-  gap: 10px;
+  gap: 2.2cqi;
 }
 
 .open-card-message.is-long .message-paragraphs p {
-  font-size: clamp(0.78rem, 1.02vw, 0.92rem);
+  font-size: clamp(0.65rem, 2.75cqi, 0.92rem);
   line-height: 1.24;
 }
 
 .card-closing {
   align-self: end;
-  margin-top: 16px;
+  margin-top: 3.6cqi;
   color: var(--gcu-ink);
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(0.95rem, 1.3vw, 1.12rem);
+  font-size: clamp(0.75rem, 3.2cqi, 1.12rem);
   line-height: 1.2;
   text-align: center;
 }
 
 .card-signature {
-  margin-top: 8px;
+  margin-top: 1.8cqi;
   color: var(--gcu-orange);
   font-family: "Dancing Script", cursive;
-  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-size: clamp(1.2rem, 8.5cqi, 2.8rem);
   line-height: 0.9;
   text-align: center;
   transform: rotate(-2deg);
@@ -2859,7 +2858,7 @@ textarea:focus {
 }
 
 .editor-inside-preview .open-card-message {
-  padding: 28px 22px 24px;
+  padding: 10.7cqi 9.3cqi 9.3cqi;
 }
 
 .refinement-panel {
@@ -3742,16 +3741,7 @@ textarea:focus {
   }
 
   .open-card-message {
-    padding: 30px 24px 28px;
-  }
-
-  .open-card-message span,
-  .message-paragraphs p {
-    font-size: clamp(0.82rem, 3.2vw, 1rem);
-  }
-
-  .card-signature {
-    font-size: clamp(1.8rem, 8vw, 2.35rem);
+    padding: 10cqi 8.5cqi 8.5cqi;
   }
 
   .proof-actions .secondary-button {
@@ -3895,12 +3885,8 @@ textarea:focus {
       0 0 0 1px rgba(63, 155, 145, 0.12);
   }
 
-  .open-card-message {
-    padding: 24px 20px 22px;
-  }
-
   .message-paragraphs {
-    gap: 8px;
+    gap: 2.2cqi;
   }
 }
 
