@@ -835,6 +835,7 @@ const createInsideImageUrl = ({
   signature,
   width = CARD_COVER_WIDTH,
   height = CARD_COVER_HEIGHT,
+  showFrame = true,
 }: {
   greeting: string
   paragraphs: string[]
@@ -842,6 +843,7 @@ const createInsideImageUrl = ({
   signature: string
   width?: number
   height?: number
+  showFrame?: boolean
 }) => {
   if (typeof document === 'undefined') {
     return ''
@@ -882,9 +884,11 @@ const createInsideImageUrl = ({
   context.fillStyle = cornerGlow
   context.fillRect(0, 0, canvas.width, canvas.height)
 
-  context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
-  context.lineWidth = 4 * scaleX
-  context.strokeRect(marginX, marginY, canvas.width - marginX * 2, canvas.height - marginY * 2)
+  if (showFrame) {
+    context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
+    context.lineWidth = 4 * scaleX
+    context.strokeRect(marginX, marginY, canvas.width - marginX * 2, canvas.height - marginY * 2)
+  }
 
   context.fillStyle = '#2d6762'
   context.textAlign = 'center'
@@ -2233,6 +2237,7 @@ function App() {
         signature: cardSignatureLabel,
         width: PRINT_CARD_WIDTH,
         height: PRINT_CARD_HEIGHT,
+        showFrame: false,
       })
       if (!insideUrl) {
         throw new Error('Unable to prepare the print inside file.')
