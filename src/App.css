@@ -1840,6 +1840,11 @@ textarea:focus {
   margin-bottom: 4px;
 }
 
+.revise-actions .text-action-link {
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
 .proof-actions .primary-button,
 .proof-actions .secondary-button {
   min-width: 170px;
@@ -2271,9 +2276,13 @@ textarea:focus {
 .admin-print-links {
   margin: 8px 0 0;
   font-size: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
 }
 
-.admin-print-links a {
+.admin-print-links .text-action-link {
   font-weight: 700;
 }
 

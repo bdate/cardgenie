@@ -950,6 +950,7 @@ function App() {
   const [refinementNotice, setRefinementNotice] = useState('')
   const [showEditor, setShowEditor] = useState(false)
   const [editorHasChanges, setEditorHasChanges] = useState(false)
+  const [hasAcceptedRevision, setHasAcceptedRevision] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
   const [showPolishDialog, setShowPolishDialog] = useState(false)
   const [cardGreeting, setCardGreeting] = useState<string | null>(null)
@@ -1147,6 +1148,8 @@ function App() {
   const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
   const coverSaveLabel = prefersPhotoSave ? 'Save cover to photos' : 'Save cover image'
   const insideSaveLabel = prefersPhotoSave ? 'Save inside to photos' : 'Save inside image'
+  const printCoverSaveLabel = prefersPhotoSave ? 'Save print cover to photos' : 'Save print cover'
+  const printInsideSaveLabel = prefersPhotoSave ? 'Save print inside to photos' : 'Save print inside'
   const insideDownloadUrl = useMemo(
     () =>
       card && isRecipientView
@@ -1959,6 +1962,7 @@ function App() {
     setError('')
     setShowEditor(false)
     setShowPolishDialog(false)
+    setHasAcceptedRevision(false)
     setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
@@ -2024,6 +2028,7 @@ function App() {
     setActiveGenerationStep(0)
     setShowEditor(false)
     setShowPolishDialog(false)
+    setHasAcceptedRevision(false)
     setSharedCard(null)
     setDeliveryNotice('')
     setHasSentCurrentCard(false)
@@ -2181,6 +2186,7 @@ function App() {
     }
 
     setSaveNotice('')
+    setAdminPrintNotice('')
 
     if (prefersPhotoSave) {
       try {
@@ -2258,6 +2264,7 @@ function App() {
     setShowEditor(false)
     setShowPolishDialog(false)
     setEditorHasChanges(false)
+    setHasAcceptedRevision(true)
   }
 
   const scrollToCardPreview = () => {
@@ -3973,9 +3980,15 @@ function App() {
               )}
               {showSendActions && !isRecipientView && !showEditor && showReviseButton && (
                 <div className="proof-actions revise-actions">
-                  <button className="primary-button" type="button" onClick={openEditor}>
-                    Revise card
-                  </button>
+                  {hasAcceptedRevision ? (
+                    <button className="text-action-link" type="button" onClick={openEditor}>
+                      Revise card again
+                    </button>
+                  ) : (
+                    <button className="primary-button" type="button" onClick={openEditor}>
+                      Revise card
+                    </button>
+                  )}
                 </div>
               )}
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
@@ -4224,17 +4237,39 @@ function App() {
                         : 'Create print test files (1504×2096)'}
                     </button>
                     {adminPrintFiles && (
-                      <p className="admin-print-links">
-                        <a href={adminPrintFiles.coverUrl} download={printCoverDownloadName}>
-                          Download print cover
-                        </a>
+                      <div className="admin-print-links" aria-label="Save print test files">
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          onClick={() =>
+                            void saveImageToDevice(
+                              adminPrintFiles.coverUrl,
+                              printCoverDownloadName,
+                              'Print cover',
+                            )
+                          }
+                        >
+                          {printCoverSaveLabel}
+                        </button>
                         <span aria-hidden="true"> · </span>
-                        <a href={adminPrintFiles.insideUrl} download={printInsideDownloadName}>
-                          Download print inside
-                        </a>
-                      </p>
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          onClick={() =>
+                            void saveImageToDevice(
+                              adminPrintFiles.insideUrl,
+                              printInsideDownloadName,
+                              'Print inside',
+                            )
+                          }
+                        >
+                          {printInsideSaveLabel}
+                        </button>
+                      </div>
                     )}
-                    {adminPrintNotice && <p className="admin-print-notice">{adminPrintNotice}</p>}
+                    {(saveNotice || adminPrintNotice) && (
+                      <p className="admin-print-notice">{saveNotice || adminPrintNotice}</p>
+                    )}
                   </div>
                 )}
                 {deliveryNotice &&
