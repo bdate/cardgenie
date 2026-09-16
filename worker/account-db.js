@@ -699,6 +699,7 @@ const adminPhoneNumbers = new Set(['+19259637453'])
 export const isAdminPhone = (phoneE164) => Boolean(phoneE164 && adminPhoneNumbers.has(phoneE164))
 
 const METRICS_TIME_ZONE = 'America/Los_Angeles'
+const METRICS_EARLIEST_DAY = '2026-09-13'
 
 const pacificDayKeyFromDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value)
@@ -727,7 +728,7 @@ const buildDayRangeEndingOn = (endDayKey, dayCount) => {
     const date = new Date(Date.UTC(year, month - 1, day - offset))
     keys.push(date.toISOString().slice(0, 10))
   }
-  return keys
+  return keys.filter((day) => day >= METRICS_EARLIEST_DAY)
 }
 
 const resolveMetricsPeriod = (period) => {
@@ -742,18 +743,25 @@ const resolveMetricsPeriod = (period) => {
     return { period: '30d', today, dayKeys: buildDayRangeEndingOn(today, 30) }
   }
   if (normalized === 'ytd') {
-    const start = Date.UTC(year, 0, 1)
+    const startDay = `${year}-01-01` < METRICS_EARLIEST_DAY ? METRICS_EARLIEST_DAY : `${year}-01-01`
+    const [startYear, startMonth, startDayNum] = startDay.split('-').map((part) => Number(part))
+    const start = Date.UTC(startYear, startMonth - 1, startDayNum)
     const end = Date.UTC(year, month - 1, day)
-    const days = Math.floor((end - start) / 86400000) + 1
+    const days = Math.max(1, Math.floor((end - start) / 86400000) + 1)
     return { period: 'ytd', today, dayKeys: buildDayRangeEndingOn(today, days) }
   }
   return { period: '7d', today, dayKeys: buildDayRangeEndingOn(today, 7) }
 }
 
 const querySinceIso = (firstDayKey) => {
-  const [year, month, day] = String(firstDayKey)
+  const boundedDay = firstDayKey < METRICS_EARLIEST_DAY ? METRICS_EARLIEST_DAY : firstDayKey
+  const [year, month, day] = String(boundedDay)
     .split('-')
     .map((part) => Number(part))
+  // Start of METRICS_EARLIEST_DAY in Pacific (PDT, UTC-7).
+  if (boundedDay === METRICS_EARLIEST_DAY) {
+    return '2026-09-13T07:00:00.000Z'
+  }
   // Pull a small buffer so Pacific-day edges near UTC midnight are included.
   return new Date(Date.UTC(year, month - 1, day - 2, 0, 0, 0)).toISOString()
 }
