@@ -11,7 +11,11 @@ export const getCoverThumbUrl = (request, env, cardId) => {
     return ''
   }
 
-  const base = (env.SHARE_BASE_URL || env.PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, '')
+  // Thumbs must be served by the Worker/API host. www.card-genie.com/c/* is often
+  // handled by GitHub Pages for the SPA, which cannot return image bytes.
+  const configuredApi = String(env.PUBLIC_API_URL || '').replace(/\/$/, '')
+  const requestOrigin = new URL(request.url).origin
+  const base = configuredApi || requestOrigin
   return `${base}/c/${encodeURIComponent(cardId)}/thumb`
 }
 

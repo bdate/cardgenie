@@ -1724,13 +1724,20 @@ function App() {
       return []
     }
 
+    const resolveThumbUrl = (cardId?: string, coverThumbUrl?: string) => {
+      if (cardId && apiBaseUrl) {
+        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb`
+      }
+      return coverThumbUrl || ''
+    }
+
     const created = (accountHistory.cards || []).map((card) => ({
       id: `card-${card.id}`,
       createdAt: card.createdAt,
       title: 'Created',
       detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
       status: card.status,
-      coverThumbUrl: card.coverThumbUrl || '',
+      coverThumbUrl: resolveThumbUrl(card.id, card.coverThumbUrl),
     }))
 
     const sent = (accountHistory.deliveries || []).map((delivery) => ({
@@ -1741,7 +1748,7 @@ function App() {
       }`,
       detail: delivery.destination,
       status: delivery.status,
-      coverThumbUrl: delivery.coverThumbUrl || '',
+      coverThumbUrl: resolveThumbUrl(delivery.cardId, delivery.coverThumbUrl),
     }))
 
     const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
@@ -3230,7 +3237,16 @@ function App() {
                           <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
                           {item.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">
-                              <img src={item.coverThumbUrl} alt="" loading="lazy" />
+                              <img
+                                src={item.coverThumbUrl}
+                                alt=""
+                                loading="lazy"
+                                onError={(event) => {
+                                  const row = event.currentTarget.closest('.account-row')
+                                  row?.classList.remove('has-cover-thumb')
+                                  event.currentTarget.closest('.account-row-thumb')?.remove()
+                                }}
+                              />
                             </span>
                           ) : null}
                         </div>

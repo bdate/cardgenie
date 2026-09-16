@@ -2474,6 +2474,11 @@ textarea:focus {
 .account-list {
   display: grid;
   gap: 8px;
+  overflow: visible;
+}
+
+.account-block {
+  overflow: visible;
 }
 
 .account-more-link {
