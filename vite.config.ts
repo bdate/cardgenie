@@ -16,7 +16,19 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': {
+        target: 'http://localhost:8787',
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const origin =
+              req.headers.origin ||
+              (req.headers.referer ? new URL(String(req.headers.referer)).origin : '')
+            if (origin) {
+              proxyReq.setHeader('X-Frontend-Origin', origin)
+            }
+          })
+        },
+      },
       '/c': 'http://localhost:8787',
     },
   },

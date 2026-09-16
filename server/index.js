@@ -4,10 +4,59 @@ import crypto from 'node:crypto'
 import express from 'express'
 import OpenAI, { toFile } from 'openai'
 
+const COVER_IMAGE_SIZE = '1056x1472'
+const COVER_IMAGE_WIDTH = 1056
+const COVER_IMAGE_HEIGHT = 1472
+
 const app = express()
 const port = process.env.PORT || 8787
 const cardStore = new Map()
 const jobStore = new Map()
+
+const localDevAuthEnabled =
+  process.env.LOCAL_DEV_AUTH === '1' || String(process.env.LOCAL_DEV_AUTH || '').toLowerCase() === 'true'
+const localDevOtpCode = String(process.env.LOCAL_DEV_OTP || '424242')
+  .replace(/\D/g, '')
+  .padStart(6, '0')
+  .slice(-6)
+const localAccountSessions = new Map()
+const localAccountUsers = new Map()
+
+const isLocalDevAuthRequest = (req) => {
+  if (!localDevAuthEnabled) {
+    return false
+  }
+
+  const origin = req.headers.origin || ''
+  if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+    return false
+  }
+
+  return true
+}
+
+const readBearerToken = (req) => {
+  const header = req.headers.authorization || ''
+  const match = header.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() || ''
+}
+
+const getLocalDevUser = (phoneE164) => {
+  const existing = localAccountUsers.get(phoneE164)
+  if (existing) {
+    return existing
+  }
+
+  const user = {
+    id: crypto.randomUUID(),
+    phoneE164,
+    email: '',
+    creditBalance: 50,
+    createdAt: Date.now(),
+  }
+  localAccountUsers.set(phoneE164, user)
+  return user
+}
 const allowedOrigins = (
   process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 )
@@ -24,7 +73,7 @@ app.use((req, res, next) => {
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204)
@@ -697,7 +746,7 @@ const normalizeReferenceImages = (value) => {
 const buildImagePrompt = (details, refinement = '', imageMode = 'new') => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
-The generated image must be portrait artwork at 1024px wide by 1536px tall, composed for a 5x7 greeting-card cover. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
+The generated image must be portrait artwork at ${COVER_IMAGE_WIDTH}px wide by ${COVER_IMAGE_HEIGHT}px tall, composed for a greeting-card cover in standard 5x7 proportions. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
 
 Occasion: ${details.occasion}
 Recipient: ${details.recipientName || details.recipientType}
@@ -872,7 +921,7 @@ const generateImageFromPrompt = async (openai, prompt) => {
   const imageResponse = await openai.images.generate({
     model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     prompt,
-    size: '1024x1536',
+    size: COVER_IMAGE_SIZE,
     quality: 'medium',
   })
 
@@ -943,7 +992,7 @@ const editImageWithFiles = async (openai, prompt, imageFiles) => {
     model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     image: imageFiles,
     prompt,
-    size: '1024x1536',
+    size: COVER_IMAGE_SIZE,
     quality: 'medium',
   })
 
@@ -1097,14 +1146,43 @@ const parseCopyResponse = (response) => {
 
 const createCardId = () => crypto.randomUUID?.() || crypto.randomBytes(16).toString('hex')
 
-const getPublicAppUrl = (req) =>
-  (process.env.PUBLIC_APP_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
+const localApiHostPattern = /^(localhost|127\.0\.0\.1):8787$/i
 
-const getShareBaseUrl = (req) =>
-  (process.env.SHARE_BASE_URL || process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`).replace(
-    /\/$/,
-    '',
-  )
+const resolveFrontendAppUrl = (req) => {
+  const configured = String(process.env.SHARE_BASE_URL || process.env.PUBLIC_APP_URL || process.env.DEV_APP_URL || '')
+    .replace(/\/$/, '')
+  const forwarded = String(req.headers['x-frontend-origin'] || '').replace(/\/$/, '')
+  const origin = String(req.headers.origin || '').replace(/\/$/, '')
+  const host = req.get('host') || ''
+
+  if (forwarded) {
+    return forwarded
+  }
+
+  if (origin) {
+    try {
+      if (!localApiHostPattern.test(new URL(origin).host)) {
+        return origin
+      }
+    } catch {
+      // Ignore malformed Origin values.
+    }
+  }
+
+  if (configured) {
+    return configured
+  }
+
+  if (localApiHostPattern.test(host)) {
+    return 'http://localhost:5173'
+  }
+
+  return `${req.protocol}://${host}`.replace(/\/$/, '')
+}
+
+const getPublicAppUrl = (req) => resolveFrontendAppUrl(req)
+
+const getShareBaseUrl = (req) => resolveFrontendAppUrl(req)
 
 const getShareUrl = (req, cardId) => `${getShareBaseUrl(req)}/c/${encodeURIComponent(cardId)}`
 
@@ -1774,6 +1852,126 @@ app.post('/api/refine-image', async (req, res) => {
   }
 })
 
+app.post('/api/auth/otp/start', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Sign-in is only available on the deployed API.' })
+  }
+
+  try {
+    const phoneE164 = normalizePhoneNumber(req.body?.phone)
+    console.log(`[local dev auth] Sign-in code for ${phoneE164}: ${localDevOtpCode}`)
+    return res.json({
+      ok: true,
+      phoneE164,
+      message: `Local dev: enter ${localDevOtpCode} (also printed in the API terminal). No text was sent.`,
+    })
+  } catch (error) {
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : 'Unable to send a sign-in code.',
+    })
+  }
+})
+
+app.post('/api/auth/otp/verify', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Sign-in is only available on the deployed API.' })
+  }
+
+  try {
+    const phoneE164 = normalizePhoneNumber(req.body?.phone)
+    const cleanCode = String(req.body?.code || '')
+      .replace(/\D/g, '')
+      .padStart(6, '0')
+      .slice(-6)
+
+    if (cleanCode !== localDevOtpCode) {
+      return res.status(400).json({ error: 'That code does not match. Check the API terminal for the local dev code.' })
+    }
+
+    const user = getLocalDevUser(phoneE164)
+    user.lastLoginAt = Date.now()
+    const token = crypto.randomUUID()
+    localAccountSessions.set(token, { token, userId: user.id, phoneE164, createdAt: Date.now() })
+
+    return res.json({
+      ok: true,
+      token,
+      phoneE164,
+      email: user.email || '',
+      creditBalance: user.creditBalance,
+      isNew: false,
+      phoneVerifyBonusCredits: 0,
+      message: 'Signed in for local testing.',
+    })
+  } catch (error) {
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : 'Unable to confirm that code.',
+    })
+  }
+})
+
+app.get('/api/account', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Account is only available on the deployed API.' })
+  }
+
+  const token = readBearerToken(req)
+  const session = token ? localAccountSessions.get(token) : null
+  if (!session) {
+    return res.status(401).json({ error: 'Confirm your mobile number before viewing your account.' })
+  }
+
+  const user = getLocalDevUser(session.phoneE164)
+  return res.json({
+    ok: true,
+    phoneE164: session.phoneE164,
+    email: user.email || '',
+    creditBalance: user.creditBalance,
+  })
+})
+
+app.get('/api/account/history', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Account history is only available on the deployed API.' })
+  }
+
+  const token = readBearerToken(req)
+  const session = token ? localAccountSessions.get(token) : null
+  if (!session) {
+    return res.status(401).json({ error: 'Confirm your mobile number before viewing your account.' })
+  }
+
+  return res.json({
+    ok: true,
+    phoneE164: session.phoneE164,
+    sends: [],
+    creditEvents: [],
+  })
+})
+
+app.post('/api/account/credits', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Account credits are only available on the deployed API.' })
+  }
+
+  const token = readBearerToken(req)
+  const session = token ? localAccountSessions.get(token) : null
+  if (!session) {
+    return res.status(401).json({ error: 'Confirm your mobile number before changing credits.' })
+  }
+
+  const user = getLocalDevUser(session.phoneE164)
+  const balance = Number(req.body?.balance)
+  const add = Number(req.body?.add)
+  if (Number.isFinite(balance)) {
+    user.creditBalance = Math.max(0, balance)
+  } else if (Number.isFinite(add)) {
+    user.creditBalance = Math.max(0, user.creditBalance + add)
+  }
+
+  return res.json({ ok: true, creditBalance: user.creditBalance })
+})
+
 app.post('/api/refine-copy', async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({
@@ -1825,4 +2023,7 @@ app.post('/api/refine-copy', async (req, res) => {
 
 app.listen(port, () => {
   console.log(`AI Card Buddy API listening on http://localhost:${port}`)
+  if (localDevAuthEnabled) {
+    console.log(`Local dev sign-in enabled. OTP code: ${localDevOtpCode} (override with LOCAL_DEV_OTP).`)
+  }
 })

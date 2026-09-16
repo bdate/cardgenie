@@ -28,6 +28,11 @@ type SharedCard = {
   signature?: string
 }
 
+const CARD_COVER_WIDTH = 1056
+const CARD_COVER_HEIGHT = 1472
+const PRINT_CARD_WIDTH = 1504
+const PRINT_CARD_HEIGHT = 2096
+
 type ExperienceStep = 'envelope' | 'envelopeFlip' | 'envelopeBack' | 'opening' | 'front' | 'cardOpening' | 'inside'
 type EditorTab = 'front' | 'inside'
 type CoverRefinementMode = 'revise' | 'new'
@@ -106,6 +111,10 @@ const maxReferencePhotoDataUrlLength = 480000
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
+const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
+
+const localShareUrl = (cardId: string) =>
+  `${window.location.origin}/?card=${encodeURIComponent(cardId)}`
 const hostedApiMessage =
   'This online demo needs a deployed API server before Card Genie can generate cards. Run it locally with the Express server, or connect VITE_API_BASE_URL to a hosted backend.'
 const getSharedCardId = () => {
@@ -170,6 +179,12 @@ const getApiJson = async (response: Response, fallbackMessage: string) => {
   }
 
   if (!response.ok) {
+    const body = await response.text()
+    if (isLocalApiDev && /Cannot (GET|POST) \/api\//i.test(body)) {
+      throw new Error(
+        'Local API server is missing this route. Stop dev, then run npm run dev again (or restart node server/index.js on port 8787).',
+      )
+    }
     throw new Error(window.location.hostname.endsWith('github.io') && !apiBaseUrl ? hostedApiMessage : fallbackMessage)
   }
 
@@ -597,6 +612,32 @@ const downloadImageFallback = (imageUrl: string, fileName: string) => {
   link.remove()
 }
 
+const loadImageElement = (imageUrl: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    if (!imageUrl.startsWith('data:')) {
+      image.crossOrigin = 'anonymous'
+    }
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Unable to load the cover image for print export.'))
+    image.src = imageUrl
+  })
+
+const upscaleImageToDataUrl = (image: HTMLImageElement, width: number, height: number) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return ''
+  }
+
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/png')
+}
+
 const isMobileDevice = () =>
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
@@ -792,24 +833,34 @@ const createInsideImageUrl = ({
   paragraphs,
   closing,
   signature,
+  width = CARD_COVER_WIDTH,
+  height = CARD_COVER_HEIGHT,
 }: {
   greeting: string
   paragraphs: string[]
   closing: string
   signature: string
+  width?: number
+  height?: number
 }) => {
   if (typeof document === 'undefined') {
     return ''
   }
 
   const canvas = document.createElement('canvas')
-  canvas.width = 1200
-  canvas.height = 1500
+  canvas.width = width
+  canvas.height = height
   const context = canvas.getContext('2d')
 
   if (!context) {
     return ''
   }
+
+  const scaleX = width / 1200
+  const scaleY = height / 1500
+  const marginX = 70 * scaleX
+  const marginY = 70 * scaleY
+  const maxTextWidth = 840 * scaleX
 
   const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
   gradient.addColorStop(0, '#fffdf6')
@@ -818,45 +869,60 @@ const createInsideImageUrl = ({
   context.fillStyle = gradient
   context.fillRect(0, 0, canvas.width, canvas.height)
 
-  const cornerGlow = context.createRadialGradient(930, 190, 40, 930, 190, 520)
+  const cornerGlow = context.createRadialGradient(
+    930 * scaleX,
+    190 * scaleY,
+    40 * scaleX,
+    930 * scaleX,
+    190 * scaleY,
+    520 * scaleX,
+  )
   cornerGlow.addColorStop(0, 'rgba(245, 158, 51, 0.18)')
   cornerGlow.addColorStop(1, 'rgba(245, 158, 51, 0)')
   context.fillStyle = cornerGlow
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
-  context.lineWidth = 4
-  context.strokeRect(70, 70, canvas.width - 140, canvas.height - 140)
+  context.lineWidth = 4 * scaleX
+  context.strokeRect(marginX, marginY, canvas.width - marginX * 2, canvas.height - marginY * 2)
 
   context.fillStyle = '#2d6762'
   context.textAlign = 'center'
   context.textBaseline = 'top'
 
-  let y = 190
-  const maxTextWidth = 840
+  let y = 190 * scaleY
+  const bodyLineHeight = 58 * scaleY
+  const closingLineHeight = 52 * scaleY
+  const signatureLineHeight = 82 * scaleY
 
   if (greeting.trim()) {
-    context.font = '44px Georgia, serif'
+    context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
     const greetingLines = wrapCanvasText(context, greeting.trim(), maxTextWidth)
-    drawCenteredLines(context, greetingLines, canvas.width / 2, y, 58)
-    y += greetingLines.length * 58 + 36
+    drawCenteredLines(context, greetingLines, canvas.width / 2, y, bodyLineHeight)
+    y += greetingLines.length * bodyLineHeight + 36 * scaleY
   }
 
-  context.font = '42px Georgia, serif'
+  context.font = `${Math.round(42 * scaleX)}px Georgia, serif`
   for (const paragraph of paragraphs) {
     const lines = wrapCanvasText(context, paragraph, maxTextWidth)
-    drawCenteredLines(context, lines, canvas.width / 2, y, 58)
-    y += lines.length * 58 + 34
+    drawCenteredLines(context, lines, canvas.width / 2, y, bodyLineHeight)
+    y += lines.length * bodyLineHeight + 34 * scaleY
   }
 
-  context.font = '40px Georgia, serif'
+  context.font = `${Math.round(40 * scaleX)}px Georgia, serif`
   const closingLines = wrapCanvasText(context, closing, maxTextWidth)
-  drawCenteredLines(context, closingLines, canvas.width / 2, Math.max(y + 22, 1110), 52)
+  drawCenteredLines(
+    context,
+    closingLines,
+    canvas.width / 2,
+    Math.max(y + 22 * scaleY, 1110 * scaleY),
+    closingLineHeight,
+  )
 
   context.fillStyle = '#d88a31'
-  context.font = '70px cursive'
+  context.font = `${Math.round(70 * scaleX)}px cursive`
   const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
-  drawCenteredLines(context, signatureLines, canvas.width / 2, 1220, 82)
+  drawCenteredLines(context, signatureLines, canvas.width / 2, 1220 * scaleY, signatureLineHeight)
 
   return canvas.toDataURL('image/png')
 }
@@ -950,6 +1016,9 @@ function App() {
   const [isSendingThankYou, setIsSendingThankYou] = useState(false)
   const [thankYouNotice, setThankYouNotice] = useState('')
   const [creditNotice, setCreditNotice] = useState('')
+  const [adminPrintFiles, setAdminPrintFiles] = useState<{ coverUrl: string; insideUrl: string } | null>(null)
+  const [isPreparingAdminPrintFiles, setIsPreparingAdminPrintFiles] = useState(false)
+  const [adminPrintNotice, setAdminPrintNotice] = useState('')
   const [error, setError] = useState('')
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -1069,6 +1138,8 @@ function App() {
   )
   const coverDownloadName = card ? `${fileNameBase}-cover.${getImageExtension(card.imageUrl)}` : 'card-cover.png'
   const insideDownloadName = `${fileNameBase}-inside.png`
+  const printCoverDownloadName = `${fileNameBase}-print-cover.png`
+  const printInsideDownloadName = `${fileNameBase}-print-inside.png`
   const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
   const coverSaveLabel = prefersPhotoSave ? 'Save cover to photos' : 'Save cover image'
   const insideSaveLabel = prefersPhotoSave ? 'Save inside to photos' : 'Save inside image'
@@ -1128,6 +1199,10 @@ function App() {
           headers: { Authorization: `Bearer ${parsed.token}` },
         })
         if (!response.ok) {
+          if (isLocalApiDev) {
+            window.localStorage.removeItem(accountSessionStorageKey)
+            setAccountSession(null)
+          }
           return
         }
 
@@ -2135,6 +2210,45 @@ function App() {
     setSaveNotice('The image was saved to your downloads folder.')
   }
 
+  const prepareAdminPrintFiles = async () => {
+    if (!card) {
+      return
+    }
+
+    setIsPreparingAdminPrintFiles(true)
+    setAdminPrintNotice('')
+    setAdminPrintFiles(null)
+
+    try {
+      const coverImage = await loadImageElement(card.imageUrl)
+      const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+      if (!coverUrl) {
+        throw new Error('Unable to prepare the print cover file.')
+      }
+
+      const insideUrl = createInsideImageUrl({
+        greeting: insideGreeting,
+        paragraphs: messageParagraphs,
+        closing: cardClosing,
+        signature: cardSignatureLabel,
+        width: PRINT_CARD_WIDTH,
+        height: PRINT_CARD_HEIGHT,
+      })
+      if (!insideUrl) {
+        throw new Error('Unable to prepare the print inside file.')
+      }
+
+      setAdminPrintFiles({ coverUrl, insideUrl })
+      setAdminPrintNotice('Print test files are ready at 1504×2096 px.')
+    } catch (caughtError) {
+      setAdminPrintNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to prepare print test files.',
+      )
+    } finally {
+      setIsPreparingAdminPrintFiles(false)
+    }
+  }
+
   const acceptEditorChanges = () => {
     setShowEditor(false)
     setShowPolishDialog(false)
@@ -2523,8 +2637,11 @@ function App() {
     }
 
     const shared = data as SharedCard
-    setSharedCard(shared)
-    return shared
+    const normalized: SharedCard = isLocalApiDev
+      ? { ...shared, shareUrl: localShareUrl(shared.id) }
+      : shared
+    setSharedCard(normalized)
+    return normalized
   }
 
   const addDeliveryLog = (entry: Omit<DeliveryLog, 'id' | 'createdAt'>) => {
@@ -2864,7 +2981,7 @@ function App() {
                     ))}
                   </div>
                 )}
-                {isAdmin && (
+                {(isAdmin || isLocalApiDev) && (
                   <p className="credit-dev-links">
                     Set credits:
                     <button type="button" onClick={() => setCreditBalance(0)}>
@@ -2876,6 +2993,11 @@ function App() {
                     <button type="button" onClick={() => setCreditBalance(2)}>
                       2
                     </button>
+                    {isLocalApiDev && (
+                      <button type="button" onClick={() => setCreditBalance(50)}>
+                        50
+                      </button>
+                    )}
                   </p>
                 )}
               </div>
@@ -4083,6 +4205,32 @@ function App() {
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
                     Open shareable card link
                   </a>
+                )}
+                {isAdmin && card && !isRecipientView && showReviseButton && (
+                  <div className="admin-print-test">
+                    <button
+                      className="text-action-link"
+                      type="button"
+                      disabled={isPreparingAdminPrintFiles}
+                      onClick={() => void prepareAdminPrintFiles()}
+                    >
+                      {isPreparingAdminPrintFiles
+                        ? 'Preparing print files…'
+                        : 'Create print test files (1504×2096)'}
+                    </button>
+                    {adminPrintFiles && (
+                      <p className="admin-print-links">
+                        <a href={adminPrintFiles.coverUrl} download={printCoverDownloadName}>
+                          Download print cover
+                        </a>
+                        <span aria-hidden="true"> · </span>
+                        <a href={adminPrintFiles.insideUrl} download={printInsideDownloadName}>
+                          Download print inside
+                        </a>
+                      </p>
+                    )}
+                    {adminPrintNotice && <p className="admin-print-notice">{adminPrintNotice}</p>}
+                  </div>
                 )}
                 {deliveryNotice &&
                   (!hasEnoughCreditsToSend

@@ -24,6 +24,10 @@ const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
 const fallbackCardStore = new Map()
 
+const COVER_IMAGE_SIZE = '1056x1472'
+const COVER_IMAGE_WIDTH = 1056
+const COVER_IMAGE_HEIGHT = 1472
+
 /** Live Stripe Price IDs for credit packs. */
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
@@ -529,7 +533,7 @@ const normalizeReferenceImages = (value) => {
 const buildImagePrompt = (details, refinement = '', imageMode = 'new') => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
-The generated image must be portrait artwork at 1024px wide by 1536px tall, composed for a 5x7 greeting-card cover. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
+The generated image must be portrait artwork at ${COVER_IMAGE_WIDTH}px wide by ${COVER_IMAGE_HEIGHT}px tall, composed for a greeting-card cover in standard 5x7 proportions. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
 
 Occasion: ${details.occasion}
 Recipient: ${details.recipientName || details.recipientType}
@@ -1529,7 +1533,7 @@ const generateImage = async (
   const imageResponse = await openai.images.generate({
     model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     prompt,
-    size: '1024x1536',
+    size: COVER_IMAGE_SIZE,
     quality: 'medium',
   })
 
@@ -1577,7 +1581,7 @@ const editImageWithFiles = async (openai, env, prompt, imageFiles) => {
     model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
     image: imageFiles,
     prompt,
-    size: '1024x1536',
+    size: COVER_IMAGE_SIZE,
     quality: 'medium',
   })
 

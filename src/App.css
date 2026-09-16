@@ -1495,7 +1495,7 @@ textarea:focus {
   z-index: 9;
   overflow: hidden;
   width: min(360px, 60%);
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   background: #fff;
   box-shadow: 0 34px 72px rgba(63, 155, 145, 0.22);
   clip-path: inset(0 0 68% 0);
@@ -1531,7 +1531,7 @@ textarea:focus {
   width: min(450px, 100%);
   max-width: 100%;
   margin-inline: auto;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   border-radius: 0;
   box-shadow:
     0 44px 96px rgba(63, 155, 145, 0.3),
@@ -1593,7 +1593,7 @@ textarea:focus {
   place-items: center;
   overflow: hidden;
   width: 48px;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   background: #fff;
   box-shadow: inset 0 0 0 1px rgba(42, 31, 61, 0.12);
 }
@@ -1625,7 +1625,7 @@ textarea:focus {
   overflow: hidden;
   width: min(450px, 100%);
   max-width: 100%;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   margin: 0 auto;
   border: 1px solid rgba(63, 155, 145, 0.2);
   border-radius: 0;
@@ -1658,7 +1658,7 @@ textarea:focus {
   width: min(450px, 100%);
   max-width: 100%;
   margin-inline: auto;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   transform-style: preserve-3d;
   animation: openStageSettle 1.8s ease forwards;
 }
@@ -1818,7 +1818,7 @@ textarea:focus {
   display: grid;
   place-items: center;
   width: 48px;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   background: #fff;
   object-fit: cover;
   box-shadow: inset 0 0 0 1px rgba(42, 31, 61, 0.12);
@@ -2261,6 +2261,27 @@ textarea:focus {
 
 .admin-links h3 {
   margin: 0 0 8px;
+}
+
+.admin-print-test {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(45, 103, 98, 0.12);
+}
+
+.admin-print-links {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+}
+
+.admin-print-links a {
+  font-weight: 700;
+}
+
+.admin-print-notice {
+  margin: 8px 0 0;
+  color: #315f5b;
+  font-size: 0.92rem;
 }
 
 .admin-link-row {
@@ -2781,7 +2802,7 @@ textarea:focus {
   z-index: 12;
   display: none;
   width: min(430px, 54vw);
-  aspect-ratio: 5 / 7;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   overflow: hidden;
   border: 10px solid rgba(255, 255, 255, 0.92);
   background: #fff;

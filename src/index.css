@@ -10,6 +10,8 @@
   --gcu-dark-grey: #666666;
   --gcu-cream: #fff8ef;
   --gcu-ink: #315f5b;
+  --card-cover-width: 1056;
+  --card-cover-height: 1472;
 
   color: var(--gcu-ink);
   background:
