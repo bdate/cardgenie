@@ -19,6 +19,12 @@ import {
   updateTestimonialStatus,
   upsertUserOnLogin,
 } from './account-db.js'
+import {
+  ensureCoverThumbForRecord,
+  getCoverThumbBytes,
+  getCoverThumbUrl,
+  putCoverThumbFromDataUrl,
+} from './cover-thumbs.js'
 
 const defaultAllowedOrigins =
   'http://localhost:5173,http://127.0.0.1:5173,https://card-genie.com,https://www.card-genie.com'
@@ -824,7 +830,7 @@ const getShareBaseUrl = (request, env) =>
 const getShareUrl = (request, env, cardId) => `${getShareBaseUrl(request, env)}/c/${encodeURIComponent(cardId)}`
 
 const getSharePathParts = (pathname) => {
-  const match = pathname.match(/^\/c\/([^/]+)(?:\/(cover))?\/?$/)
+  const match = pathname.match(/^\/c\/([^/]+)(?:\/(cover|thumb))?\/?$/)
 
   if (!match) {
     return null
@@ -833,6 +839,7 @@ const getSharePathParts = (pathname) => {
   return {
     cardId: decodeURIComponent(match[1]),
     isCover: match[2] === 'cover',
+    isThumb: match[2] === 'thumb',
   }
 }
 
@@ -942,13 +949,22 @@ const buildCardRecord = (payload) => {
   }
 }
 
-const saveCardRecord = async (env, record) => {
+const saveCardRecord = async (env, record, { coverThumbDataUrl } = {}) => {
   if (env.CARD_STORE) {
     await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
-    return
+  } else {
+    fallbackCardStore.set(record.id, record)
   }
 
-  fallbackCardStore.set(record.id, record)
+  try {
+    if (coverThumbDataUrl) {
+      await putCoverThumbFromDataUrl(env, record.id, coverThumbDataUrl)
+    } else {
+      await ensureCoverThumbForRecord(env, record)
+    }
+  } catch (error) {
+    console.error('Unable to save cover thumbnail.', error)
+  }
 }
 
 const getCardRecord = async (env, cardId) => {
@@ -1646,8 +1662,9 @@ const readJson = async (request) => {
 
 const handleSaveCard = async (request, env) => {
   try {
-    const record = buildCardRecord(await readJson(request))
-    await saveCardRecord(env, record)
+    const payload = await readJson(request)
+    const record = buildCardRecord(payload)
+    await saveCardRecord(env, record, { coverThumbDataUrl: payload?.coverThumb })
 
     return jsonResponse(request, env, getCardSummary(record, request, env), 201)
   } catch (error) {
@@ -2297,7 +2314,134 @@ const handleGetAccountHistory = async (request, env) => {
     })
   }
 
-  return jsonResponse(request, env, { ok: true, phoneE164: session.phoneE164, ...history })
+  const withThumbUrls = (items, idKey = 'id') =>
+    (items || []).map((item) => {
+      const cardId = item[idKey] || item.cardId || item.id
+      return {
+        ...item,
+        coverThumbUrl: cardId ? getCoverThumbUrl(request, env, cardId) : '',
+      }
+    })
+
+  return jsonResponse(request, env, {
+    ok: true,
+    phoneE164: session.phoneE164,
+    ...history,
+    cards: withThumbUrls(history.cards, 'id'),
+    deliveries: withThumbUrls(history.deliveries, 'cardId'),
+  })
+}
+
+const handleGetCoverThumb = async (request, env, cardId) => {
+  const stored = await getCoverThumbBytes(env, cardId)
+  if (stored) {
+    return new Response(stored.bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': stored.contentType || 'image/jpeg',
+        'Cache-Control': 'public, max-age=604800',
+        'Access-Control-Allow-Origin': '*',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
+  }
+
+  const record = await getCardRecord(env, cardId)
+  if (record?.card?.imageUrl) {
+    try {
+      await ensureCoverThumbForRecord(env, record)
+      const created = await getCoverThumbBytes(env, cardId)
+      if (created) {
+        return new Response(created.bytes, {
+          status: 200,
+          headers: {
+            'Content-Type': created.contentType || 'image/jpeg',
+            'Cache-Control': 'public, max-age=604800',
+            'Access-Control-Allow-Origin': '*',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  return jsonResponse(request, env, { error: 'Cover thumbnail not found.' }, 404)
+}
+
+const isCardStoreRecordKey = (name = '') =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)
+
+const handleBackfillCoverThumbs = async (request, env) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  if (!env.CARD_STORE) {
+    return jsonResponse(request, env, { error: 'Card storage is not configured.' }, 500)
+  }
+
+  const body = (await readJson(request).catch(() => null)) || {}
+  const limit = Math.min(100, Math.max(1, Number(body.limit) || 40))
+  let cursor = typeof body.cursor === 'string' ? body.cursor : undefined
+  let scanned = 0
+  let created = 0
+  let skipped = 0
+  let failed = 0
+  const errors = []
+
+  while (scanned < limit) {
+    const page = await env.CARD_STORE.list({ limit: Math.min(100, limit - scanned + 20), cursor })
+    for (const key of page.keys || []) {
+      if (scanned >= limit) {
+        break
+      }
+      if (!isCardStoreRecordKey(key.name)) {
+        continue
+      }
+
+      scanned += 1
+      const record = await env.CARD_STORE.get(key.name, 'json')
+      if (!record?.card?.imageUrl) {
+        skipped += 1
+        continue
+      }
+
+      const result = await ensureCoverThumbForRecord(env, record)
+      if (result.ok && result.created) {
+        created += 1
+      } else if (result.ok && result.skipped) {
+        skipped += 1
+      } else {
+        failed += 1
+        if (errors.length < 8) {
+          errors.push({ cardId: key.name, reason: result.reason || 'failed' })
+        }
+      }
+    }
+
+    if (page.list_complete) {
+      cursor = undefined
+      break
+    }
+    cursor = page.cursor
+    if (!cursor) {
+      break
+    }
+  }
+
+  return jsonResponse(request, env, {
+    ok: true,
+    scanned,
+    created,
+    skipped,
+    failed,
+    cursor: cursor || null,
+    done: !cursor,
+    storage: env.CARD_ASSETS ? 'r2' : 'kv',
+    errors,
+  })
 }
 
 const handleGetAccount = async (request, env) => {
@@ -2802,6 +2946,10 @@ const handleRequest = async (request, env, ctx) => {
     return handleShareCover(request, env, sharePath.cardId)
   }
 
+  if (sharePath?.isThumb) {
+    return handleGetCoverThumb(request, env, sharePath.cardId)
+  }
+
   if (sharePath) {
     return handleSharePreview(request, env, sharePath.cardId)
   }
@@ -2839,6 +2987,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account/history') {
     return handleGetAccountHistory(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {
+    return handleBackfillCoverThumbs(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/admin/metrics') {

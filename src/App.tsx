@@ -638,6 +638,27 @@ const upscaleImageToDataUrl = (image: HTMLImageElement, width: number, height: n
   return canvas.toDataURL('image/png')
 }
 
+const COVER_THUMB_MAX_EDGE = 320
+
+const createCoverThumbDataUrl = async (imageUrl: string) => {
+  const image = await loadImageElement(imageUrl)
+  const scale = Math.min(1, COVER_THUMB_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight))
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return ''
+  }
+
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.72)
+}
+
 const isMobileDevice = () =>
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
@@ -989,14 +1010,17 @@ function App() {
       recipientName: string
       occasion: string
       status: string
+      coverThumbUrl?: string
     }>
     deliveries?: Array<{
       id: string
+      cardId?: string
       createdAt: string
       method: string
       destination: string
       isSenderCopy: boolean
       status: string
+      coverThumbUrl?: string
     }>
     thankYous?: Array<{
       id: string
@@ -1076,6 +1100,8 @@ function App() {
   const [adminMetricsPeriod, setAdminMetricsPeriod] = useState<'today' | '7d' | '30d' | 'ytd'>('7d')
   const [isLoadingAdminMetrics, setIsLoadingAdminMetrics] = useState(false)
   const [adminMetricsError, setAdminMetricsError] = useState('')
+  const [isBackfillingThumbs, setIsBackfillingThumbs] = useState(false)
+  const [thumbBackfillNotice, setThumbBackfillNotice] = useState('')
   const [pendingReviews, setPendingReviews] = useState<
     Array<{
       id: string
@@ -1704,6 +1730,7 @@ function App() {
       title: 'Created',
       detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
       status: card.status,
+      coverThumbUrl: card.coverThumbUrl || '',
     }))
 
     const sent = (accountHistory.deliveries || []).map((delivery) => ({
@@ -1714,6 +1741,7 @@ function App() {
       }`,
       detail: delivery.destination,
       status: delivery.status,
+      coverThumbUrl: delivery.coverThumbUrl || '',
     }))
 
     const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
@@ -1724,6 +1752,7 @@ function App() {
         ? `${thankYou.recipientName}: “${thankYou.message}”`
         : `“${thankYou.message}”`,
       status: thankYou.status || 'Sent',
+      coverThumbUrl: '',
     }))
 
     return [...created, ...sent, ...thanks].sort((left, right) =>
@@ -1872,8 +1901,66 @@ function App() {
     setAdminView('analytics')
     setShowCreditMenu(false)
     setAdminMetricsPeriod('7d')
+    setThumbBackfillNotice('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
     await loadAdminMetrics(accountSession.token, '7d')
+  }
+
+  const runCoverThumbBackfill = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+
+    setIsBackfillingThumbs(true)
+    setThumbBackfillNotice('Backfilling cover thumbnails…')
+    let cursor: string | null = null
+    let totalCreated = 0
+    let totalScanned = 0
+    let totalFailed = 0
+    let pages = 0
+
+    try {
+      do {
+        const response = await fetch(apiUrl('/api/admin/backfill-cover-thumbs'), {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accountSession.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ limit: 25, cursor }),
+        })
+        const data = await getApiJson(response, 'Unable to backfill cover thumbnails.')
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to backfill cover thumbnails.')
+        }
+
+        totalCreated += Number(data.created) || 0
+        totalScanned += Number(data.scanned) || 0
+        totalFailed += Number(data.failed) || 0
+        cursor = data.done ? null : String(data.cursor || '') || null
+        pages += 1
+        setThumbBackfillNotice(
+          `Backfill in progress… scanned ${totalScanned}, created ${totalCreated}${
+            totalFailed ? `, failed ${totalFailed}` : ''
+          }.`,
+        )
+      } while (cursor && pages < 40)
+
+      setThumbBackfillNotice(
+        `Backfill finished. Scanned ${totalScanned}, created ${totalCreated}${
+          totalFailed ? `, failed ${totalFailed}` : ''
+        }.`,
+      )
+      if (accountSession.token) {
+        await loadAccountHistory(accountSession.token)
+      }
+    } catch (caughtError) {
+      setThumbBackfillNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to backfill cover thumbnails.',
+      )
+    } finally {
+      setIsBackfillingThumbs(false)
+    }
   }
 
   const openAdminReviews = async () => {
@@ -2635,12 +2722,22 @@ function App() {
   }
 
   const saveCurrentCard = async () => {
+    let coverThumb = ''
+    try {
+      coverThumb = await createCoverThumbDataUrl(card!.imageUrl)
+    } catch {
+      coverThumb = ''
+    }
+
     const response = await fetch(apiUrl('/api/cards'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(buildCurrentCardPayload()),
+      body: JSON.stringify({
+        ...buildCurrentCardPayload(),
+        ...(coverThumb ? { coverThumb } : {}),
+      }),
     })
     const data = await getApiJson(response, 'Unable to save the card for delivery.')
 
@@ -3123,11 +3220,19 @@ function App() {
                         ? cardActivityItems
                         : cardActivityItems.slice(0, accountActivityPreviewLimit)
                       ).map((item) => (
-                        <div className="account-row" key={item.id}>
+                        <div
+                          className={`account-row${item.coverThumbUrl ? ' has-cover-thumb' : ''}`}
+                          key={item.id}
+                        >
                           <span className="account-row-title">{item.title}</span>
                           <span className="account-row-detail">{item.detail}</span>
                           <span className="account-row-status">{item.status}</span>
                           <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
+                          {item.coverThumbUrl ? (
+                            <span className="account-row-thumb" aria-hidden="true">
+                              <img src={item.coverThumbUrl} alt="" loading="lazy" />
+                            </span>
+                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -3206,11 +3311,20 @@ function App() {
               >
                 {isLoadingAdminMetrics ? 'Refreshing...' : 'Refresh'}
               </button>
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={isBackfillingThumbs || !accountSession?.token}
+                onClick={() => void runCoverThumbBackfill()}
+              >
+                {isBackfillingThumbs ? 'Backfilling thumbs…' : 'Backfill cover thumbs'}
+              </button>
               <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
                 Back to account
               </button>
             </div>
           </div>
+          {thumbBackfillNotice && <div className="field-notice">{thumbBackfillNotice}</div>}
           <div className="mode-toggle admin-metrics-periods" role="tablist" aria-label="Analytics period">
             {(
               [

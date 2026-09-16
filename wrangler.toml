@@ -22,6 +22,11 @@ zone_name = "card-genie.com"
 binding = "CARD_STORE"
 id = "e599b5d8c31b4d5296a7d4c8e7a8aef0"
 
+# Enable R2 in the Cloudflare dashboard, create bucket `cardgenie-assets`, then uncomment:
+# [[r2_buckets]]
+# binding = "CARD_ASSETS"
+# bucket_name = "cardgenie-assets"
+
 [[d1_databases]]
 binding = "ACCOUNT_DB"
 database_name = "cardgenie"
