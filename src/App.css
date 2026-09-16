@@ -2486,6 +2486,12 @@ textarea:focus {
   font-size: 0.9rem;
 }
 
+.account-thumb-hint {
+  margin: 0 0 8px !important;
+  color: var(--gcu-grey);
+  font-size: 0.86rem;
+}
+
 .account-row {
   position: relative;
   display: grid;
@@ -2499,7 +2505,7 @@ textarea:focus {
 }
 
 .account-row.has-cover-thumb {
-  cursor: default;
+  cursor: pointer;
 }
 
 .account-row-thumb {
@@ -2525,6 +2531,10 @@ textarea:focus {
   aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
   object-fit: cover;
   border-radius: 8px;
+}
+
+.account-row.is-thumb-open .account-row-thumb {
+  display: block;
 }
 
 @media (hover: hover) and (pointer: fine) {

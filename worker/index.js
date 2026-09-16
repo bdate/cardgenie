@@ -23,6 +23,7 @@ import {
   ensureCoverThumbForRecord,
   getCoverThumbBytes,
   getCoverThumbUrl,
+  hasCoverThumb,
   putCoverThumbFromDataUrl,
 } from './cover-thumbs.js'
 
@@ -2314,12 +2315,40 @@ const handleGetAccountHistory = async (request, env) => {
     })
   }
 
+  const cardIds = [
+    ...new Set(
+      [...(history.cards || []).map((card) => card.id), ...(history.deliveries || []).map((delivery) => delivery.cardId)].filter(
+        Boolean,
+      ),
+    ),
+  ]
+
+  const thumbsAvailable = new Set()
+  await Promise.all(
+    cardIds.map(async (cardId) => {
+      if (await hasCoverThumb(env, cardId)) {
+        thumbsAvailable.add(cardId)
+        return
+      }
+
+      const record = await getCardRecord(env, cardId)
+      if (!record?.card?.imageUrl) {
+        return
+      }
+
+      const result = await ensureCoverThumbForRecord(env, record)
+      if (result.ok) {
+        thumbsAvailable.add(cardId)
+      }
+    }),
+  )
+
   const withThumbUrls = (items, idKey = 'id') =>
     (items || []).map((item) => {
       const cardId = item[idKey] || item.cardId || item.id
       return {
         ...item,
-        coverThumbUrl: cardId ? getCoverThumbUrl(request, env, cardId) : '',
+        coverThumbUrl: cardId && thumbsAvailable.has(cardId) ? getCoverThumbUrl(request, env, cardId) : '',
       }
     })
 

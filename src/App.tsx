@@ -1035,6 +1035,7 @@ function App() {
   const [accountHistoryError, setAccountHistoryError] = useState('')
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
+  const [activeCoverThumbId, setActiveCoverThumbId] = useState<string | null>(null)
   const [thankYouAvailable, setThankYouAvailable] = useState(false)
   const [thankYouAlreadySent, setThankYouAlreadySent] = useState(false)
   const [thankYouPresetsState, setThankYouPresetsState] = useState<
@@ -1725,10 +1726,13 @@ function App() {
     }
 
     const resolveThumbUrl = (cardId?: string, coverThumbUrl?: string) => {
+      if (!coverThumbUrl) {
+        return ''
+      }
       if (cardId && apiBaseUrl) {
         return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb`
       }
-      return coverThumbUrl || ''
+      return coverThumbUrl
     }
 
     const created = (accountHistory.cards || []).map((card) => ({
@@ -1890,6 +1894,7 @@ function App() {
     setAccountHistoryError('')
     setShowAllCreditEvents(false)
     setShowAllCardActivity(false)
+    setActiveCoverThumbId(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     if (!accountSession?.token) {
@@ -3218,6 +3223,9 @@ function App() {
               </div>
               <div className="account-block">
                 <h3>Cards and sends</h3>
+                {cardActivityItems.some((item) => item.coverThumbUrl) && (
+                  <p className="account-thumb-hint">Hover or tap a row to preview the cover.</p>
+                )}
                 {cardActivityItems.length === 0 ? (
                   <p>No cards sent yet.</p>
                 ) : (
@@ -3228,8 +3236,39 @@ function App() {
                         : cardActivityItems.slice(0, accountActivityPreviewLimit)
                       ).map((item) => (
                         <div
-                          className={`account-row${item.coverThumbUrl ? ' has-cover-thumb' : ''}`}
+                          className={[
+                            'account-row',
+                            item.coverThumbUrl ? 'has-cover-thumb' : '',
+                            activeCoverThumbId === item.id ? 'is-thumb-open' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
                           key={item.id}
+                          role={item.coverThumbUrl ? 'button' : undefined}
+                          tabIndex={item.coverThumbUrl ? 0 : undefined}
+                          aria-expanded={item.coverThumbUrl ? activeCoverThumbId === item.id : undefined}
+                          aria-label={
+                            item.coverThumbUrl
+                              ? activeCoverThumbId === item.id
+                                ? `${item.title}. Hide cover preview.`
+                                : `${item.title}. Show cover preview.`
+                              : undefined
+                          }
+                          onClick={() => {
+                            if (!item.coverThumbUrl) {
+                              return
+                            }
+                            setActiveCoverThumbId((current) => (current === item.id ? null : item.id))
+                          }}
+                          onKeyDown={(event) => {
+                            if (!item.coverThumbUrl) {
+                              return
+                            }
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setActiveCoverThumbId((current) => (current === item.id ? null : item.id))
+                            }
+                          }}
                         >
                           <span className="account-row-title">{item.title}</span>
                           <span className="account-row-detail">{item.detail}</span>
@@ -3243,8 +3282,9 @@ function App() {
                                 loading="lazy"
                                 onError={(event) => {
                                   const row = event.currentTarget.closest('.account-row')
-                                  row?.classList.remove('has-cover-thumb')
+                                  row?.classList.remove('has-cover-thumb', 'is-thumb-open')
                                   event.currentTarget.closest('.account-row-thumb')?.remove()
+                                  setActiveCoverThumbId((current) => (current === item.id ? null : current))
                                 }}
                               />
                             </span>
