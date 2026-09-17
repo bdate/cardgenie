@@ -2327,6 +2327,59 @@ textarea:focus {
   gap: 8px 18px;
 }
 
+.admin-grant-credits {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(45, 103, 98, 0.12);
+}
+
+.admin-grant-credits .field-title {
+  font-weight: 800;
+  color: var(--gcu-dark-teal);
+}
+
+.admin-grant-credits .field-help {
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.admin-grant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(88px, 0.55fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-grant-row label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--gcu-dark-grey);
+}
+
+.admin-grant-notice {
+  margin: 0;
+  color: #315f5b;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .admin-grant-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-grant-row .secondary-button {
+    width: 100%;
+  }
+}
+
 .admin-page-actions {
   display: flex;
   flex-wrap: wrap;

@@ -37,6 +37,14 @@ const getUserById = async (db, userId) => db.prepare('SELECT * FROM users WHERE 
 
 export const accountDbReady = (env) => Boolean(env.ACCOUNT_DB)
 
+export const findUserByPhone = async (env, phoneE164) => {
+  if (!env.ACCOUNT_DB || !phoneE164) {
+    return null
+  }
+
+  return mapUser(await getUserByPhone(env.ACCOUNT_DB, phoneE164))
+}
+
 export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserId }) => {
   if (!env.ACCOUNT_DB) {
     return null

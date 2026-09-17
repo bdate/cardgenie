@@ -2068,6 +2068,59 @@ app.post('/api/account/credits', (req, res) => {
   return res.json({ ok: true, creditBalance: user.creditBalance })
 })
 
+const localAdminPhones = new Set(['+19259637453'])
+
+app.post('/api/admin/grant-credits', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Admin tools are only available on the deployed API.' })
+  }
+
+  const token = readBearerToken(req)
+  const session = token ? localAccountSessions.get(token) : null
+  if (!session || !localAdminPhones.has(session.phoneE164)) {
+    return res.status(404).json({ error: 'Not found.' })
+  }
+
+  const rawPhone = String(req.body?.phone || req.body?.phoneE164 || '').trim()
+  const amount = Math.floor(Number(req.body?.credits ?? req.body?.add))
+
+  if (!rawPhone) {
+    return res.status(400).json({ error: 'Enter the account cellphone number.' })
+  }
+
+  let phoneE164 = ''
+  try {
+    phoneE164 = normalizePhoneNumber(rawPhone)
+  } catch (error) {
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : 'Enter a valid cellphone number.',
+    })
+  }
+
+  if (!Number.isFinite(amount) || amount < 1 || amount > 500) {
+    return res.status(400).json({ error: 'Enter a credit amount between 1 and 500.' })
+  }
+
+  const user = localAccountUsers.get(phoneE164)
+  if (!user) {
+    return res.status(404).json({
+      error: 'No Card Genie account found for that number. They need to confirm their phone first.',
+    })
+  }
+
+  const previousBalance = user.creditBalance
+  user.creditBalance = Math.max(0, user.creditBalance + amount)
+
+  return res.json({
+    ok: true,
+    phoneE164,
+    creditsAdded: amount,
+    creditBalance: user.creditBalance,
+    previousBalance,
+    message: `Added ${amount} credits. New balance: ${user.creditBalance}.`,
+  })
+})
+
 app.post('/api/refine-copy', async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({

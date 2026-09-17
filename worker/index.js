@@ -5,6 +5,7 @@ import {
   applyCreditChange,
   createTestimonial,
   ensureAccountUser,
+  findUserByPhone,
   getAccountForSession,
   getAccountHistory,
   getAdminMetrics,
@@ -2561,6 +2562,73 @@ const handleUpdateAdminTestimonial = async (request, env, testimonialId) => {
   return jsonResponse(request, env, { ok: true, ...updated })
 }
 
+const handleAdminGrantCredits = async (request, env) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  const session = await getAccountSession(env, readAccountToken(request))
+  const body = (await readJson(request)) || {}
+  const rawPhone = String(body.phone || body.phoneE164 || '').trim()
+  const amount = Math.floor(Number(body.credits ?? body.add))
+
+  if (!rawPhone) {
+    return jsonResponse(request, env, { error: 'Enter the account cellphone number.' }, 400)
+  }
+
+  let phoneE164 = ''
+  try {
+    phoneE164 = normalizePhoneNumber(rawPhone)
+  } catch (error) {
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Enter a valid cellphone number.' },
+      400,
+    )
+  }
+
+  if (!Number.isFinite(amount) || amount < 1 || amount > 500) {
+    return jsonResponse(request, env, { error: 'Enter a credit amount between 1 and 500.' }, 400)
+  }
+
+  const user = await findUserByPhone(env, phoneE164)
+  if (!user) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'No Card Genie account found for that number. They need to confirm their phone first.' },
+      404,
+    )
+  }
+
+  const nextBalance = await applyCreditChange(env, {
+    userId: user.id,
+    phoneE164,
+    delta: amount,
+    reason: 'admin_grant',
+    kind: 'grant',
+    note: session?.phoneE164 ? `Admin grant by ${session.phoneE164}` : 'Admin grant',
+  })
+
+  if (nextBalance === null) {
+    return jsonResponse(request, env, { error: 'Unable to grant credits for that account.' }, 500)
+  }
+
+  return jsonResponse(request, env, {
+    ok: true,
+    phoneE164,
+    creditsAdded: amount,
+    creditBalance: nextBalance,
+    previousBalance: Math.max(0, nextBalance - amount),
+    message: `Added ${amount} credits. New balance: ${nextBalance}.`,
+  })
+}
+
 const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
 const feedbackSources = new Set(['post_send', 'account'])
@@ -3117,6 +3185,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account/history') {
     return handleGetAccountHistory(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/grant-credits') {
+    return handleAdminGrantCredits(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {

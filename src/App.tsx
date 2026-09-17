@@ -1215,6 +1215,10 @@ function App() {
   const [isLoadingPendingReviews, setIsLoadingPendingReviews] = useState(false)
   const [pendingReviewNotice, setPendingReviewNotice] = useState('')
   const [updatingReviewId, setUpdatingReviewId] = useState('')
+  const [adminGrantPhone, setAdminGrantPhone] = useState('')
+  const [adminGrantCredits, setAdminGrantCredits] = useState('20')
+  const [adminGrantNotice, setAdminGrantNotice] = useState('')
+  const [isGrantingCredits, setIsGrantingCredits] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
@@ -2203,6 +2207,54 @@ function App() {
   const closeAdminView = () => {
     setAdminView(null)
     void openAccountPage()
+  }
+
+  const grantCreditsToPhone = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+
+    const validatedPhone = validatePhoneNumber(adminGrantPhone)
+    if (!validatedPhone.ok) {
+      setAdminGrantNotice(validatedPhone.message)
+      return
+    }
+
+    const amount = Math.floor(Number(adminGrantCredits))
+    if (!Number.isFinite(amount) || amount < 1 || amount > 500) {
+      setAdminGrantNotice('Enter a credit amount between 1 and 500.')
+      return
+    }
+
+    setIsGrantingCredits(true)
+    setAdminGrantNotice('')
+
+    try {
+      const response = await fetch(apiUrl('/api/admin/grant-credits'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accountSession.token}`,
+        },
+        body: JSON.stringify({
+          phone: validatedPhone.value,
+          credits: amount,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to grant credits.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to grant credits.')
+      }
+
+      setAdminGrantPhone(formatPhoneNumberDisplay(String(data.phoneE164 || validatedPhone.value)))
+      setAdminGrantNotice(
+        String(data.message || `Added ${amount} credits. New balance: ${data.creditBalance}.`),
+      )
+    } catch (caughtError) {
+      setAdminGrantNotice(caughtError instanceof Error ? caughtError.message : 'Unable to grant credits.')
+    } finally {
+      setIsGrantingCredits(false)
+    }
   }
 
   const buyCreditPack = async (pack: (typeof creditPacks)[number]) => {
@@ -3622,6 +3674,63 @@ function App() {
                       Reviews
                     </button>
                   </div>
+                  <form
+                    className="admin-grant-credits"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void grantCreditsToPhone()
+                    }}
+                  >
+                    <span className="field-title">Grant credits</span>
+                    <p className="field-help">Add credits to any confirmed Card Genie phone number.</p>
+                    <div className="admin-grant-row">
+                      <label>
+                        Phone number
+                        <input
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          value={adminGrantPhone}
+                          onChange={(event) => {
+                            setAdminGrantPhone(event.target.value)
+                            setAdminGrantNotice('')
+                          }}
+                          onBlur={() => {
+                            if (!adminGrantPhone.trim()) {
+                              return
+                            }
+                            const validated = validatePhoneNumber(adminGrantPhone)
+                            if (validated.ok) {
+                              setAdminGrantPhone(validated.display)
+                            }
+                          }}
+                          placeholder="(925) 555-1234"
+                        />
+                      </label>
+                      <label>
+                        Credits
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={500}
+                          value={adminGrantCredits}
+                          onChange={(event) => {
+                            setAdminGrantCredits(event.target.value)
+                            setAdminGrantNotice('')
+                          }}
+                        />
+                      </label>
+                      <button
+                        className="secondary-button"
+                        type="submit"
+                        disabled={isGrantingCredits || !adminGrantPhone.trim()}
+                      >
+                        {isGrantingCredits ? 'Granting…' : 'Grant'}
+                      </button>
+                    </div>
+                    {adminGrantNotice && <p className="admin-grant-notice">{adminGrantNotice}</p>}
+                  </form>
                 </div>
               )}
               <div className="account-summary">
