@@ -915,39 +915,67 @@ const createInsideImageUrl = ({
   context.textAlign = 'center'
   context.textBaseline = 'top'
 
-  let y = 190 * scaleY
   const bodyLineHeight = 58 * scaleY
   const closingLineHeight = 52 * scaleY
   const signatureLineHeight = 82 * scaleY
+  const afterGreetingGap = 36 * scaleY
+  const afterParagraphGap = 34 * scaleY
+  const beforeClosingGap = 72 * scaleY
+  const beforeSignatureGap = 28 * scaleY
 
-  if (greeting.trim()) {
-    context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
-    const greetingLines = wrapCanvasText(context, greeting.trim(), maxTextWidth)
-    drawCenteredLines(context, greetingLines, canvas.width / 2, y, bodyLineHeight)
-    y += greetingLines.length * bodyLineHeight + 36 * scaleY
-  }
-
+  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
+  const greetingLines = greeting.trim() ? wrapCanvasText(context, greeting.trim(), maxTextWidth) : []
   context.font = `${Math.round(42 * scaleX)}px Georgia, serif`
-  for (const paragraph of paragraphs) {
-    const lines = wrapCanvasText(context, paragraph, maxTextWidth)
-    drawCenteredLines(context, lines, canvas.width / 2, y, bodyLineHeight)
-    y += lines.length * bodyLineHeight + 34 * scaleY
-  }
-
+  const paragraphLineGroups = paragraphs.map((paragraph) => wrapCanvasText(context, paragraph, maxTextWidth))
   context.font = `${Math.round(40 * scaleX)}px Georgia, serif`
   const closingLines = wrapCanvasText(context, closing, maxTextWidth)
-  drawCenteredLines(
-    context,
-    closingLines,
-    canvas.width / 2,
-    Math.max(y + 22 * scaleY, 1110 * scaleY),
-    closingLineHeight,
-  )
+  context.font = `${Math.round(70 * scaleX)}px cursive`
+  const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
+
+  let contentHeight = 0
+  if (greetingLines.length) {
+    contentHeight += greetingLines.length * bodyLineHeight + afterGreetingGap
+  }
+  paragraphLineGroups.forEach((lines, index) => {
+    contentHeight += lines.length * bodyLineHeight
+    if (index < paragraphLineGroups.length - 1) {
+      contentHeight += afterParagraphGap
+    }
+  })
+  contentHeight += beforeClosingGap + closingLines.length * closingLineHeight
+  contentHeight += beforeSignatureGap + signatureLines.length * signatureLineHeight
+
+  const topBound = 160 * scaleY
+  const bottomBound = canvas.height - 160 * scaleY
+  const available = Math.max(0, bottomBound - topBound)
+  let y = topBound + Math.max(0, (available - contentHeight) / 2)
+
+  if (greetingLines.length) {
+    context.fillStyle = '#2d6762'
+    context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
+    drawCenteredLines(context, greetingLines, canvas.width / 2, y, bodyLineHeight)
+    y += greetingLines.length * bodyLineHeight + afterGreetingGap
+  }
+
+  context.fillStyle = '#2d6762'
+  context.font = `${Math.round(42 * scaleX)}px Georgia, serif`
+  paragraphLineGroups.forEach((lines, index) => {
+    drawCenteredLines(context, lines, canvas.width / 2, y, bodyLineHeight)
+    y += lines.length * bodyLineHeight
+    if (index < paragraphLineGroups.length - 1) {
+      y += afterParagraphGap
+    }
+  })
+
+  y += beforeClosingGap
+  context.fillStyle = '#2d6762'
+  context.font = `${Math.round(40 * scaleX)}px Georgia, serif`
+  drawCenteredLines(context, closingLines, canvas.width / 2, y, closingLineHeight)
+  y += closingLines.length * closingLineHeight + beforeSignatureGap
 
   context.fillStyle = '#d88a31'
   context.font = `${Math.round(70 * scaleX)}px cursive`
-  const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
-  drawCenteredLines(context, signatureLines, canvas.width / 2, 1220 * scaleY, signatureLineHeight)
+  drawCenteredLines(context, signatureLines, canvas.width / 2, y, signatureLineHeight)
 
   return canvas.toDataURL('image/png')
 }

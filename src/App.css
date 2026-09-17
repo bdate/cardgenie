@@ -1692,11 +1692,13 @@ textarea:focus {
 }
 
 .open-card-message {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  align-content: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
   overflow: hidden;
-  padding: 10.7cqi 9.3cqi 9.3cqi;
+  padding: 12cqi 9.3cqi;
   color: var(--gcu-ink);
   background:
     linear-gradient(90deg, rgba(63, 155, 145, 0.08), transparent 18%),
@@ -1711,13 +1713,14 @@ textarea:focus {
   font-weight: 400;
   line-height: 1.35;
   font-size: clamp(0.75rem, 3.4cqi, 1.18rem);
+  margin-bottom: 2.4cqi;
 }
 
 .message-paragraphs {
   display: grid;
   align-content: start;
   gap: 3.1cqi;
-  margin-top: 1.8cqi;
+  width: 100%;
 }
 
 .message-paragraphs p {
@@ -1742,8 +1745,7 @@ textarea:focus {
 }
 
 .card-closing {
-  align-self: end;
-  margin-top: 3.6cqi;
+  margin-top: 7cqi;
   color: var(--gcu-ink);
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(0.75rem, 3.2cqi, 1.12rem);
@@ -1752,7 +1754,7 @@ textarea:focus {
 }
 
 .card-signature {
-  margin-top: 1.8cqi;
+  margin-top: 2.4cqi;
   color: var(--gcu-orange);
   font-family: "Dancing Script", cursive;
   font-size: clamp(1.2rem, 8.5cqi, 2.8rem);
