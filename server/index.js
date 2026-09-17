@@ -7,9 +7,8 @@ import OpenAI, { toFile } from 'openai'
 const COVER_IMAGE_SIZE = '1056x1472'
 const COVER_IMAGE_WIDTH = 1056
 const COVER_IMAGE_HEIGHT = 1472
-/** Print cut cushion is 75px at 1504x2096; scales to ~53px at cover size. */
-const COVER_SAFE_MARGIN_PX = 53
-const PRINT_SAFE_MARGIN_PX = 75
+/** Outer band kept clear of essential content for print trim (15% ≈ 226px at 1504 print width). */
+const COVER_SAFE_MARGIN_PERCENT = 15
 
 const app = express()
 const port = process.env.PORT || 8787
@@ -774,9 +773,9 @@ ${
 
 Composition requirements:
 - Portrait artwork composed for a 5x7 greeting-card cover at full ${COVER_IMAGE_WIDTH}x${COVER_IMAGE_HEIGHT} size. Do not shrink the artwork or add empty letterboxing.
-- Print cut cushion: keep essential content at least ${COVER_SAFE_MARGIN_PX}px away from every edge (about ${PRINT_SAFE_MARGIN_PX}px when printed at 1504x2096). Background, color, texture, and soft scenery may extend all the way to the edges.
-- Essential content that must stay inside the safe area (not in the outer ${COVER_SAFE_MARGIN_PX}px band): all text; faces and heads; the main subject; hands or body parts that define the scene; key props; and any small detail meant to be read or noticed.
-- Main subject should have clear visual breathing room inside the safe area, not pressed against the cushion line.
+- Treat the outer ${COVER_SAFE_MARGIN_PERCENT}% on every side as a protected safe margin for print trimming. Background, color, texture, and soft scenery may extend all the way to the edges.
+- Essential content that must stay fully inside the central ${100 - COVER_SAFE_MARGIN_PERCENT * 2}% safe area (not in the outer ${COVER_SAFE_MARGIN_PERCENT}% band): all text; faces and heads; the main subject; hands or body parts that define the scene; key props; and any small detail meant to be read or noticed.
+- Main subject centered with clear visual breathing room inside the safe area, not pressed against the margin line.
 - Background should extend naturally to the edges so the printed card can be trimmed cleanly.
 - Focus on an emotionally warm scene or symbolic illustration inspired by the personal context.
 - It should feel like premium editorial or storybook artwork made for a finished greeting-card cover.
@@ -790,9 +789,9 @@ Cover text direction:
 - Include a small amount of tasteful cover text only if it improves the greeting card.
 - If cover text is used, keep it short, legible, correctly spelled, and emotionally appropriate.
 - Choose font style based on the card: elegant serif or script for heartfelt/elegant cards, playful lettering for funny/playful cards, clean modern type for simple or contemporary cards.
-- Text should be large enough to read but never oversized, never crowded, and never inside the outer ${COVER_SAFE_MARGIN_PX}px cut cushion.
+- Text should be large enough to read but never oversized, never crowded, and never inside the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
 - Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
-- Names and ages are allowed only when they fit naturally and remain fully inside the safe area.
+- Names and ages are allowed only when they fit naturally and remain fully inside the central safe area.
 
 Copyright and identity:
 - Do not depict trademarked superheroes, movie characters, logos, brands, or celebrity likenesses even if they are mentioned in the personal context.
@@ -800,8 +799,8 @@ Copyright and identity:
 - Stay in the selected art style. Never output a photograph unless the selected style is photorealistic.
 
 Negative requirements:
-- No text, letters, numbers, captions, signs, banners, labels, posters, plaques, handwriting, or decorative typography within the outer ${COVER_SAFE_MARGIN_PX}px of any edge.
-- No faces, heads, main subjects, key props, or other essential details within that same outer cut cushion.
+- No text, letters, numbers, captions, signs, banners, labels, posters, plaques, handwriting, or decorative typography within the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
+- No faces, heads, main subjects, key props, or other essential details within that same outer ${COVER_SAFE_MARGIN_PERCENT}% band.
 - No white border, margin, frame, matting, drop shadow, mockup, envelope, folded card, or UI.
 - No cropped-off subject, no text near margins, no layout elements near edges.
 `
@@ -821,7 +820,7 @@ Card context:
 - Visual style: ${details.imageStyle || 'AI chooses the best style for this card'}
 - Personal context: ${details.keyDetails}
 
-Keep the output as portrait artwork composed for a 5x7 greeting-card cover at full ${COVER_IMAGE_WIDTH}x${COVER_IMAGE_HEIGHT} size. Do not shrink the artwork or add empty letterboxing. Do not add borders, paper edges, frames, mockups, envelopes, or UI. Keep essential content (text, faces, heads, main subject, key props) at least ${COVER_SAFE_MARGIN_PX}px from every edge for print trimming; background may still extend to the edges. Do not place new text inside that outer cut cushion.
+Keep the output as portrait artwork composed for a 5x7 greeting-card cover at full ${COVER_IMAGE_WIDTH}x${COVER_IMAGE_HEIGHT} size. Do not shrink the artwork or add empty letterboxing. Do not add borders, paper edges, frames, mockups, envelopes, or UI. Keep essential content (text, faces, heads, main subject, key props) fully inside the central safe area — at least ${COVER_SAFE_MARGIN_PERCENT}% away from every edge for print trimming; background may still extend to the edges. Do not place new text in the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
 `
 
 const getOpenAI = () =>
