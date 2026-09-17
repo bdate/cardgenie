@@ -85,9 +85,20 @@ const styleOptions = [
 ]
 const initialCreditBalance = 2
 const creditStorageKey = 'cardGenieCredits'
-const sendCreditCost = 3
+const sendCreditCostSingle = 3
+const sendCreditCostPerRecipient = 2
+const maxDeliveryRecipients = 10
 const coverRevisionCost = 1
 const aiCopyCost = 1
+
+const getSendCreditCost = (recipientCount: number) => {
+  const count = Math.max(0, Math.floor(recipientCount))
+  if (count <= 0) {
+    return sendCreditCostSingle
+  }
+
+  return Math.max(sendCreditCostSingle, sendCreditCostPerRecipient * count)
+}
 const adminPhoneNumbers = new Set(['+19259637453'])
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
@@ -1082,7 +1093,7 @@ function App() {
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
-  const [deliveryDestination, setDeliveryDestination] = useState('')
+  const [deliveryDestinations, setDeliveryDestinations] = useState<string[]>([''])
   const [showSenderCopyField, setShowSenderCopyField] = useState(false)
   const [senderCopyEmail, setSenderCopyEmail] = useState('')
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
@@ -1226,7 +1237,10 @@ function App() {
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
-  const hasEnoughCreditsToSend = credits >= sendCreditCost
+  const filledDeliveryDestinations = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
+  const plannedRecipientCount = Math.max(1, filledDeliveryDestinations.length)
+  const currentSendCreditCost = getSendCreditCost(plannedRecipientCount)
+  const hasEnoughCreditsToSend = credits >= currentSendCreditCost
   const hasEnoughCreditsForCover = credits >= coverRevisionCost
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
@@ -2941,40 +2955,131 @@ function App() {
     }
   }
 
+  const updateDeliveryDestination = (index: number, value: string) => {
+    setDeliveryDestinations((current) => current.map((entry, entryIndex) => (entryIndex === index ? value : entry)))
+    setDeliveryNotice('')
+  }
+
+  const removeDeliveryDestination = (index: number) => {
+    setDeliveryDestinations((current) => {
+      if (current.length <= 1) {
+        return ['']
+      }
+
+      return current.filter((_, entryIndex) => entryIndex !== index)
+    })
+    setDeliveryNotice('')
+  }
+
+  const addDeliveryDestination = () => {
+    if (deliveryDestinations.length >= maxDeliveryRecipients) {
+      setDeliveryNotice(`You can send to up to ${maxDeliveryRecipients} recipients at a time.`)
+      return
+    }
+
+    const lastEntry = deliveryDestinations[deliveryDestinations.length - 1]?.trim() || ''
+    if (lastEntry) {
+      if (deliveryMethod === 'email') {
+        const validated = validateEmailAddress(lastEntry)
+        if (!validated.ok) {
+          setDeliveryNotice(validated.message)
+          return
+        }
+        setDeliveryDestinations((current) => [
+          ...current.slice(0, -1),
+          validated.value,
+          '',
+        ])
+      } else {
+        const validated = validatePhoneNumber(lastEntry)
+        if (!validated.ok) {
+          setDeliveryNotice(validated.message)
+          return
+        }
+        setDeliveryDestinations((current) => [
+          ...current.slice(0, -1),
+          validated.display,
+          '',
+        ])
+      }
+    } else {
+      setDeliveryDestinations((current) => [...current, ''])
+    }
+
+    setDeliveryNotice('')
+  }
+
+  const resetDeliveryDestinations = () => {
+    setDeliveryDestinations([''])
+  }
+
   const deliverCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
     setDeliveryNotice('')
 
-    let destinationValue = ''
-    let destinationDisplay = ''
+    const rawEntries = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
 
-    if (deliveryMethod === 'email') {
-      const validated = validateEmailAddress(deliveryDestination)
-
-      if (!validated.ok) {
-        setDeliveryNotice(validated.message)
-        return
-      }
-
-      destinationValue = validated.value
-      destinationDisplay = validated.value
-    } else {
-      const validated = validatePhoneNumber(deliveryDestination)
-
-      if (!validated.ok) {
-        setDeliveryNotice(validated.message)
-        return
-      }
-
-      destinationValue = validated.value
-      destinationDisplay = validated.display
+    if (!rawEntries.length) {
+      setDeliveryNotice(
+        deliveryMethod === 'email'
+          ? 'Enter the recipient email address.'
+          : 'Enter the recipient cellphone number.',
+      )
+      return
     }
 
-    setDeliveryDestination(destinationDisplay)
+    if (rawEntries.length > maxDeliveryRecipients) {
+      setDeliveryNotice(`You can send to up to ${maxDeliveryRecipients} recipients at a time.`)
+      return
+    }
+
+    const validatedDestinations: Array<{ value: string; display: string }> = []
+    const seen = new Set<string>()
+
+    for (const entry of rawEntries) {
+      if (deliveryMethod === 'email') {
+        const validated = validateEmailAddress(entry)
+        if (!validated.ok) {
+          setDeliveryNotice(validated.message)
+          return
+        }
+        if (seen.has(validated.value)) {
+          continue
+        }
+        seen.add(validated.value)
+        validatedDestinations.push({ value: validated.value, display: validated.value })
+      } else {
+        const validated = validatePhoneNumber(entry)
+        if (!validated.ok) {
+          setDeliveryNotice(validated.message)
+          return
+        }
+        if (seen.has(validated.value)) {
+          continue
+        }
+        seen.add(validated.value)
+        validatedDestinations.push({ value: validated.value, display: validated.display })
+      }
+    }
+
+    if (!validatedDestinations.length) {
+      setDeliveryNotice(
+        deliveryMethod === 'email'
+          ? 'Enter the recipient email address.'
+          : 'Enter the recipient cellphone number.',
+      )
+      return
+    }
+
+    setDeliveryDestinations(validatedDestinations.map((entry) => entry.display))
 
     if (deliveryMethod === 'text' && !smsConsentConfirmed) {
-      setDeliveryNotice('Confirm the recipient agreed to receive this one-time card delivery text.')
+      setDeliveryNotice(
+        validatedDestinations.length > 1
+          ? 'Confirm each recipient agreed to receive this one-time card delivery text.'
+          : 'Confirm the recipient agreed to receive this one-time card delivery text.',
+      )
       return
     }
 
@@ -2997,15 +3102,20 @@ function App() {
       return
     }
 
-    if (!hasEnoughCreditsToSend) {
+    const sendCost = getSendCreditCost(validatedDestinations.length)
+
+    if (credits < sendCost) {
       promptNeedCredits(
-        `You need ${sendCreditCost} credits to send a card. You currently have ${credits}. Buy more credits to keep going.`,
+        `You need ${sendCost} credits to send to ${validatedDestinations.length} recipient${
+          validatedDestinations.length === 1 ? '' : 's'
+        }. You currently have ${credits}. Buy more credits to keep going.`,
         'send',
       )
       return
     }
 
     setIsDelivering(true)
+    let loggedDeliveryFailure = false
 
     try {
       const shared = await saveCurrentCard()
@@ -3018,7 +3128,7 @@ function App() {
         body: JSON.stringify({
           cardId: shared.id,
           method: deliveryMethod,
-          destination: destinationValue,
+          destinations: validatedDestinations.map((entry) => entry.value),
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
           senderCopyEmail: senderCopyValue || undefined,
         }),
@@ -3026,21 +3136,95 @@ function App() {
       const data = await getApiJson(response, 'Unable to deliver the card.')
 
       if (!response.ok) {
+        const failedResults = Array.isArray(data.results)
+          ? (data.results as Array<{ destination?: string; status?: string; error?: string }>)
+          : []
+        for (const result of failedResults) {
+          if (result.status !== 'failed') {
+            continue
+          }
+          loggedDeliveryFailure = true
+          addDeliveryLog({
+            method: deliveryMethod,
+            destination:
+              deliveryMethod === 'email'
+                ? formatEmailAddress(String(result.destination || ''))
+                : formatPhoneNumberDisplay(String(result.destination || '')),
+            status: 'Failed',
+            message: result.error || data.error || 'Unable to deliver the card.',
+          })
+        }
         throw new Error(data.error || 'Unable to deliver the card.')
       }
 
-      const deliveredDisplay =
-        deliveryMethod === 'email'
-          ? formatEmailAddress(String(data.deliveredTo || destinationValue))
-          : formatPhoneNumberDisplay(String(data.deliveredTo || destinationValue))
+      const results = Array.isArray(data.results)
+        ? (data.results as Array<{ destination?: string; status?: string; error?: string }>)
+        : []
+      const sentResults = results.filter((result) => result.status === 'sent')
+      const failedResults = results.filter((result) => result.status === 'failed')
+      const deliveredCount =
+        typeof data.deliveredCount === 'number'
+          ? data.deliveredCount
+          : sentResults.length || validatedDestinations.length
+      const chargedCredits = getSendCreditCost(deliveredCount)
 
-      setDeliveryNotice(
-        `Card sent to ${deliveredDisplay}.`,
-      )
-      setDeliveryDestination('')
+      for (const result of sentResults) {
+        addDeliveryLog({
+          method: deliveryMethod,
+          destination:
+            deliveryMethod === 'email'
+              ? formatEmailAddress(String(result.destination || ''))
+              : formatPhoneNumberDisplay(String(result.destination || '')),
+          status: 'Sent',
+          message: 'Card has been sent.',
+        })
+      }
+
+      for (const result of failedResults) {
+        addDeliveryLog({
+          method: deliveryMethod,
+          destination:
+            deliveryMethod === 'email'
+              ? formatEmailAddress(String(result.destination || ''))
+              : formatPhoneNumberDisplay(String(result.destination || '')),
+          status: 'Failed',
+          message: result.error || 'Unable to deliver the card.',
+        })
+      }
+
+      if (!sentResults.length && deliveredCount > 0) {
+        const fallbackDisplay =
+          deliveryMethod === 'email'
+            ? formatEmailAddress(String(data.deliveredTo || validatedDestinations[0].value))
+            : formatPhoneNumberDisplay(String(data.deliveredTo || validatedDestinations[0].value))
+        addDeliveryLog({
+          method: deliveryMethod,
+          destination: fallbackDisplay,
+          status: 'Sent',
+          message: data.message || 'Card has been sent.',
+        })
+      }
+
+      const notice =
+        typeof data.message === 'string' && data.message
+          ? data.message
+          : deliveredCount === 1
+            ? `Card sent to ${
+                deliveryMethod === 'email'
+                  ? formatEmailAddress(String(data.deliveredTo || validatedDestinations[0].display))
+                  : formatPhoneNumberDisplay(String(data.deliveredTo || validatedDestinations[0].display))
+              }.`
+            : `Card sent to ${deliveredCount} recipients.`
+
+      setDeliveryNotice(notice)
+      resetDeliveryDestinations()
       setHasSentCurrentCard(true)
-      const nextCredits = rememberCredits(credits - sendCreditCost)
-      setCreditNotice(`${sendCreditCost} credits used to send this card.`)
+      const nextCredits = rememberCredits(credits - chargedCredits)
+      setCreditNotice(
+        chargedCredits === 1
+          ? '1 credit used to send this card.'
+          : `${chargedCredits} credits used to send this card.`,
+      )
       void syncAccountCredits({ balance: nextCredits, reason: 'card_send' })
       if (senderCopyValue) {
         setShowSenderCopyField(false)
@@ -3050,21 +3234,17 @@ function App() {
           copyEmail: senderCopyValue,
         })
       }
-      addDeliveryLog({
-        method: deliveryMethod,
-        destination: deliveredDisplay,
-        status: 'Sent',
-        message: data.message || 'Card has been sent.',
-      })
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Unable to deliver the card.'
       setDeliveryNotice(message)
-      addDeliveryLog({
-        method: deliveryMethod,
-        destination: destinationDisplay,
-        status: 'Failed',
-        message,
-      })
+      if (!loggedDeliveryFailure) {
+        addDeliveryLog({
+          method: deliveryMethod,
+          destination: validatedDestinations.map((entry) => entry.display).join(', '),
+          status: 'Failed',
+          message,
+        })
+      }
     } finally {
       setIsDelivering(false)
     }
@@ -4210,7 +4390,7 @@ function App() {
                     type="button"
                     onClick={() => {
                       setDeliveryMethod('email')
-                      setDeliveryDestination('')
+                      resetDeliveryDestinations()
                       setShowSenderCopyField(false)
                       setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
@@ -4224,7 +4404,7 @@ function App() {
                     type="button"
                     onClick={() => {
                       setDeliveryMethod('text')
-                      setDeliveryDestination('')
+                      resetDeliveryDestinations()
                       setShowSenderCopyField(false)
                       setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
@@ -4234,47 +4414,72 @@ function App() {
                     Cellphone
                   </button>
                 </div>
-                <label>
-                  {deliveryMethod === 'email' ? 'Recipient email' : 'Recipient cellphone'}
-                  <input
-                    type={deliveryMethod === 'email' ? 'email' : 'tel'}
-                    inputMode={deliveryMethod === 'email' ? 'email' : 'tel'}
-                    autoComplete={deliveryMethod === 'email' ? 'email' : 'tel'}
-                    value={deliveryDestination}
-                    onChange={(event) => {
-                      setDeliveryDestination(event.target.value)
-                      setDeliveryNotice('')
-                    }}
-                    onBlur={() => {
-                      if (!deliveryDestination.trim()) {
-                        return
-                      }
+                <div className="delivery-recipients">
+                  {deliveryDestinations.map((destination, index) => (
+                    <label key={`delivery-recipient-${index}`} className="delivery-recipient-field">
+                      <span className="delivery-recipient-label-row">
+                        <span>
+                          {deliveryDestinations.length === 1
+                            ? deliveryMethod === 'email'
+                              ? 'Recipient email'
+                              : 'Recipient cellphone'
+                            : deliveryMethod === 'email'
+                              ? `Recipient email ${index + 1}`
+                              : `Recipient cellphone ${index + 1}`}
+                        </span>
+                        {deliveryDestinations.length > 1 && (
+                          <button
+                            className="text-action-link delivery-recipient-remove"
+                            type="button"
+                            onClick={() => removeDeliveryDestination(index)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </span>
+                      <input
+                        type={deliveryMethod === 'email' ? 'email' : 'tel'}
+                        inputMode={deliveryMethod === 'email' ? 'email' : 'tel'}
+                        autoComplete={deliveryMethod === 'email' ? 'email' : 'tel'}
+                        value={destination}
+                        onChange={(event) => updateDeliveryDestination(index, event.target.value)}
+                        onBlur={() => {
+                          if (!destination.trim()) {
+                            return
+                          }
 
-                      if (deliveryMethod === 'email') {
-                        const validated = validateEmailAddress(deliveryDestination)
+                          if (deliveryMethod === 'email') {
+                            const validated = validateEmailAddress(destination)
 
-                        if (validated.ok) {
-                          setDeliveryDestination(validated.value)
-                          setDeliveryNotice('')
-                        } else {
-                          setDeliveryNotice(validated.message)
-                        }
+                            if (validated.ok) {
+                              updateDeliveryDestination(index, validated.value)
+                              setDeliveryNotice('')
+                            } else {
+                              setDeliveryNotice(validated.message)
+                            }
 
-                        return
-                      }
+                            return
+                          }
 
-                      const validated = validatePhoneNumber(deliveryDestination)
+                          const validated = validatePhoneNumber(destination)
 
-                      if (validated.ok) {
-                        setDeliveryDestination(validated.display)
-                        setDeliveryNotice('')
-                      } else {
-                        setDeliveryNotice(validated.message)
-                      }
-                    }}
-                    placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
-                  />
-                </label>
+                          if (validated.ok) {
+                            updateDeliveryDestination(index, validated.display)
+                            setDeliveryNotice('')
+                          } else {
+                            setDeliveryNotice(validated.message)
+                          }
+                        }}
+                        placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
+                      />
+                    </label>
+                  ))}
+                  {deliveryDestinations.length < maxDeliveryRecipients && (
+                    <button className="text-action-link delivery-add-recipient" type="button" onClick={addDeliveryDestination}>
+                      Add another recipient
+                    </button>
+                  )}
+                </div>
                 <label className="sender-copy">
                   <input
                     type="checkbox"
@@ -4330,10 +4535,11 @@ function App() {
                       onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
                     />
                     <span>
-                      Optional SMS delivery: I confirm this recipient agreed to receive a one-time SMS/text message from
-                      Card Genie with a link to this card. Message frequency is one message per card delivery request.
-                      Msg & data rates may apply. Reply STOP to cancel, HELP for help. SMS consent is optional and is
-                      not required to create a card or use email delivery. See our{' '}
+                      Optional SMS delivery: I confirm{' '}
+                      {plannedRecipientCount > 1 ? 'each recipient agreed' : 'this recipient agreed'} to receive a
+                      one-time SMS/text message from Card Genie with a link to this card. Message frequency is one
+                      message per card delivery request. Msg & data rates may apply. Reply STOP to cancel, HELP for
+                      help. SMS consent is optional and is not required to create a card or use email delivery. See our{' '}
                       <a href="/privacy/index.html" target="_blank" rel="noreferrer">
                         Privacy Policy
                       </a>{' '}
@@ -4424,8 +4630,12 @@ function App() {
                   aria-busy={isDelivering}
                 >
                   {isDelivering
-                    ? 'Sending your card...'
-                    : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${sendCreditCost} credits`}
+                    ? plannedRecipientCount > 1
+                      ? 'Sending your cards...'
+                      : 'Sending your card...'
+                    : plannedRecipientCount > 1
+                      ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
+                      : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
                 </button>
                 {sharedCard && isAdmin && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">

@@ -185,11 +185,28 @@ const publicDeliveryError = (error, method = 'email') => {
   return message || (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.')
 }
 
+const MAX_DELIVERY_RECIPIENTS = 10
+
+const collectDeliveryDestinations = ({ destination, destinations }) => {
+  if (Array.isArray(destinations)) {
+    return destinations.map((entry) => String(entry || '').trim()).filter(Boolean)
+  }
+
+  const single = typeof destination === 'string' ? destination.trim() : ''
+  return single ? [single] : []
+}
+
 app.post('/api/deliver-card', async (req, res) => {
-  const { cardId, method, destination, recipientConsentConfirmed, senderCopyEmail: rawSenderCopyEmail } =
-    req.body || {}
+  const {
+    cardId,
+    method,
+    destination,
+    destinations,
+    recipientConsentConfirmed,
+    senderCopyEmail: rawSenderCopyEmail,
+  } = req.body || {}
   const record = cardStore.get(cardId)
-  const cleanDestination = destination?.trim()
+  const destinationList = collectDeliveryDestinations({ destination, destinations })
   const senderCopyEmail = rawSenderCopyEmail?.trim()
 
   if (!record) {
@@ -204,57 +221,134 @@ app.post('/api/deliver-card', async (req, res) => {
     })
   }
 
-  if (!cleanDestination) {
+  if (!destinationList.length) {
     return res.status(400).json({
       error: method === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.',
     })
   }
 
+  if (destinationList.length > MAX_DELIVERY_RECIPIENTS) {
+    return res.status(400).json({
+      error: `You can send to up to ${MAX_DELIVERY_RECIPIENTS} recipients at a time.`,
+    })
+  }
+
   if (method === 'text' && recipientConsentConfirmed !== true) {
     return res.status(400).json({
-      error: 'Confirm the recipient agreed to receive this one-time card delivery text.',
+      error:
+        destinationList.length > 1
+          ? 'Confirm each recipient agreed to receive this one-time card delivery text.'
+          : 'Confirm the recipient agreed to receive this one-time card delivery text.',
     })
   }
 
-  try {
-    const shareUrl = getShareUrl(req, record.id)
-    const coverUrl = getEmailCoverUrl(req, record.id)
-    const copy = buildDeliveryCopy(record, shareUrl, coverUrl)
+  const shareUrl = getShareUrl(req, record.id)
+  const coverUrl = getEmailCoverUrl(req, record.id)
+  const copy = buildDeliveryCopy(record, shareUrl, coverUrl)
+  const results = []
+  const seen = new Set()
+  let senderCopyDeliveredTo = null
+  let senderCopyPending = Boolean(senderCopyEmail)
 
-    const deliveredTo =
-      method === 'email'
-        ? await sendEmailDelivery({ to: normalizeEmailAddress(cleanDestination), copy })
-        : await sendTextDelivery({ to: cleanDestination, copy })
+  for (const rawDestination of destinationList) {
+    let normalizedDestination = ''
 
-    let senderCopyDeliveredTo = null
-
-    if (senderCopyEmail) {
-      const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl)
-      senderCopyDeliveredTo = await sendEmailDelivery({
-        to: normalizeEmailAddress(senderCopyEmail),
-        copy: senderCopy,
-      })
+    try {
+      normalizedDestination =
+        method === 'email' ? normalizeEmailAddress(rawDestination) : normalizePhoneNumber(rawDestination)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid recipient.'
+      results.push({ destination: rawDestination, status: 'failed', error: message })
+      continue
     }
 
-    res.json({
-      ok: true,
-      shareUrl,
-      deliveredTo,
-      senderCopyDeliveredTo,
-      message: senderCopyDeliveredTo
-        ? 'Card has been sent. A copy was emailed to you.'
-        : 'Card has been sent.',
-    })
-  } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
-    const isValidationError =
-      /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(rawMessage) &&
-      !/SendGrid|Postmark|Twilio|configured/i.test(rawMessage)
+    if (seen.has(normalizedDestination)) {
+      continue
+    }
+    seen.add(normalizedDestination)
 
-    res.status(isValidationError ? 400 : 500).json({
-      error: isValidationError ? rawMessage : publicDeliveryError(error, method),
-    })
+    try {
+      const deliveredTo =
+        method === 'email'
+          ? await sendEmailDelivery({ to: normalizedDestination, copy })
+          : await sendTextDelivery({ to: normalizedDestination, copy })
+
+      if (senderCopyPending && senderCopyEmail) {
+        try {
+          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl)
+          senderCopyDeliveredTo = await sendEmailDelivery({
+            to: normalizeEmailAddress(senderCopyEmail),
+            copy: senderCopy,
+          })
+        } catch (copyError) {
+          console.error(copyError)
+        }
+        senderCopyPending = false
+      }
+
+      results.push({ destination: deliveredTo, status: 'sent' })
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
+      const isValidationError =
+        /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(rawMessage) &&
+        !/SendGrid|Postmark|Twilio|configured/i.test(rawMessage)
+
+      results.push({
+        destination: normalizedDestination || rawDestination,
+        status: 'failed',
+        error: isValidationError ? rawMessage : publicDeliveryError(error, method),
+      })
+    }
   }
+
+  const sent = results.filter((entry) => entry.status === 'sent')
+  const failed = results.filter((entry) => entry.status === 'failed')
+
+  if (!sent.length) {
+    return res
+      .status(
+        failed.every((entry) =>
+          /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(entry.error || ''),
+        )
+          ? 400
+          : 500,
+      )
+      .json({
+        error:
+          failed[0]?.error ||
+          (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.'),
+        results,
+        deliveredCount: 0,
+        failedCount: failed.length,
+      })
+  }
+
+  const message = (() => {
+    if (failed.length) {
+      return sent.length === 1
+        ? `Card sent to 1 recipient. ${failed.length} could not be reached.`
+        : `Card sent to ${sent.length} recipients. ${failed.length} could not be reached.`
+    }
+
+    if (senderCopyDeliveredTo) {
+      return sent.length === 1
+        ? 'Card has been sent. A copy was emailed to you.'
+        : `Card sent to ${sent.length} recipients. A copy was emailed to you.`
+    }
+
+    return sent.length === 1 ? 'Card has been sent.' : `Card sent to ${sent.length} recipients.`
+  })()
+
+  res.json({
+    ok: true,
+    shareUrl,
+    deliveredTo: sent[0].destination,
+    deliveredCount: sent.length,
+    failedCount: failed.length,
+    results,
+    senderCopyDeliveredTo,
+    message,
+  })
 })
 
 const buildCopyPrompt = (details, refinement = '', messageKeyDetails) => {

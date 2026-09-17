@@ -2085,8 +2085,35 @@ textarea:focus {
   max-width: 360px;
 }
 
+.delivery-recipients {
+  display: grid;
+  gap: 12px;
+}
+
+.delivery-recipient-field {
+  display: grid;
+  gap: 8px;
+}
+
+.delivery-recipient-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.delivery-recipient-remove {
+  flex-shrink: 0;
+  font-size: 0.86rem;
+}
+
+.delivery-add-recipient {
+  justify-self: start;
+  font-size: 0.92rem;
+}
+
 .delivery-panel .primary-button {
-  width: min(260px, 100%);
+  width: min(320px, 100%);
 }
 
 .sms-consent {
