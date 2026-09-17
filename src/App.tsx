@@ -1219,6 +1219,7 @@ function App() {
   const [adminGrantCredits, setAdminGrantCredits] = useState('20')
   const [adminGrantNotice, setAdminGrantNotice] = useState('')
   const [isGrantingCredits, setIsGrantingCredits] = useState(false)
+  const [showAdminGrantCredits, setShowAdminGrantCredits] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
   const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
@@ -3681,55 +3682,69 @@ function App() {
                       void grantCreditsToPhone()
                     }}
                   >
-                    <span className="field-title">Grant credits</span>
-                    <p className="field-help">Add credits to any confirmed Card Genie phone number.</p>
-                    <div className="admin-grant-row">
-                      <label>
-                        Phone number
-                        <input
-                          type="tel"
-                          inputMode="tel"
-                          autoComplete="tel"
-                          value={adminGrantPhone}
-                          onChange={(event) => {
-                            setAdminGrantPhone(event.target.value)
-                            setAdminGrantNotice('')
-                          }}
-                          onBlur={() => {
-                            if (!adminGrantPhone.trim()) {
-                              return
-                            }
-                            const validated = validatePhoneNumber(adminGrantPhone)
-                            if (validated.ok) {
-                              setAdminGrantPhone(validated.display)
-                            }
-                          }}
-                          placeholder="(925) 555-1234"
-                        />
-                      </label>
-                      <label>
-                        Credits
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          max={500}
-                          value={adminGrantCredits}
-                          onChange={(event) => {
-                            setAdminGrantCredits(event.target.value)
-                            setAdminGrantNotice('')
-                          }}
-                        />
-                      </label>
-                      <button
-                        className="secondary-button"
-                        type="submit"
-                        disabled={isGrantingCredits || !adminGrantPhone.trim()}
-                      >
-                        {isGrantingCredits ? 'Granting…' : 'Grant'}
-                      </button>
-                    </div>
-                    {adminGrantNotice && <p className="admin-grant-notice">{adminGrantNotice}</p>}
+                    <button
+                      className="text-action-link admin-grant-toggle"
+                      type="button"
+                      aria-expanded={showAdminGrantCredits}
+                      onClick={() => {
+                        setShowAdminGrantCredits((current) => !current)
+                        setAdminGrantNotice('')
+                      }}
+                    >
+                      Grant credits to shoppers
+                    </button>
+                    {showAdminGrantCredits && (
+                      <>
+                        <p className="field-help">Add credits to any confirmed Card Genie phone number.</p>
+                        <div className="admin-grant-row">
+                          <label>
+                            Phone number
+                            <input
+                              type="tel"
+                              inputMode="tel"
+                              autoComplete="tel"
+                              value={adminGrantPhone}
+                              onChange={(event) => {
+                                setAdminGrantPhone(event.target.value)
+                                setAdminGrantNotice('')
+                              }}
+                              onBlur={() => {
+                                if (!adminGrantPhone.trim()) {
+                                  return
+                                }
+                                const validated = validatePhoneNumber(adminGrantPhone)
+                                if (validated.ok) {
+                                  setAdminGrantPhone(validated.display)
+                                }
+                              }}
+                              placeholder="(925) 555-1234"
+                            />
+                          </label>
+                          <label>
+                            Credits
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={500}
+                              value={adminGrantCredits}
+                              onChange={(event) => {
+                                setAdminGrantCredits(event.target.value)
+                                setAdminGrantNotice('')
+                              }}
+                            />
+                          </label>
+                          <button
+                            className="secondary-button"
+                            type="submit"
+                            disabled={isGrantingCredits || !adminGrantPhone.trim()}
+                          >
+                            {isGrantingCredits ? 'Granting…' : 'Grant'}
+                          </button>
+                        </div>
+                        {adminGrantNotice && <p className="admin-grant-notice">{adminGrantNotice}</p>}
+                      </>
+                    )}
                   </form>
                 </div>
               )}
