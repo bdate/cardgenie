@@ -1763,25 +1763,35 @@ function App() {
       return coverThumbUrl
     }
 
-    const created = (accountHistory.cards || []).map((card) => ({
-      id: `card-${card.id}`,
-      createdAt: card.createdAt,
-      title: 'Created',
-      detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
-      status: card.status,
-      coverThumbUrl: resolveThumbUrl(card.id, card.coverThumbUrl),
-    }))
+    const deliveries = accountHistory.deliveries || []
+    const cardIdsWithEmailSend = new Set(
+      deliveries
+        .filter((delivery) => !delivery.isSenderCopy && delivery.method === 'email')
+        .map((delivery) => delivery.cardId)
+        .filter(Boolean),
+    )
 
-    const sent = (accountHistory.deliveries || []).map((delivery) => ({
-      id: `delivery-${delivery.id}`,
-      createdAt: delivery.createdAt,
-      title: `${delivery.isSenderCopy ? 'Copy to you' : 'Sent'} · ${
-        delivery.method === 'text' ? 'Text' : 'Email'
-      }`,
-      detail: delivery.destination,
-      status: delivery.status,
-      coverThumbUrl: resolveThumbUrl(delivery.cardId, delivery.coverThumbUrl),
-    }))
+    const created = (accountHistory.cards || [])
+      .filter((card) => !cardIdsWithEmailSend.has(card.id))
+      .map((card) => ({
+        id: `card-${card.id}`,
+        createdAt: card.createdAt,
+        title: 'Created',
+        detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
+        status: card.status,
+        coverThumbUrl: resolveThumbUrl(card.id, card.coverThumbUrl),
+      }))
+
+    const sent = deliveries
+      .filter((delivery) => !delivery.isSenderCopy)
+      .map((delivery) => ({
+        id: `delivery-${delivery.id}`,
+        createdAt: delivery.createdAt,
+        title: `Sent · ${delivery.method === 'text' ? 'Text' : 'Email'}`,
+        detail: delivery.destination,
+        status: delivery.status,
+        coverThumbUrl: resolveThumbUrl(delivery.cardId, delivery.coverThumbUrl),
+      }))
 
     const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
       id: `thanks-${thankYou.id}`,
