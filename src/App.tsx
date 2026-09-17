@@ -227,11 +227,69 @@ const getFriendlyErrorMessage = (error: unknown, fallbackMessage: string) => {
 }
 
 const generationJobStorageKey = 'cardgenie.generationJob'
+const checkoutResumeStorageKey = 'cardGenieCheckoutResume'
 const generateJobPollMs = 2000
 const generateJobClientTimeoutMs = 12 * 60 * 1000
 const generateJobMaxPollFailures = 15
 const generationLostConnectionMessage =
   'We lost the connection while checking on your card. Come back to this page — if it finished, it will appear. No credits are used until the card is ready.'
+
+type CheckoutResumeState = {
+  version: 1
+  savedAt: number
+  cardId?: string
+  shareUrl?: string
+  details: CardDetails
+  card?: GeneratedCard
+  greeting?: string | null
+  signature?: string | null
+  step: ExperienceStep
+  hasViewedFront: boolean
+  hasViewedInside: boolean
+  hasSentCurrentCard: boolean
+  deliveryMethod: DeliveryMethod
+  deliveryDestinations: string[]
+  showSenderCopyField: boolean
+  senderCopyEmail: string
+  smsConsentConfirmed: boolean
+}
+
+const readCheckoutResume = (): CheckoutResumeState | null => {
+  try {
+    const raw = window.sessionStorage.getItem(checkoutResumeStorageKey)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as CheckoutResumeState
+    if (parsed?.version !== 1 || !parsed.details) {
+      return null
+    }
+
+    // Ignore stale snapshots older than 6 hours.
+    if (parsed.savedAt && Date.now() - parsed.savedAt > 6 * 60 * 60 * 1000) {
+      window.sessionStorage.removeItem(checkoutResumeStorageKey)
+      return null
+    }
+
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+const writeCheckoutResume = (state: CheckoutResumeState) => {
+  const payload = JSON.stringify(state)
+  window.sessionStorage.setItem(checkoutResumeStorageKey, payload)
+}
+
+const clearCheckoutResume = () => {
+  try {
+    window.sessionStorage.removeItem(checkoutResumeStorageKey)
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 const readStoredGenerationJob = () => {
   try {
@@ -1305,6 +1363,108 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const resume = readCheckoutResume()
+    if (!resume || (!resume.cardId && !resume.card)) {
+      return
+    }
+
+    let cancelled = false
+
+    const restoreAfterCheckout = async () => {
+      setDetails(resume.details)
+      setCardGreeting(resume.greeting ?? null)
+      setCardSignature(resume.signature ?? null)
+      setHasViewedFront(true)
+      setHasViewedInside(true)
+      setHasSentCurrentCard(Boolean(resume.hasSentCurrentCard))
+      setDeliveryMethod(resume.deliveryMethod === 'text' ? 'text' : 'email')
+      setDeliveryDestinations(
+        Array.isArray(resume.deliveryDestinations) && resume.deliveryDestinations.length > 0
+          ? resume.deliveryDestinations
+          : [''],
+      )
+      setShowSenderCopyField(Boolean(resume.showSenderCopyField))
+      setSenderCopyEmail(resume.senderCopyEmail || '')
+      setSmsConsentConfirmed(Boolean(resume.smsConsentConfirmed))
+      setShowEditor(false)
+      setShowAccountPage(false)
+
+      let restoredCard: GeneratedCard | null = resume.card || null
+      let restoredShared: SharedCard | null = null
+
+      if (resume.cardId) {
+        try {
+          const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(resume.cardId)}`))
+          const data = await getApiJson(response, 'Unable to restore your card.')
+          if (response.ok && data?.card?.imageUrl) {
+            const shared = data as SharedCard
+            restoredShared = isLocalApiDev
+              ? { ...shared, shareUrl: localShareUrl(shared.id) }
+              : shared
+            const copy = normalizeCardCopy(
+              shared.card.message,
+              shared.card.closing,
+              shared.details.senderName || resume.details.senderName || 'Your Name',
+            )
+            restoredCard = {
+              ...shared.card,
+              message: copy.message,
+              closing: copy.closing,
+            }
+            if (shared.greeting) {
+              setCardGreeting(shared.greeting)
+            }
+            if (shared.signature) {
+              setCardSignature(shared.signature)
+            }
+          }
+        } catch {
+          // Fall back to the snapshot card below.
+        }
+      }
+
+      if (cancelled) {
+        return
+      }
+
+      if (!restoredCard) {
+        return
+      }
+
+      setCard(restoredCard)
+      if (restoredShared) {
+        setSharedCard(restoredShared)
+      } else if (resume.cardId) {
+        setSharedCard({
+          id: resume.cardId,
+          shareUrl: resume.shareUrl || localShareUrl(resume.cardId),
+          details: resume.details,
+          card: restoredCard,
+          greeting: resume.greeting || undefined,
+          signature: resume.signature || undefined,
+        })
+      }
+
+      setStep(resume.hasViewedInside || resume.step === 'inside' ? 'inside' : 'front')
+      clearCheckoutResume()
+      setDeliveryNotice('Welcome back — your card and recipients are ready to send.')
+      window.setTimeout(() => {
+        document.querySelector('.delivery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 250)
+    }
+
+    void restoreAfterCheckout()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isRecipientView])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const billing = params.get('billing')
     if (!billing) {
@@ -2061,6 +2221,49 @@ function App() {
     setRefinementNotice('')
 
     try {
+      // Stripe leaves the page — stash card + recipients so checkout return can restore them.
+      if (card) {
+        let resumeCardId = sharedCard?.id
+        let resumeShareUrl = sharedCard?.shareUrl
+
+        try {
+          const shared = await saveCurrentCard()
+          resumeCardId = shared.id
+          resumeShareUrl = shared.shareUrl
+        } catch {
+          // Still try to resume from in-memory card if save fails.
+        }
+
+        const resumeBase: CheckoutResumeState = {
+          version: 1,
+          savedAt: Date.now(),
+          cardId: resumeCardId,
+          shareUrl: resumeShareUrl,
+          details,
+          greeting: cardGreeting,
+          signature: cardSignature,
+          step: hasViewedInside ? 'inside' : hasViewedFront ? 'front' : step,
+          hasViewedFront: hasViewedFront || Boolean(card),
+          hasViewedInside: hasViewedInside || Boolean(card),
+          hasSentCurrentCard,
+          deliveryMethod,
+          deliveryDestinations,
+          showSenderCopyField,
+          senderCopyEmail,
+          smsConsentConfirmed,
+        }
+
+        try {
+          writeCheckoutResume({ ...resumeBase, card })
+        } catch {
+          try {
+            writeCheckoutResume(resumeBase)
+          } catch {
+            // If storage is full, checkout still proceeds; restore may be incomplete.
+          }
+        }
+      }
+
       const response = await fetch(apiUrl('/api/billing/checkout-session'), {
         method: 'POST',
         headers: {
