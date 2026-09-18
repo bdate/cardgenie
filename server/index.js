@@ -932,6 +932,12 @@ const getLengthRange = (length = '') => {
   return match ? { min: Number(match[1]), max: Number(match[2]) } : null
 }
 
+const copyLengthSpecs = [
+  { id: 'short', label: 'Short, 5-20 words', min: 5, max: 20 },
+  { id: 'medium', label: 'Medium, 20-40 words', min: 20, max: 40 },
+  { id: 'long', label: 'Long, 40-70 words', min: 40, max: 70 },
+]
+
 const countWords = (message = '') => message.trim().split(/\s+/).filter(Boolean).length
 
 const trimToWordLimit = (message, maxWords) => {
@@ -1010,6 +1016,78 @@ If a likeness brief is provided, you may use it to know who the card is about, b
   return {
     ...copy,
     message: stripAppearanceFromMessage(copy.message),
+  }
+}
+
+const generateCopyVariants = async (openai, details, likenessBrief = '') => {
+  const messageKeyDetails = extractMessageKeyDetails(getOriginalKeyDetails(details))
+  const prompt = `
+Write three inside-message versions for a personalized greeting card: short, medium, and long.
+
+Recipient: ${details.recipientName || details.recipientType}
+Recipient type or relationship: ${details.recipientType}
+Sender: ${details.senderName}
+Occasion: ${details.occasion}
+Tone: ${details.tone}
+Personal details to include: ${messageKeyDetails || 'Use the occasion, tone, and relationship only.'}
+${buildLikenessBriefSection(likenessBrief)}
+${
+  messageKeyDetails.trim() !== (details.keyDetails || '').trim()
+    ? '\nNote: Physical appearance details were removed from the list above. They are used only for the cover artwork. Do not infer, describe, or compliment anyone\'s looks, height, hair, eyes, figure, or skin tone.'
+    : ''
+}
+
+Return strict JSON only, with this shape:
+{
+  "short": "Body copy only, 5-20 words. No salutation, closing, sender name, or signature.",
+  "medium": "Body copy only, 20-40 words. No salutation, closing, sender name, or signature.",
+  "long": "Body copy only, 40-70 words. No salutation, closing, sender name, or signature.",
+  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship."
+}
+
+Rules:
+- All three versions must share the same emotional idea and personal details, just at different lengths.
+- Strictly obey each word-count range for the body only.
+- Do not include a salutation like "Dear..." or the sender name/signature in any body.
+- Do NOT mention physical appearance in any version.
+- If a likeness brief is provided, you may use it to know who the card is about, but do not describe anyone's physical appearance. Do not mention photos.
+`
+
+  const copyResponse = await openai.responses.create({
+    model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+    input: prompt,
+  })
+
+  const text = stripCodeFence(getMessageText(copyResponse))
+  const parsed = parseJsonishText(text) || {}
+  const closing = String(parsed.closing || 'With love,').trim() || 'With love,'
+  const variants = {}
+
+  for (const spec of copyLengthSpecs) {
+    const raw = String(parsed[spec.id] || '').trim()
+    const cleaned = stripAppearanceFromMessage(raw)
+    variants[spec.id] = trimToWordLimit(cleaned || raw, spec.max)
+  }
+
+  if (!variants.short || !variants.medium || !variants.long) {
+    const fallback = await generateCopy(openai, { ...details, length: 'Medium, 20-40 words' }, '', [], likenessBrief)
+    return {
+      message: fallback.message,
+      closing: fallback.closing,
+      selectedLength: 'medium',
+      messageVariants: {
+        short: fallback.message,
+        medium: fallback.message,
+        long: fallback.message,
+      },
+    }
+  }
+
+  return {
+    message: variants.medium,
+    closing,
+    selectedLength: 'medium',
+    messageVariants: variants,
   }
 }
 
@@ -1699,6 +1777,8 @@ const publicGenerateJob = (job) => {
     error: job.error || undefined,
     message: job.result?.message,
     closing: job.result?.closing,
+    selectedLength: job.result?.selectedLength,
+    messageVariants: job.result?.messageVariants,
     imageUrl: job.result?.imageUrl,
   }
 }
@@ -1784,7 +1864,7 @@ const processGenerateJob = async (jobInput) => {
       const openai = getOpenAI()
       const likenessBrief = await describeReferenceImages(openai, referenceImages)
       const [copy, imageUrl] = await Promise.all([
-        generateCopy(openai, details, '', referenceImages, likenessBrief),
+        generateCopyVariants(openai, details, likenessBrief),
         generateImage(openai, details, '', 'new', referenceImages, likenessBrief),
       ])
 
@@ -1801,6 +1881,8 @@ const processGenerateJob = async (jobInput) => {
           result: {
             message: copy.message,
             closing: copy.closing,
+            selectedLength: copy.selectedLength || 'medium',
+            messageVariants: copy.messageVariants || undefined,
             imageUrl,
           },
         })

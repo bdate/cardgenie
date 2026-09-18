@@ -13,10 +13,20 @@ type CardDetails = {
   keyDetails: string
 }
 
+type MessageLengthId = 'short' | 'medium' | 'long'
+
+type MessageVariants = {
+  short: string
+  medium: string
+  long: string
+}
+
 type GeneratedCard = {
   imageUrl: string
   message: string
   closing?: string
+  messageVariants?: MessageVariants
+  selectedLength?: MessageLengthId
 }
 
 type SharedCard = {
@@ -65,6 +75,11 @@ const initialDetails: CardDetails = {
 
 const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
 const lengthOptions = ['Short, 5-20 words', 'Medium, 20-40 words', 'Long, 40-70 words']
+const messageLengthChoices: Array<{ id: MessageLengthId; label: string }> = [
+  { id: 'short', label: 'Short' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'long', label: 'Long' },
+]
 const styleOptions = [
   'AI chooses the best style for this card',
   'Photorealistic warm portrait photography',
@@ -400,7 +415,13 @@ const waitForGenerationJob = async (jobId: string, isCurrent: () => boolean) => 
           )
         }
 
-        return data as { message: string; closing?: string; imageUrl: string }
+        return data as {
+          message: string
+          closing?: string
+          imageUrl: string
+          selectedLength?: MessageLengthId
+          messageVariants?: MessageVariants
+        }
       }
     } catch (error) {
       const retryable =
@@ -2342,12 +2363,34 @@ function App() {
     void syncAccountCredits({ balance, reason: 'dev_set' })
   }
 
-  const finishGeneratedCard = (data: { message: string; closing?: string; imageUrl: string }, signatureName: string) => {
-    const copy = normalizeCardCopy(data.message, data.closing, signatureName)
+  const finishGeneratedCard = (
+    data: {
+      message: string
+      closing?: string
+      imageUrl: string
+      messageVariants?: MessageVariants
+      selectedLength?: MessageLengthId
+    },
+    signatureName: string,
+  ) => {
+    const selectedLength =
+      data.selectedLength === 'short' || data.selectedLength === 'long' ? data.selectedLength : 'medium'
+    const variants =
+      data.messageVariants?.short && data.messageVariants?.medium && data.messageVariants?.long
+        ? {
+            short: normalizeCardCopy(data.messageVariants.short, data.closing, signatureName).message,
+            medium: normalizeCardCopy(data.messageVariants.medium, data.closing, signatureName).message,
+            long: normalizeCardCopy(data.messageVariants.long, data.closing, signatureName).message,
+          }
+        : undefined
+    const activeMessage = variants?.[selectedLength] || data.message
+    const copy = normalizeCardCopy(activeMessage, data.closing, signatureName)
     setCard({
       imageUrl: data.imageUrl,
       message: copy.message,
       closing: copy.closing,
+      messageVariants: variants,
+      selectedLength: variants ? selectedLength : undefined,
     })
     setCardGreeting('')
     setCardSignature(signatureName)
@@ -2578,8 +2621,38 @@ function App() {
   }
 
   const updateCardMessage = (message: string) => {
-    setCard((current) => (current ? { ...current, message } : current))
+    setCard((current) => {
+      if (!current) {
+        return current
+      }
+
+      const selected = current.selectedLength
+      const nextVariants =
+        current.messageVariants && selected
+          ? { ...current.messageVariants, [selected]: message }
+          : current.messageVariants
+
+      return {
+        ...current,
+        message,
+        messageVariants: nextVariants,
+      }
+    })
     setEditorHasChanges(true)
+  }
+
+  const selectMessageLength = (lengthId: MessageLengthId) => {
+    setCard((current) => {
+      if (!current?.messageVariants?.[lengthId]) {
+        return current
+      }
+
+      return {
+        ...current,
+        selectedLength: lengthId,
+        message: current.messageVariants[lengthId],
+      }
+    })
   }
 
   const updateCardClosing = (closing: string) => {
@@ -3005,6 +3078,13 @@ function App() {
               ...current,
               message: copy.message,
               closing: copy.closing,
+              messageVariants:
+                current.messageVariants && current.selectedLength
+                  ? {
+                      ...current.messageVariants,
+                      [current.selectedLength]: copy.message,
+                    }
+                  : current.messageVariants,
             }
           : current,
       )
@@ -4224,18 +4304,6 @@ function App() {
                 ))}
               </select>
             </label>
-
-            <label>
-              Message length
-              <select
-                value={details.length}
-                onChange={(event) => updateDetails('length', event.target.value)}
-              >
-                {lengthOptions.map((length) => (
-                  <option key={length}>{length}</option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="style-field">
@@ -4587,6 +4655,30 @@ function App() {
                   </button>
                 </nav>
               )}
+              {!isRecipientView &&
+                step === 'inside' &&
+                card?.messageVariants?.short &&
+                card.messageVariants.medium &&
+                card.messageVariants.long && (
+                  <div className="message-length-picker" aria-label="Message length">
+                    <div className="mode-toggle message-length-toggle" role="group" aria-label="Choose message length">
+                      {messageLengthChoices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          className={(card.selectedLength || 'medium') === choice.id ? 'is-selected' : ''}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            selectMessageLength(choice.id)
+                          }}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="message-length-hint">Message Length — pick the one that feels right.</p>
+                  </div>
+                )}
               {showCoverWatermark &&
                 !showEditor &&
                 (step === 'front' || step === 'inside' || step === 'opening' || step === 'cardOpening') && (
@@ -5121,6 +5213,26 @@ function App() {
                               <div className="card-signature">{cardSignatureLabel}</div>
                             </div>
                           </div>
+                          {card?.messageVariants?.short && card.messageVariants.medium && card.messageVariants.long && (
+                            <div className="message-length-picker editor-message-length-picker" aria-label="Message length">
+                              <div
+                                className="mode-toggle message-length-toggle"
+                                role="group"
+                                aria-label="Choose message length"
+                              >
+                                {messageLengthChoices.map((choice) => (
+                                  <button
+                                    key={choice.id}
+                                    className={(card.selectedLength || 'medium') === choice.id ? 'is-selected' : ''}
+                                    type="button"
+                                    onClick={() => selectMessageLength(choice.id)}
+                                  >
+                                    {choice.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <span className="zoom-hint">Your edits appear on the inside as you type</span>
                         </>
                       )}

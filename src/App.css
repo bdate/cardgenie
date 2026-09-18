@@ -1880,6 +1880,34 @@ textarea:focus {
   cursor: default;
 }
 
+.message-length-picker {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  margin-top: 16px;
+  max-width: 360px;
+  width: 100%;
+  justify-self: center;
+  border: 1px solid rgba(143, 208, 201, 0.26);
+  border-radius: 18px;
+  padding: 6px 6px 10px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.message-length-hint {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--gcu-grey);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.editor-message-length-picker {
+  margin-top: 12px;
+  width: 100%;
+}
+
 .recipient-save-links {
   display: flex;
   align-items: center;
@@ -3069,6 +3097,21 @@ textarea:focus {
   box-shadow: 0 10px 22px rgba(63, 155, 145, 0.16);
 }
 
+.mode-toggle.message-length-toggle {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: none;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.mode-toggle.message-length-toggle button {
+  padding: 10px 8px;
+  white-space: nowrap;
+}
+
 .refinement-card textarea {
   min-height: 160px;
   caret-color: var(--gcu-ink);
@@ -3928,6 +3971,15 @@ textarea:focus {
 
   .mode-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .mode-toggle.message-length-toggle {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mode-toggle.message-length-toggle button {
+    padding: 9px 4px;
+    font-size: 0.78rem;
   }
 
   .inside-editor-header {
