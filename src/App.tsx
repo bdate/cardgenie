@@ -4675,7 +4675,7 @@ function App() {
                         </button>
                       ))}
                     </div>
-                    <p className="message-length-hint">Message Length — pick the one that feels right.</p>
+                    <p className="message-length-hint">Message Length — pick the one you like.</p>
                   </div>
                 )}
               {showCoverWatermark &&
