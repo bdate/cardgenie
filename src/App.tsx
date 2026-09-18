@@ -3684,11 +3684,12 @@ function App() {
                     <button type="button" onClick={() => setCreditBalance(2)}>
                       2
                     </button>
-                    {isLocalApiDev && (
-                      <button type="button" onClick={() => setCreditBalance(50)}>
-                        50
-                      </button>
-                    )}
+                    <button type="button" onClick={() => setCreditBalance(25)}>
+                      25
+                    </button>
+                    <button type="button" onClick={() => setCreditBalance(50)}>
+                      50
+                    </button>
                   </p>
                 )}
               </div>
