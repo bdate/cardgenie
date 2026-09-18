@@ -74,7 +74,6 @@ const initialDetails: CardDetails = {
 }
 
 const toneOptions = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
-const lengthOptions = ['Short, 5-20 words', 'Medium, 20-40 words', 'Long, 40-70 words']
 const messageLengthChoices: Array<{ id: MessageLengthId; label: string }> = [
   { id: 'short', label: 'Short' },
   { id: 'medium', label: 'Medium' },
