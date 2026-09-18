@@ -4058,62 +4058,85 @@ function App() {
               </p>
               <div className="admin-stat-grid">
                 <div>
-                  <span>Accounts {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Accounts {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.accounts ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.accounts ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.accounts ?? 0}</small>
                 </div>
                 <div>
-                  <span>Sends {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Sends {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.sends ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.sends ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.sends ?? 0}</small>
                 </div>
                 <div>
-                  <span>Cards {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Cards {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.cards ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.cards ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.cards ?? 0}</small>
                 </div>
                 <div>
-                  <span>Logins {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Logins {adminMetricsPeriodLabel}
+                    <small> · Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.logins ?? 0}</strong>
-                  <small>Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
                 </div>
                 <div>
-                  <span>Thank-yous {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Thank-yous {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.thankYous ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.thankYous ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.thankYous ?? 0}</small>
                 </div>
                 <div>
-                  <span>Reviews {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Reviews {adminMetricsPeriodLabel}
+                    <small>
+                      {' '}
+                      · Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
+                      {adminMetrics.totals?.testimonials ?? 0}
+                    </small>
+                  </span>
                   <strong>{adminPeriodStats.testimonials ?? 0}</strong>
-                  <small>
-                    Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
-                    {adminMetrics.totals?.testimonials ?? 0}
-                  </small>
                 </div>
                 <div>
-                  <span>Credits spent {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Credits spent {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.creditsSpent ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
                 </div>
                 <div>
-                  <span>Credits bought {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Credits bought {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
+                  </span>
                   <strong>{adminPeriodStats.creditsPurchased ?? 0}</strong>
-                  <small>Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
                 </div>
                 <div>
-                  <span>Amount paid {adminMetricsPeriodLabel}</span>
+                  <span>
+                    Amount paid {adminMetricsPeriodLabel}
+                    <small> · Total {formatAdminDollars(adminMetrics.totals?.amountPaid)}</small>
+                  </span>
                   <strong>{formatAdminDollars(adminPeriodStats.amountPaid)}</strong>
-                  <small>Total {formatAdminDollars(adminMetrics.totals?.amountPaid)}</small>
                 </div>
                 <div>
-                  <span>Failed sends</span>
+                  <span>
+                    Failed sends
+                    <small> · All time</small>
+                  </span>
                   <strong>{adminMetrics.totals?.failedSends ?? 0}</strong>
-                  <small>All time</small>
                 </div>
                 <div>
-                  <span>Active 30 days</span>
+                  <span>
+                    Active 30 days
+                    <small> · Recent use</small>
+                  </span>
                   <strong>{adminMetrics.totals?.activeUsers30 ?? 0}</strong>
-                  <small>Accounts with recent use</small>
                 </div>
               </div>
               <div className="admin-daily-table-wrap">
