@@ -2422,7 +2422,13 @@ textarea:focus {
 }
 
 .admin-metrics-periods {
-  max-width: 560px;
+  max-width: none;
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mode-toggle.admin-metrics-periods {
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -2500,6 +2506,13 @@ textarea:focus {
 .admin-daily-table th {
   color: var(--gcu-grey);
   font-weight: 750;
+}
+
+.admin-daily-table th.admin-th-stack {
+  max-width: 4.8rem;
+  white-space: normal;
+  line-height: 1.15;
+  vertical-align: bottom;
 }
 
 .admin-daily-table tr:last-child td {
@@ -3971,6 +3984,15 @@ textarea:focus {
 
   .mode-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .mode-toggle.admin-metrics-periods {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .mode-toggle.admin-metrics-periods button {
+    padding: 9px 4px;
+    font-size: 0.72rem;
   }
 
   .mode-toggle.message-length-toggle {

@@ -789,6 +789,14 @@ const countByPacificDay = (rows, timestampField = 'created_at') => {
 
 const seriesFromMap = (dayKeys, map) => dayKeys.map((day) => ({ day, count: map.get(day) || 0 }))
 
+const sumMapRange = (map, dayKeys) =>
+  (dayKeys || []).reduce((sum, day) => sum + Number(map.get(day) || 0), 0)
+
+const formatCentsAsDollars = (cents) => {
+  const amount = Number(cents) || 0
+  return Math.round(amount) / 100
+}
+
 const safeCount = async (db, sql, binds = []) => {
   try {
     const row = await db.prepare(sql).bind(...binds).first()
@@ -833,6 +841,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
     activeUsers30,
     creditsPurchasedTotal,
     creditsSpentTotal,
+    amountPaidTotalCents,
     accountRows,
     cardRows,
     sendRows,
@@ -841,6 +850,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
     testimonialRows,
     creditPurchaseRows,
     creditSpendRows,
+    paymentRows,
   ] = await Promise.all([
     safeCount(db, `SELECT COUNT(*) AS n FROM users`),
     safeCount(db, `SELECT COUNT(*) AS n FROM cards`),
@@ -875,6 +885,12 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       `SELECT COALESCE(SUM(CASE WHEN credits_delta < 0 THEN ABS(credits_delta) ELSE 0 END), 0) AS n
        FROM credit_events`,
     ),
+    safeCount(
+      db,
+      `SELECT COALESCE(SUM(amount_cents - COALESCE(amount_refunded_cents, 0)), 0) AS n
+       FROM payments
+       WHERE status = 'paid'`,
+    ),
     safeAll(db, `SELECT created_at FROM users WHERE created_at >= ?`, [since]),
     safeAll(db, `SELECT created_at FROM cards WHERE created_at >= ?`, [since]),
     safeAll(
@@ -898,6 +914,14 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
        WHERE created_at >= ? AND credits_delta < 0`,
       [since],
     ),
+    safeAll(
+      db,
+      `SELECT COALESCE(paid_at, created_at) AS created_at,
+              (amount_cents - COALESCE(amount_refunded_cents, 0)) AS amount
+       FROM payments
+       WHERE status = 'paid' AND COALESCE(paid_at, created_at) >= ?`,
+      [since],
+    ),
   ])
 
   const accountsByDay = countByPacificDay(accountRows)
@@ -908,6 +932,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
   const testimonialsByDay = countByPacificDay(testimonialRows)
   const creditsPurchasedByDay = countByPacificDay(creditPurchaseRows)
   const creditsSpentByDay = countByPacificDay(creditSpendRows)
+  const amountPaidByDay = countByPacificDay(paymentRows)
 
   return {
     generatedAt: isoNow(),
@@ -929,6 +954,8 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       activeUsers30,
       creditsPurchased: creditsPurchasedTotal,
       creditsSpent: creditsSpentTotal,
+      amountPaidCents: amountPaidTotalCents,
+      amountPaid: formatCentsAsDollars(amountPaidTotalCents),
     },
     todayStats: {
       accounts: sumMapDay(accountsByDay, today),
@@ -939,6 +966,20 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       logins: sumMapDay(loginsByDay, today),
       creditsPurchased: sumMapDay(creditsPurchasedByDay, today),
       creditsSpent: sumMapDay(creditsSpentByDay, today),
+      amountPaidCents: sumMapDay(amountPaidByDay, today),
+      amountPaid: formatCentsAsDollars(sumMapDay(amountPaidByDay, today)),
+    },
+    periodStats: {
+      accounts: sumMapRange(accountsByDay, dayKeysOldestFirst),
+      cards: sumMapRange(cardsByDay, dayKeysOldestFirst),
+      sends: sumMapRange(sendsByDay, dayKeysOldestFirst),
+      thankYous: sumMapRange(thankYousByDay, dayKeysOldestFirst),
+      testimonials: sumMapRange(testimonialsByDay, dayKeysOldestFirst),
+      logins: sumMapRange(loginsByDay, dayKeysOldestFirst),
+      creditsPurchased: sumMapRange(creditsPurchasedByDay, dayKeysOldestFirst),
+      creditsSpent: sumMapRange(creditsSpentByDay, dayKeysOldestFirst),
+      amountPaidCents: sumMapRange(amountPaidByDay, dayKeysOldestFirst),
+      amountPaid: formatCentsAsDollars(sumMapRange(amountPaidByDay, dayKeysOldestFirst)),
     },
     daily: {
       accounts: seriesFromMap(dayKeys, accountsByDay),
@@ -949,6 +990,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       testimonials: seriesFromMap(dayKeys, testimonialsByDay),
       creditsPurchased: seriesFromMap(dayKeys, creditsPurchasedByDay),
       creditsSpent: seriesFromMap(dayKeys, creditsSpentByDay),
+      amountPaidCents: seriesFromMap(dayKeys, amountPaidByDay),
     },
   }
 }

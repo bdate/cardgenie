@@ -1213,6 +1213,7 @@ function App() {
     timezone?: string
     totals?: Record<string, number>
     todayStats?: Record<string, number>
+    periodStats?: Record<string, number>
     daily?: Record<string, Array<{ day: string; count: number }>>
   } | null>(null)
   const [adminMetricsPeriod, setAdminMetricsPeriod] = useState<'today' | '7d' | '30d' | 'ytd'>('7d')
@@ -1327,6 +1328,22 @@ function App() {
   const hasEnoughCreditsForCover = credits >= coverRevisionCost
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
+  const adminMetricsPeriodLabel =
+    adminMetricsPeriod === 'today'
+      ? 'today'
+      : adminMetricsPeriod === '7d'
+        ? '7 days'
+        : adminMetricsPeriod === '30d'
+          ? '30 days'
+          : 'YTD'
+  const adminPeriodStats = adminMetrics?.periodStats || adminMetrics?.todayStats || {}
+  const formatAdminDollars = (value: unknown) => {
+    const amount = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(amount)) {
+      return '$0.00'
+    }
+    return `$${amount.toFixed(2)}`
+  }
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
   const showReviseButton = hasViewedFront && hasViewedInside
@@ -4041,47 +4058,52 @@ function App() {
               </p>
               <div className="admin-stat-grid">
                 <div>
-                  <span>Accounts today</span>
-                  <strong>{adminMetrics.todayStats?.accounts ?? 0}</strong>
+                  <span>Accounts {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.accounts ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.accounts ?? 0}</small>
                 </div>
                 <div>
-                  <span>Sends today</span>
-                  <strong>{adminMetrics.todayStats?.sends ?? 0}</strong>
+                  <span>Sends {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.sends ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.sends ?? 0}</small>
                 </div>
                 <div>
-                  <span>Cards today</span>
-                  <strong>{adminMetrics.todayStats?.cards ?? 0}</strong>
+                  <span>Cards {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.cards ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.cards ?? 0}</small>
                 </div>
                 <div>
-                  <span>Logins today</span>
-                  <strong>{adminMetrics.todayStats?.logins ?? 0}</strong>
+                  <span>Logins {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.logins ?? 0}</strong>
                   <small>Active 7d {adminMetrics.totals?.activeUsers7 ?? 0}</small>
                 </div>
                 <div>
-                  <span>Thank-yous today</span>
-                  <strong>{adminMetrics.todayStats?.thankYous ?? 0}</strong>
+                  <span>Thank-yous {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.thankYous ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.thankYous ?? 0}</small>
                 </div>
                 <div>
-                  <span>Reviews today</span>
-                  <strong>{adminMetrics.todayStats?.testimonials ?? 0}</strong>
+                  <span>Reviews {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.testimonials ?? 0}</strong>
                   <small>
                     Pending {adminMetrics.totals?.testimonialsPending ?? 0} · Total{' '}
                     {adminMetrics.totals?.testimonials ?? 0}
                   </small>
                 </div>
                 <div>
-                  <span>Credits spent today</span>
-                  <strong>{adminMetrics.todayStats?.creditsSpent ?? 0}</strong>
+                  <span>Credits spent {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.creditsSpent ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.creditsSpent ?? 0}</small>
                 </div>
                 <div>
-                  <span>Credits bought today</span>
-                  <strong>{adminMetrics.todayStats?.creditsPurchased ?? 0}</strong>
+                  <span>Credits bought {adminMetricsPeriodLabel}</span>
+                  <strong>{adminPeriodStats.creditsPurchased ?? 0}</strong>
                   <small>Total {adminMetrics.totals?.creditsPurchased ?? 0}</small>
+                </div>
+                <div>
+                  <span>Amount paid {adminMetricsPeriodLabel}</span>
+                  <strong>{formatAdminDollars(adminPeriodStats.amountPaid)}</strong>
+                  <small>Total {formatAdminDollars(adminMetrics.totals?.amountPaid)}</small>
                 </div>
                 <div>
                   <span>Failed sends</span>
@@ -4104,8 +4126,21 @@ function App() {
                       <th>Logins</th>
                       <th>Thanks</th>
                       <th>Reviews</th>
-                      <th>Credits purchased</th>
-                      <th>Credits spent</th>
+                      <th className="admin-th-stack">
+                        Credits
+                        <br />
+                        purchased
+                      </th>
+                      <th className="admin-th-stack">
+                        Credits
+                        <br />
+                        spent
+                      </th>
+                      <th className="admin-th-stack">
+                        Amount
+                        <br />
+                        paid
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4119,6 +4154,11 @@ function App() {
                         <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.creditsPurchased?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.creditsSpent?.[index]?.count ?? 0}</td>
+                        <td>
+                          {formatAdminDollars(
+                            ((adminMetrics.daily?.amountPaidCents?.[index]?.count ?? 0) as number) / 100,
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

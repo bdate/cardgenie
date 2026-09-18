@@ -2152,6 +2152,99 @@ app.post('/api/account/credits', (req, res) => {
 
 const localAdminPhones = new Set(['+19259637453'])
 
+const localPacificDayKey = (date = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+
+const buildLocalMetricsDayKeys = (period = '7d') => {
+  const today = localPacificDayKey()
+  const [year, month, day] = today.split('-').map((part) => Number(part))
+  const normalized = String(period || '7d').trim().toLowerCase()
+  let count = 7
+  if (normalized === 'today') {
+    count = 1
+  } else if (normalized === '30d') {
+    count = 30
+  } else if (normalized === 'ytd') {
+    const start = Date.UTC(year, 0, 1)
+    const end = Date.UTC(year, month - 1, day)
+    count = Math.max(1, Math.floor((end - start) / 86400000) + 1)
+  }
+
+  const keys = []
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const stamp = new Date(Date.UTC(year, month - 1, day - offset, 12, 0, 0))
+    keys.push(localPacificDayKey(stamp))
+  }
+  return { today, period: normalized === 'today' || normalized === '30d' || normalized === 'ytd' ? normalized : '7d', dayKeysOldestFirst: keys }
+}
+
+const buildLocalZeroSeries = (dayKeysNewestFirst) => dayKeysNewestFirst.map((day) => ({ day, count: 0 }))
+
+app.get('/api/admin/metrics', (req, res) => {
+  if (!isLocalDevAuthRequest(req)) {
+    return res.status(404).json({ error: 'Admin tools are only available on the deployed API.' })
+  }
+
+  const token = readBearerToken(req)
+  const session = token ? localAccountSessions.get(token) : null
+  if (!session || !localAdminPhones.has(session.phoneE164)) {
+    return res.status(404).json({ error: 'Not found.' })
+  }
+
+  const resolved = buildLocalMetricsDayKeys(req.query?.period)
+  const dayKeysNewestFirst = resolved.dayKeysOldestFirst.slice().reverse()
+  const emptySeries = buildLocalZeroSeries(dayKeysNewestFirst)
+  const zeroStats = {
+    accounts: 0,
+    cards: 0,
+    sends: 0,
+    thankYous: 0,
+    testimonials: 0,
+    logins: 0,
+    creditsPurchased: 0,
+    creditsSpent: 0,
+    amountPaidCents: 0,
+    amountPaid: 0,
+  }
+
+  return res.json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    today: resolved.today,
+    period: resolved.period,
+    timezone: 'America/Los_Angeles',
+    days: resolved.dayKeysOldestFirst.length,
+    rangeStart: resolved.dayKeysOldestFirst[0],
+    rangeEnd: resolved.today,
+    note: 'Local analytics stub — live metrics come from the deployed worker/D1.',
+    totals: {
+      ...zeroStats,
+      failedSends: 0,
+      testimonialsPending: 0,
+      activeUsers7: 0,
+      activeUsers30: 0,
+    },
+    todayStats: zeroStats,
+    periodStats: zeroStats,
+    daily: {
+      accounts: emptySeries,
+      cards: emptySeries,
+      sends: emptySeries,
+      thankYous: emptySeries,
+      logins: emptySeries,
+      testimonials: emptySeries,
+      creditsPurchased: emptySeries,
+      creditsSpent: emptySeries,
+      amountPaidCents: emptySeries,
+    },
+  })
+})
+
 app.post('/api/admin/grant-credits', (req, res) => {
   if (!isLocalDevAuthRequest(req)) {
     return res.status(404).json({ error: 'Admin tools are only available on the deployed API.' })
