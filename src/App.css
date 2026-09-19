@@ -2332,9 +2332,9 @@ textarea:focus {
     gap: 2px;
   }
 
-  /* Mobile To: further left; keep mid-envelope vertical */
+  /* Mobile To: +10% right of prior 28%/26%; desktop To rules untouched */
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 28%;
+    left: 38%;
     top: 52%;
     max-width: 56%;
     font-size: 0.78rem;
@@ -2354,7 +2354,7 @@ textarea:focus {
   }
 
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 26%;
+    left: 36%;
     top: 50%;
     max-width: 58%;
     font-size: 0.72rem;
