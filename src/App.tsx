@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { toPng } from 'html-to-image'
 import './App.css'
 
@@ -1610,7 +1610,7 @@ function App() {
   const [printShipTo, setPrintShipTo] = useState<MailingAddress>(emptyMailingAddress)
   const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>({ ...defaultPrintMailFrom })
   const [printShopperEmail, setPrintShopperEmail] = useState('')
-  const [printOrderNotice, setPrintOrderNotice] = useState('')
+  const [printOrderNotice, setPrintOrderNotice] = useState<ReactNode>('')
   const [isOrderingPrint, setIsOrderingPrint] = useState(false)
   const [showSenderCopyField, setShowSenderCopyField] = useState(false)
   const [senderCopyEmail, setSenderCopyEmail] = useState('')
@@ -3496,13 +3496,22 @@ function App() {
       })
       setPrintShopperEmail(shopperEmail.value)
       setPrintOrderNotice(
-        [
-          `Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`,
-          orderCode ? `Order number: ${orderCode}` : null,
-          `A confirmation was emailed to ${shopperEmail.value}.`,
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
+        <div className="print-order-success-notice">
+          <p>
+            Your card will be mailed to:
+            <strong className="print-order-success-address">
+              {formatMailingAddressLines(shipTo.value)}
+            </strong>
+          </p>
+          {orderCode ? (
+            <p>
+              Order number: <strong>{orderCode}</strong>
+            </p>
+          ) : null}
+          <p>
+            A confirmation was emailed to <strong>{shopperEmail.value}</strong>.
+          </p>
+        </div>,
       )
       setPrintOrderStep('closed')
       setPrintShipTo(emptyMailingAddress())
@@ -3617,7 +3626,7 @@ function App() {
   }
 
   const renderCreditNeedNotice = (message: string) => (
-    <div className="delivery-notice">
+    <div className="delivery-notice credit-need-notice">
       <span>{message}</span>
       <button className="secondary-button" type="button" onClick={openCreditPurchase}>
         Buy more credits
@@ -4467,7 +4476,11 @@ function App() {
         )}
         {!isRecipientView && (
           <div className="credit-wallet-block">
-            <p className="wallet-kicker">
+            <p
+              className={`wallet-kicker${
+                /need .+ credits?/i.test(creditNotice) ? ' is-credit-need' : ''
+              }`.trim()}
+            >
               {creditNotice ||
                 (details.senderName.trim()
                   ? `Welcome back, ${details.senderName.trim()}. Ready to make another card?`
@@ -6252,11 +6265,17 @@ function App() {
                   )}
 
                   {printOrderNotice &&
-                    (credits < printCardCreditCost && /need .* credits/i.test(printOrderNotice)
+                    (typeof printOrderNotice === 'string' &&
+                    credits < printCardCreditCost &&
+                    /need .* credits/i.test(printOrderNotice)
                       ? renderCreditNeedNotice(printOrderNotice)
                       : (
                         <div className="delivery-notice">
-                          <div className="print-order-success-notice">{printOrderNotice}</div>
+                          {typeof printOrderNotice === 'string' ? (
+                            <div className="print-order-success-notice">{printOrderNotice}</div>
+                          ) : (
+                            printOrderNotice
+                          )}
                         </div>
                       ))}
                 </section>

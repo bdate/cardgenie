@@ -162,6 +162,10 @@
   text-transform: none;
 }
 
+.hero-section .wallet-kicker.is-credit-need {
+  color: #b42318;
+}
+
 .credit-wallet strong {
   color: var(--gcu-ink);
   font-size: clamp(1rem, 1.8vw, 1.2rem);
@@ -600,7 +604,7 @@ textarea:focus {
 .credit-action-block {
   display: grid;
   gap: 4px;
-  justify-items: start;
+  justify-items: center;
   width: fit-content;
   max-width: 100%;
 }
@@ -612,6 +616,8 @@ textarea:focus {
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.01em;
+  text-align: center;
+  width: 100%;
 }
 
 .error-message {
@@ -2342,6 +2348,24 @@ textarea:focus {
 }
 
 .print-order-success-notice {
+  display: grid;
+  gap: 0.9em;
+  font-weight: 500;
+}
+
+.print-order-success-notice p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.print-order-success-notice strong {
+  font-weight: 800;
+  color: var(--gcu-ink);
+}
+
+.print-order-success-address {
+  display: block;
+  margin-top: 0.2em;
   white-space: pre-line;
 }
 
@@ -3001,6 +3025,16 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.76);
   font-size: 0.9rem;
   font-weight: 750;
+}
+
+.delivery-notice.credit-need-notice {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.28);
+  background: rgba(255, 241, 239, 0.92);
+}
+
+.delivery-notice.credit-need-notice > span {
+  color: #b42318;
 }
 
 .delivery-notice .text-action-link {
