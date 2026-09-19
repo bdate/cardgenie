@@ -1766,7 +1766,7 @@ textarea:focus {
 }
 
 .card-signature {
-  margin-top: 4.2cqi;
+  margin-top: 6.5cqi;
   color: var(--gcu-orange);
   font-family: "Dancing Script", cursive;
   font-size: clamp(1.32rem, 9.35cqi, 3.08rem);

@@ -1085,7 +1085,7 @@ const createInsideImageUrl = ({
   const afterGreetingGap = 2.4 * cqi
   const afterParagraphGap = (density === 'is-long' ? 2.2 : 3.1) * cqi
   const beforeClosingGap = 7 * cqi
-  const beforeSignatureGap = 4.2 * cqi
+  const beforeSignatureGap = 6.5 * cqi
 
   const serifFont = '"Playfair Display", Georgia, serif'
   const scriptFont = '"Dancing Script", cursive'
