@@ -2858,6 +2858,12 @@ function App() {
   }
 
   const previewPrintEnvelope = () => {
+    if (printOrderStep === 'review') {
+      setPrintOrderStep('closed')
+      setPrintOrderNotice('')
+      return
+    }
+
     setPrintShipTo({ ...samplePrintShipTo })
     setPrintMailFrom({ ...defaultPrintMailFrom })
     setPrintOrderStep('review')
@@ -5459,7 +5465,7 @@ function App() {
                     </button>
                     <span aria-hidden="true"> · </span>
                     <button className="text-action-link" type="button" onClick={previewPrintEnvelope}>
-                      Preview envelope
+                      {printOrderStep === 'review' ? 'Close envelope preview' : 'Preview envelope'}
                     </button>
                     {adminPrintFiles && (
                       <div className="admin-print-links" aria-label="Save print test files">

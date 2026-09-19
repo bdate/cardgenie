@@ -1707,6 +1707,18 @@ textarea:focus {
   text-align: center;
 }
 
+@media (max-width: 720px) {
+  .open-card-message {
+    padding-left: 12.3cqi;
+    padding-right: 12.3cqi;
+  }
+
+  .editor-inside-preview .open-card-message {
+    padding-left: 12.3cqi;
+    padding-right: 12.3cqi;
+  }
+}
+
 .open-card-message span {
   color: var(--gcu-ink);
   font-family: "Playfair Display", Georgia, serif;
@@ -2218,11 +2230,15 @@ textarea:focus {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  min-height: 0;
   margin: 0;
-  padding: 8px 0 0;
+  padding: 16px;
   overflow: visible;
   grid-template-rows: auto;
-  justify-items: stretch;
+  row-gap: 0;
+  justify-items: center;
+  align-content: center;
+  cursor: default;
 }
 
 .print-order-envelope-scene .envelope.print-order-envelope {
@@ -2230,6 +2246,7 @@ textarea:focus {
   max-width: 100%;
   height: 320px;
   box-sizing: border-box;
+  justify-self: center;
 }
 
 .print-order-envelope .envelope-from.print-order-from {
@@ -2287,7 +2304,10 @@ textarea:focus {
   }
 
   .print-order-envelope-scene.envelope-scene {
-    padding: 4px 0 0;
+    min-height: 0;
+    padding: 12px;
+    row-gap: 0;
+    grid-template-rows: auto;
   }
 
   .print-order-envelope-scene .envelope.print-order-envelope {
