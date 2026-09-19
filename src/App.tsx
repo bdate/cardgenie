@@ -5331,9 +5331,17 @@ function App() {
                       ))}
                     </div>
                     <p className="message-length-hint">
-                      {isPrintOrderOpen
-                        ? `Printing uses the ${selectedMessageLengthLabel.toLowerCase()} message shown above.`
-                        : 'Message Length — pick the one you like.'}
+                      {isPrintOrderOpen ? (
+                        <>
+                          Printing uses the{' '}
+                          <strong className="print-order-length-label">
+                            {selectedMessageLengthLabel.toLowerCase()}
+                          </strong>{' '}
+                          message shown above.
+                        </>
+                      ) : (
+                        'Message Length — pick the one you like.'
+                      )}
                     </p>
                   </div>
                 )}
@@ -5834,8 +5842,12 @@ function App() {
                         <span className="delivery-kicker">Mail a printed card</span>
                         <p>Where should we ship this card? United States only.</p>
                         <p className="print-order-message-note">
-                          Printing the <strong>{selectedMessageLengthLabel.toLowerCase()}</strong> inside message
-                          shown above. Switch Short / Medium / Long anytime before you place the order.
+                          Printing the{' '}
+                          <strong className="print-order-length-label">
+                            {selectedMessageLengthLabel.toLowerCase()}
+                          </strong>{' '}
+                          inside message shown above. Switch Short / Medium / Long anytime before you place the
+                          order.
                         </p>
                       </div>
                       {renderMailingAddressFields('ship-to', printShipTo, 'Recipient name')}
@@ -5889,7 +5901,8 @@ function App() {
                         <span className="delivery-kicker">Review envelope</span>
                         <p>Confirm the addresses, then place the print order.</p>
                         <p className="print-order-message-note">
-                          Inside message for print: <strong>{selectedMessageLengthLabel}</strong>
+                          Inside message for print:{' '}
+                          <strong className="print-order-length-label">{selectedMessageLengthLabel}</strong>
                         </p>
                       </div>
                       <div className="proof-stage envelope-scene print-order-envelope-scene">

@@ -2191,6 +2191,11 @@ textarea:focus {
   color: var(--gcu-ink) !important;
 }
 
+.print-order-length-label {
+  color: var(--gcu-orange);
+  font-weight: 800;
+}
+
 .print-order-form,
 .print-order-review {
   display: grid;
