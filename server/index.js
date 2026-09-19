@@ -376,7 +376,8 @@ app.post('/api/order-print-card', async (req, res) => {
     const cover = parseDataUrlImage(coverImage, 'cover')
     const inside = parseDataUrlImage(insideImage, 'inside')
     const shareUrl = getShareUrl(req, record.id)
-    const orderCode = generatePrintOrderCode()
+    const orderNumber = allocateLocalPrintOrderNumber()
+    const orderCode = String(orderNumber)
     const copy = buildPrintOrderEmailCopy({
       cardId: record.id,
       orderCode,
@@ -406,6 +407,7 @@ app.post('/api/order-print-card', async (req, res) => {
     return res.json({
       ok: true,
       orderCode,
+      orderNumber,
       creditCost: PRINT_CARD_CREDIT_COST,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
       message: `Print order ${orderCode} sent. We'll mail the card shortly.`,
@@ -1715,15 +1717,11 @@ const sendEmailDelivery = async ({ to, copy, attachments = [] }) => {
 
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
-const PRINT_ORDER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+let localPrintOrderNumber = 1000
 
-const generatePrintOrderCode = () => {
-  const bytes = crypto.randomBytes(6)
-  let code = 'CG-'
-  for (const byte of bytes) {
-    code += PRINT_ORDER_CODE_ALPHABET[byte % PRINT_ORDER_CODE_ALPHABET.length]
-  }
-  return code
+const allocateLocalPrintOrderNumber = () => {
+  localPrintOrderNumber += 1
+  return localPrintOrderNumber
 }
 
 const US_STATE_CODES = new Set([
@@ -1802,7 +1800,7 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
   const text = [
     'New printed card order from Card Genie.',
     '',
-    `Order code: ${orderCode}`,
+    `Order number: ${orderCode}`,
     `Card ID: ${cardId}`,
     '',
     'Mail from:',
@@ -1826,7 +1824,7 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
       <h2 style="margin: 0 0 12px;">New printed card order</h2>
       <p style="margin: 0 0 16px;">A shopper requested a physical greeting card mailing.</p>
-      <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order code:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order number:</strong> ${orderCode}</p>
       <p style="margin: 0 0 16px;"><strong>Card ID:</strong> ${cardId}</p>
       <p style="margin: 0 0 6px;"><strong>Mail from</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(mailFrom)}</pre>

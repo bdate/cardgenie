@@ -2993,7 +2993,7 @@ function App() {
       setPrintOrderNotice(
         [
           `Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`,
-          orderCode ? `Order code: ${orderCode}` : null,
+          orderCode ? `Order number: ${orderCode}` : null,
         ]
           .filter(Boolean)
           .join('\n\n'),

@@ -17,6 +17,7 @@ import {
   recordStripeCreditPurchase,
   recordSuccessfulDelivery,
   recordThankYou,
+  createPrintOrder,
   updateTestimonialStatus,
   upsertUserOnLogin,
 } from './account-db.js'
@@ -1374,16 +1375,6 @@ const sendEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
 
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
-const PRINT_ORDER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-
-const generatePrintOrderCode = () => {
-  const bytes = crypto.getRandomValues(new Uint8Array(6))
-  let code = 'CG-'
-  for (const byte of bytes) {
-    code += PRINT_ORDER_CODE_ALPHABET[byte % PRINT_ORDER_CODE_ALPHABET.length]
-  }
-  return code
-}
 
 const US_STATE_CODES = new Set([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
@@ -1461,7 +1452,7 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
   const text = [
     'New printed card order from Card Genie.',
     '',
-    `Order code: ${orderCode}`,
+    `Order number: ${orderCode}`,
     `Card ID: ${cardId}`,
     '',
     'Mail from:',
@@ -1485,7 +1476,7 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
       <h2 style="margin: 0 0 12px;">New printed card order</h2>
       <p style="margin: 0 0 16px;">A shopper requested a physical greeting card mailing.</p>
-      <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order code:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order number:</strong> ${orderCode}</p>
       <p style="margin: 0 0 16px;"><strong>Card ID:</strong> ${cardId}</p>
       <p style="margin: 0 0 6px;"><strong>Mail from</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(mailFrom)}</pre>
@@ -3176,7 +3167,17 @@ const handleOrderPrintCard = async (request, env) => {
     const cover = parseDataUrlImage(coverImage, 'cover')
     const inside = parseDataUrlImage(insideImage, 'inside')
     const shareUrl = getShareUrl(request, env, record.id)
-    const orderCode = generatePrintOrderCode()
+    const savedOrder = await createPrintOrder(env, {
+      userId: session.userId,
+      cardId: record.id,
+      mailFrom,
+      shipTo,
+      creditCost: PRINT_CARD_CREDIT_COST,
+    })
+    const orderCode = savedOrder?.orderCode || String(savedOrder?.orderNumber || '')
+    if (!orderCode) {
+      return jsonResponse(request, env, { error: 'Unable to allocate a print order number.' }, 500)
+    }
     const copy = buildPrintOrderEmailCopy({
       cardId: record.id,
       orderCode,
@@ -3207,6 +3208,7 @@ const handleOrderPrintCard = async (request, env) => {
     return jsonResponse(request, env, {
       ok: true,
       orderCode,
+      orderNumber: savedOrder.orderNumber,
       creditCost: PRINT_CARD_CREDIT_COST,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
       message: `Print order ${orderCode} sent. We'll mail the card shortly.`,

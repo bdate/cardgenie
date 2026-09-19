@@ -1050,3 +1050,79 @@ export const updateTestimonialStatus = async (env, { id, status }) => {
   await env.ACCOUNT_DB.prepare(`UPDATE testimonials SET status = ? WHERE id = ?`).bind(status, id).run()
   return { id, status }
 }
+
+const ensurePrintOrderTables = async (db) => {
+  await db.batch([
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS print_order_counter (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        next_value INTEGER NOT NULL
+      )
+    `),
+    db.prepare(`INSERT OR IGNORE INTO print_order_counter (id, next_value) VALUES (1, 1000)`),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS print_orders (
+        order_number INTEGER PRIMARY KEY,
+        user_id TEXT,
+        card_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        ship_to_name TEXT,
+        ship_to_json TEXT NOT NULL,
+        mail_from_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'submitted',
+        credit_cost INTEGER NOT NULL DEFAULT 10
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_user_id ON print_orders (user_id, created_at)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_card_id ON print_orders (card_id)`),
+  ])
+}
+
+/** Allocate the next sequential print order number (1001+) and store the order. */
+export const createPrintOrder = async (
+  env,
+  { userId, cardId, mailFrom, shipTo, creditCost = 10, status = 'submitted' },
+) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return null
+  }
+
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+
+  const allocated = await env.ACCOUNT_DB.prepare(
+    `UPDATE print_order_counter
+     SET next_value = next_value + 1
+     WHERE id = 1
+     RETURNING next_value AS order_number`,
+  ).first()
+
+  const orderNumber = Number(allocated?.order_number)
+  if (!Number.isFinite(orderNumber) || orderNumber < 1) {
+    throw new Error('Unable to allocate a print order number.')
+  }
+
+  const now = isoNow()
+  await env.ACCOUNT_DB.prepare(
+    `INSERT INTO print_orders (
+      order_number, user_id, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, status, credit_cost
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      orderNumber,
+      userId || null,
+      cardId,
+      now,
+      shipTo?.name || null,
+      JSON.stringify(shipTo || {}),
+      JSON.stringify(mailFrom || {}),
+      status,
+      Math.max(0, Math.floor(Number(creditCost) || 0)),
+    )
+    .run()
+
+  return {
+    orderNumber,
+    orderCode: String(orderNumber),
+    createdAt: now,
+  }
+}
