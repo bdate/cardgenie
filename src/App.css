@@ -2243,11 +2243,11 @@ textarea:focus {
   line-height: 1.25;
 }
 
-/* Desktop: known-good absolute placement on 520×320 */
+/* Desktop: keep X; drop To into mid-envelope (54px was pinned at the top) */
 .print-order-envelope .print-order-to {
   position: absolute;
   left: 200px;
-  top: 54px;
+  top: 52%;
   display: grid;
   justify-items: start;
   gap: 6px;
@@ -2258,7 +2258,7 @@ textarea:focus {
   font-weight: 600;
   line-height: 1.3;
   text-align: left;
-  transform: translateY(-50%);
+  transform: none;
 }
 
 .print-order-address-block {
@@ -2312,11 +2312,11 @@ textarea:focus {
     gap: 2px;
   }
 
-  /* Mobile To: nudged left 10pts from 48% after overshoot */
+  /* Mobile To: further left; keep mid-envelope vertical */
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 38%;
+    left: 28%;
     top: 52%;
-    max-width: 50%;
+    max-width: 56%;
     font-size: 0.78rem;
     line-height: 1.25;
     transform: none;
@@ -2334,9 +2334,9 @@ textarea:focus {
   }
 
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 36%;
+    left: 26%;
     top: 50%;
-    max-width: 52%;
+    max-width: 58%;
     font-size: 0.72rem;
   }
 
@@ -2444,7 +2444,15 @@ textarea:focus {
 .account-confirmed {
   margin: 0;
   color: var(--gcu-dark-teal);
+  font-size: 0.86rem;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .account-confirmed {
+    font-size: 0.78rem;
+  }
 }
 
 .delivery-support {
