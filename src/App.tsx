@@ -1062,9 +1062,9 @@ const createInsideImageUrl = ({
 
   const scaleX = width / 1200
   const scaleY = height / 1500
-  const marginX = 70 * scaleX
+  const marginX = 80.5 * scaleX
   const marginY = 70 * scaleY
-  const maxTextWidth = 840 * scaleX
+  const maxTextWidth = 714 * scaleX
 
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, canvas.width, canvas.height)

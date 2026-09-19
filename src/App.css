@@ -1698,7 +1698,7 @@ textarea:focus {
   align-items: center;
   gap: 0;
   overflow: hidden;
-  padding: 12cqi 9.3cqi;
+  padding: 12cqi 10.7cqi;
   color: var(--gcu-ink);
   background:
     linear-gradient(90deg, rgba(63, 155, 145, 0.08), transparent 18%),
@@ -2312,11 +2312,11 @@ textarea:focus {
     gap: 2px;
   }
 
-  /* Mobile To: start near horizontal mid of envelope (desktop ~38%; was stuck at 12% in cached builds) */
+  /* Mobile To: nudged left 10pts from 48% after overshoot */
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 48%;
+    left: 38%;
     top: 52%;
-    max-width: 46%;
+    max-width: 50%;
     font-size: 0.78rem;
     line-height: 1.25;
     transform: none;
@@ -3247,7 +3247,7 @@ textarea:focus {
 }
 
 .editor-inside-preview .open-card-message {
-  padding: 10.7cqi 9.3cqi 9.3cqi;
+  padding: 10.7cqi 10.7cqi 9.3cqi;
 }
 
 .refinement-panel {
