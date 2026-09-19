@@ -376,8 +376,10 @@ app.post('/api/order-print-card', async (req, res) => {
     const cover = parseDataUrlImage(coverImage, 'cover')
     const inside = parseDataUrlImage(insideImage, 'inside')
     const shareUrl = getShareUrl(req, record.id)
+    const orderCode = generatePrintOrderCode()
     const copy = buildPrintOrderEmailCopy({
       cardId: record.id,
+      orderCode,
       shareUrl,
       mailFrom,
       shipTo,
@@ -403,9 +405,10 @@ app.post('/api/order-print-card', async (req, res) => {
 
     return res.json({
       ok: true,
+      orderCode,
       creditCost: PRINT_CARD_CREDIT_COST,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
-      message: `Print order sent to ${PRINT_ORDER_SUPPORT_EMAIL}. We'll mail the card shortly.`,
+      message: `Print order ${orderCode} sent. We'll mail the card shortly.`,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to place the print order.'
@@ -1712,6 +1715,17 @@ const sendEmailDelivery = async ({ to, copy, attachments = [] }) => {
 
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
+const PRINT_ORDER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+const generatePrintOrderCode = () => {
+  const bytes = crypto.randomBytes(6)
+  let code = 'CG-'
+  for (const byte of bytes) {
+    code += PRINT_ORDER_CODE_ALPHABET[byte % PRINT_ORDER_CODE_ALPHABET.length]
+  }
+  return code
+}
+
 const US_STATE_CODES = new Set([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
@@ -1781,12 +1795,15 @@ const formatMailingAddressBlock = (address) =>
     .filter(Boolean)
     .join('\n')
 
-const buildPrintOrderEmailCopy = ({ cardId, shareUrl, mailFrom, shipTo, details }) => {
+const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipTo, details }) => {
   const occasion = String(details?.occasion || '').trim() || 'greeting card'
   const recipient = String(details?.recipientName || shipTo.name || 'recipient').trim()
-  const subject = `Print card order · ${shipTo.name} · ${cardId}`
+  const subject = `Print card order · ${orderCode} · ${shipTo.name}`
   const text = [
     'New printed card order from Card Genie.',
+    '',
+    `Order code: ${orderCode}`,
+    `Card ID: ${cardId}`,
     '',
     'Mail from:',
     formatMailingAddressBlock(mailFrom),
@@ -1794,7 +1811,6 @@ const buildPrintOrderEmailCopy = ({ cardId, shareUrl, mailFrom, shipTo, details 
     'Ship to:',
     formatMailingAddressBlock(shipTo),
     '',
-    `Card ID: ${cardId}`,
     `Occasion: ${occasion}`,
     `Card recipient name: ${recipient}`,
     shareUrl ? `Share link: ${shareUrl}` : null,
@@ -1810,11 +1826,12 @@ const buildPrintOrderEmailCopy = ({ cardId, shareUrl, mailFrom, shipTo, details 
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
       <h2 style="margin: 0 0 12px;">New printed card order</h2>
       <p style="margin: 0 0 16px;">A shopper requested a physical greeting card mailing.</p>
+      <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order code:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 16px;"><strong>Card ID:</strong> ${cardId}</p>
       <p style="margin: 0 0 6px;"><strong>Mail from</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(mailFrom)}</pre>
       <p style="margin: 0 0 6px;"><strong>Ship to</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(shipTo)}</pre>
-      <p style="margin: 0 0 4px;"><strong>Card ID:</strong> ${cardId}</p>
       <p style="margin: 0 0 4px;"><strong>Occasion:</strong> ${occasion}</p>
       <p style="margin: 0 0 4px;"><strong>Card recipient name:</strong> ${recipient}</p>
       ${shareUrl ? `<p style="margin: 0 0 16px;"><strong>Share link:</strong> <a href="${shareUrl}">${shareUrl}</a></p>` : ''}

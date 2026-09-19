@@ -2980,7 +2980,16 @@ function App() {
       const nextCredits = rememberCredits(credits - chargedCredits)
       setCreditNotice(`${chargedCredits} credits used to order a printed card.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'print_card_order' })
-      setPrintOrderNotice(`Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`)
+      const orderCode =
+        typeof data.orderCode === 'string' && data.orderCode.trim() ? data.orderCode.trim() : ''
+      setPrintOrderNotice(
+        [
+          `Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`,
+          orderCode ? `Order code: ${orderCode}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      )
       setPrintOrderStep('closed')
       setPrintShipTo(emptyMailingAddress())
       setPrintMailFrom({ ...defaultPrintMailFrom })

@@ -2151,6 +2151,8 @@ textarea:focus {
   border: 1px solid rgba(143, 208, 201, 0.34);
   border-radius: 24px;
   padding: 20px;
+  min-width: 0;
+  overflow: visible;
   background:
     radial-gradient(circle at top left, rgba(63, 155, 145, 0.12), transparent 36%),
     rgba(255, 255, 255, 0.72);
@@ -2181,6 +2183,7 @@ textarea:focus {
 .print-order-review {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .print-address-fields {
@@ -2210,39 +2213,48 @@ textarea:focus {
   width: min(320px, 100%);
 }
 
-.print-order-envelope-scene {
+/* Keep print envelope inside the panel (not 90vw of the whole phone). */
+.print-order-envelope-scene.envelope-scene {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 8px 0 0;
+  overflow: visible;
+  grid-template-rows: auto;
+  justify-items: stretch;
 }
 
-.print-order-envelope {
-  container-type: size;
-  container-name: print-envelope;
+.print-order-envelope-scene .envelope.print-order-envelope {
+  width: min(520px, 100%);
+  max-width: 100%;
+  height: 320px;
+  box-sizing: border-box;
 }
 
 .print-order-envelope .envelope-from.print-order-from {
-  top: 11.25cqh;
-  left: 7.3cqw;
+  top: 36px;
+  left: 38px;
   display: grid;
   gap: 4px;
-  max-width: 46%;
-  font-size: clamp(0.58rem, 2.2cqw, 0.72rem);
+  max-width: 42%;
+  font-size: 0.72rem;
   font-weight: 600;
   line-height: 1.25;
 }
 
-/* Desktop target was left 200/520 and top 54/320; cqw/cqh keep that ratio on mobile */
+/* Desktop: known-good absolute placement on 520×320 */
 .print-order-envelope .print-order-to {
   position: absolute;
-  left: 38.46cqw;
-  top: 16.875cqh;
+  left: 200px;
+  top: 54px;
   display: grid;
   justify-items: start;
   gap: 6px;
-  max-width: 52cqw;
+  max-width: 52%;
   margin: 0;
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(0.72rem, 3.2cqw, 1.15rem);
+  font-size: clamp(0.95rem, 2.1vw, 1.15rem);
   font-weight: 600;
   line-height: 1.3;
   text-align: left;
@@ -2255,7 +2267,7 @@ textarea:focus {
 
 .print-order-change {
   justify-self: start;
-  font-size: clamp(0.64rem, 2.4cqw, 0.78rem);
+  font-size: 0.78rem;
   font-family: inherit;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -2270,12 +2282,68 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .print-order-panel {
+    padding: 16px;
+  }
+
+  .print-order-envelope-scene.envelope-scene {
+    padding: 4px 0 0;
+  }
+
+  .print-order-envelope-scene .envelope.print-order-envelope {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 520 / 320;
+  }
+
+  .print-order-envelope .envelope-stamp {
+    top: 10px;
+    right: 10px;
+    width: 48px;
+  }
+
   .print-order-envelope .envelope-from.print-order-from {
-    max-width: 44%;
+    top: 10px;
+    left: 12px;
+    max-width: 40%;
+    font-size: 0.58rem;
+    line-height: 1.2;
+    gap: 2px;
+  }
+
+  /* Classic mobile mail layout: To sits below From, clear of stamp */
+  .print-order-envelope .print-order-to {
+    left: 12%;
+    top: 52%;
+    max-width: 62%;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    transform: none;
+  }
+
+  .print-order-change {
+    font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .print-order-envelope .envelope-from.print-order-from {
+    font-size: 0.54rem;
+    max-width: 38%;
   }
 
   .print-order-envelope .print-order-to {
-    max-width: 54cqw;
+    left: 10%;
+    top: 50%;
+    max-width: 64%;
+    font-size: 0.72rem;
+  }
+
+  .print-order-envelope .envelope-stamp {
+    width: 42px;
+    right: 8px;
+    top: 8px;
   }
 }
 
