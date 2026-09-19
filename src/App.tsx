@@ -805,7 +805,13 @@ const loadImageElement = (imageUrl: string) =>
     image.src = imageUrl
   })
 
-const upscaleImageToDataUrl = (image: HTMLImageElement, width: number, height: number) => {
+const upscaleImageToDataUrl = (
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  mimeType: 'image/png' | 'image/jpeg' = 'image/png',
+  quality = 0.92,
+) => {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
@@ -817,7 +823,7 @@ const upscaleImageToDataUrl = (image: HTMLImageElement, width: number, height: n
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
   context.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL('image/png')
+  return mimeType === 'image/jpeg' ? canvas.toDataURL('image/jpeg', quality) : canvas.toDataURL('image/png')
 }
 
 const COVER_THUMB_MAX_EDGE = 320
@@ -1229,7 +1235,7 @@ const createInsideImageUrl = ({
   return canvas.toDataURL('image/png')
 }
 
-/** Capture the inside with the same CSS layout width the shopper sees, then enlarge to print size. */
+/** Layout the inside at the shopper's on-screen card width, then enlarge to print size. */
 const buildPrintInsideImageUrl = async ({
   greeting,
   paragraphs,
@@ -1257,7 +1263,46 @@ const buildPrintInsideImageUrl = async ({
 
   const layoutWidth = getVisibleInsideCardWidth()
   const layoutHeight = Math.round(layoutWidth * (CARD_COVER_HEIGHT / CARD_COVER_WIDTH))
-  const pixelRatio = PRINT_CARD_WIDTH / layoutWidth
+
+  // Prefer canvas at the visible card width (reliable on mobile). DOM capture is a desktop enhancement.
+  const renderCanvasFallback = async () => {
+    const fallbackUrl = createInsideImageUrl({
+      greeting,
+      paragraphs,
+      closing,
+      signature,
+      width: Math.max(layoutWidth, 450),
+      height: Math.round(Math.max(layoutWidth, 450) * (CARD_COVER_HEIGHT / CARD_COVER_WIDTH)),
+      showFrame: false,
+      density,
+      printSafe: true,
+    })
+    if (!fallbackUrl) {
+      return ''
+    }
+    const image = await loadImageElement(fallbackUrl)
+    return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+  }
+
+  if (isMobileDevice()) {
+    // On phones, layout at the actual on-screen width so wraps match what they see.
+    const mobileUrl = createInsideImageUrl({
+      greeting,
+      paragraphs,
+      closing,
+      signature,
+      width: layoutWidth,
+      height: layoutHeight,
+      showFrame: false,
+      density,
+      printSafe: true,
+    })
+    if (!mobileUrl) {
+      return ''
+    }
+    const image = await loadImageElement(mobileUrl)
+    return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+  }
 
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
@@ -1327,36 +1372,22 @@ const buildPrintInsideImageUrl = async ({
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
     })
 
-    return await toPng(cardEl, {
+    const captureRatio = Math.min(2, PRINT_CARD_WIDTH / layoutWidth)
+    const capturedUrl = await toPng(cardEl, {
       width: layoutWidth,
       height: layoutHeight,
-      pixelRatio,
+      pixelRatio: captureRatio,
       cacheBust: true,
-      canvasWidth: PRINT_CARD_WIDTH,
-      canvasHeight: PRINT_CARD_HEIGHT,
       style: {
         transform: 'none',
         animation: 'none',
       },
     })
+    const capturedImage = await loadImageElement(capturedUrl)
+    return upscaleImageToDataUrl(capturedImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
   } catch (error) {
     console.error('Unable to capture on-screen inside layout for print.', error)
-    const fallbackUrl = createInsideImageUrl({
-      greeting,
-      paragraphs,
-      closing,
-      signature,
-      width: layoutWidth,
-      height: layoutHeight,
-      showFrame: false,
-      density,
-      printSafe: true,
-    })
-    if (!fallbackUrl) {
-      return ''
-    }
-    const image = await loadImageElement(fallbackUrl)
-    return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+    return renderCanvasFallback()
   } finally {
     host.remove()
   }
@@ -3145,7 +3176,7 @@ function App() {
     }
 
     const coverImage = await loadImageElement(card.imageUrl)
-    const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+    const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT, 'image/jpeg', 0.92)
     if (!coverUrl) {
       throw new Error('Unable to prepare the print cover file.')
     }

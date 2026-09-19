@@ -414,7 +414,7 @@ app.post('/api/order-print-card', async (req, res) => {
       copy,
       attachments: [
         {
-          filename: 'print-cover.png',
+          filename: cover.type?.includes('jpeg') || cover.type?.includes('jpg') ? 'print-cover.jpg' : 'print-cover.png',
           type: cover.type || 'image/png',
           content: cover.content,
         },
@@ -424,6 +424,8 @@ app.post('/api/order-print-card', async (req, res) => {
           content: inside.content,
         },
       ],
+    }).catch((emailError) => {
+      console.error('Print order saved but support email failed.', emailError)
     })
 
     try {

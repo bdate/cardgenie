@@ -3257,23 +3257,29 @@ const handleOrderPrintCard = async (request, env) => {
       shopperEmail,
     })
 
-    await sendEmailDelivery({
-      env,
-      to: PRINT_ORDER_SUPPORT_EMAIL,
-      copy,
-      attachments: [
-        {
-          filename: 'print-cover.png',
-          type: cover.type || 'image/png',
-          content: cover.content,
-        },
-        {
-          filename: 'print-inside.png',
-          type: inside.type || 'image/png',
-          content: inside.content,
-        },
-      ],
-    })
+    let supportEmailError = ''
+    try {
+      await sendEmailDelivery({
+        env,
+        to: PRINT_ORDER_SUPPORT_EMAIL,
+        copy,
+        attachments: [
+          {
+            filename: cover.type?.includes('jpeg') || cover.type?.includes('jpg') ? 'print-cover.jpg' : 'print-cover.png',
+            type: cover.type || 'image/png',
+            content: cover.content,
+          },
+          {
+            filename: 'print-inside.png',
+            type: inside.type || 'image/png',
+            content: inside.content,
+          },
+        ],
+      })
+    } catch (emailError) {
+      supportEmailError = emailError instanceof Error ? emailError.message : 'Unable to email support.'
+      console.error('Print order saved but support email failed.', emailError)
+    }
 
     try {
       const confirmationCopy = buildPrintOrderConfirmationCopy({
@@ -3312,7 +3318,10 @@ const handleOrderPrintCard = async (request, env) => {
       creditCost: PRINT_CARD_CREDIT_COST,
       shopperEmail,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
-      message: `Print order ${orderCode} sent. We'll mail the card shortly.`,
+      supportEmailError: supportEmailError || undefined,
+      message: supportEmailError
+        ? `Print order ${orderCode} was placed. We had trouble notifying support — contact support@card-genie.com with your order number.`
+        : `Print order ${orderCode} sent. We'll mail the card shortly.`,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to place the print order.'
