@@ -1066,24 +1066,7 @@ const createInsideImageUrl = ({
   const marginY = 70 * scaleY
   const maxTextWidth = 840 * scaleX
 
-  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
-  gradient.addColorStop(0, '#fffdf6')
-  gradient.addColorStop(0.52, '#fdf7ef')
-  gradient.addColorStop(1, '#eefaf7')
-  context.fillStyle = gradient
-  context.fillRect(0, 0, canvas.width, canvas.height)
-
-  const cornerGlow = context.createRadialGradient(
-    930 * scaleX,
-    190 * scaleY,
-    40 * scaleX,
-    930 * scaleX,
-    190 * scaleY,
-    520 * scaleX,
-  )
-  cornerGlow.addColorStop(0, 'rgba(245, 158, 51, 0.18)')
-  cornerGlow.addColorStop(1, 'rgba(245, 158, 51, 0)')
-  context.fillStyle = cornerGlow
+  context.fillStyle = '#ffffff'
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   if (showFrame) {
@@ -1096,21 +1079,21 @@ const createInsideImageUrl = ({
   context.textAlign = 'center'
   context.textBaseline = 'top'
 
-  const bodyLineHeight = 58 * scaleY
-  const closingLineHeight = 52 * scaleY
-  const signatureLineHeight = 82 * scaleY
+  const bodyLineHeight = 64 * scaleY
+  const closingLineHeight = 57 * scaleY
+  const signatureLineHeight = 90 * scaleY
   const afterGreetingGap = 36 * scaleY
   const afterParagraphGap = 34 * scaleY
   const beforeClosingGap = 72 * scaleY
   const beforeSignatureGap = 28 * scaleY
 
-  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
+  context.font = `${Math.round(48 * scaleX)}px Georgia, serif`
   const greetingLines = greeting.trim() ? wrapCanvasText(context, greeting.trim(), maxTextWidth) : []
-  context.font = `${Math.round(42 * scaleX)}px Georgia, serif`
+  context.font = `${Math.round(46 * scaleX)}px Georgia, serif`
   const paragraphLineGroups = paragraphs.map((paragraph) => wrapCanvasText(context, paragraph, maxTextWidth))
-  context.font = `${Math.round(40 * scaleX)}px Georgia, serif`
+  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
   const closingLines = wrapCanvasText(context, closing, maxTextWidth)
-  context.font = `${Math.round(70 * scaleX)}px cursive`
+  context.font = `${Math.round(77 * scaleX)}px cursive`
   const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
 
   let contentHeight = 0
@@ -1133,13 +1116,13 @@ const createInsideImageUrl = ({
 
   if (greetingLines.length) {
     context.fillStyle = '#2d6762'
-    context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
+    context.font = `${Math.round(48 * scaleX)}px Georgia, serif`
     drawCenteredLines(context, greetingLines, canvas.width / 2, y, bodyLineHeight)
     y += greetingLines.length * bodyLineHeight + afterGreetingGap
   }
 
   context.fillStyle = '#2d6762'
-  context.font = `${Math.round(42 * scaleX)}px Georgia, serif`
+  context.font = `${Math.round(46 * scaleX)}px Georgia, serif`
   paragraphLineGroups.forEach((lines, index) => {
     drawCenteredLines(context, lines, canvas.width / 2, y, bodyLineHeight)
     y += lines.length * bodyLineHeight
@@ -1150,12 +1133,12 @@ const createInsideImageUrl = ({
 
   y += beforeClosingGap
   context.fillStyle = '#2d6762'
-  context.font = `${Math.round(40 * scaleX)}px Georgia, serif`
+  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
   drawCenteredLines(context, closingLines, canvas.width / 2, y, closingLineHeight)
   y += closingLines.length * closingLineHeight + beforeSignatureGap
 
   context.fillStyle = '#d88a31'
-  context.font = `${Math.round(70 * scaleX)}px cursive`
+  context.font = `${Math.round(77 * scaleX)}px cursive`
   drawCenteredLines(context, signatureLines, canvas.width / 2, y, signatureLineHeight)
 
   return canvas.toDataURL('image/png')
