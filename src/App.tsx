@@ -1030,6 +1030,9 @@ const drawCenteredLines = (
   })
 }
 
+type InsideMessageDensity = 'is-short' | 'is-medium' | 'is-long'
+
+/** Match on-screen `.open-card-message` layout (cqi-based) so print is a scale-up, not a reflow. */
 const createInsideImageUrl = ({
   greeting,
   paragraphs,
@@ -1038,6 +1041,8 @@ const createInsideImageUrl = ({
   width = CARD_COVER_WIDTH,
   height = CARD_COVER_HEIGHT,
   showFrame = true,
+  density = 'is-short',
+  printSafe = false,
 }: {
   greeting: string
   paragraphs: string[]
@@ -1046,6 +1051,8 @@ const createInsideImageUrl = ({
   width?: number
   height?: number
   showFrame?: boolean
+  density?: InsideMessageDensity
+  printSafe?: boolean
 }) => {
   if (typeof document === 'undefined') {
     return ''
@@ -1060,45 +1067,70 @@ const createInsideImageUrl = ({
     return ''
   }
 
-  const scaleX = width / 1200
-  const scaleY = height / 1500
-  const marginX = 80.5 * scaleX
-  const marginY = 70 * scaleY
-  const maxTextWidth = 714 * scaleX
+  const cqi = width / 100
+  const padX = 10.7 * cqi
+  const padY = 12 * cqi
+  const maxTextWidth = Math.max(1, width - padX * 2)
 
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  const bodyFontSize =
+    (density === 'is-long' ? 3.03 : density === 'is-medium' ? 3.41 : 3.85) * cqi
+  const bodyLineHeightMult = density === 'is-long' ? 1.24 : density === 'is-medium' ? 1.3 : 1.35
+  const bodyLineHeight = bodyFontSize * bodyLineHeightMult
+  const greetingFontSize = 3.74 * cqi
+  const greetingLineHeight = greetingFontSize * 1.35
+  const closingFontSize = 3.52 * cqi
+  const closingLineHeight = closingFontSize * 1.2
+  const signatureFontSize = 9.35 * cqi
+  const signatureLineHeight = signatureFontSize * 0.9
+  const afterGreetingGap = 2.4 * cqi
+  const afterParagraphGap = (density === 'is-long' ? 2.2 : 3.1) * cqi
+  const beforeClosingGap = 7 * cqi
+  const beforeSignatureGap = 2.4 * cqi
+
+  const serifFont = '"Playfair Display", Georgia, serif'
+  const scriptFont = '"Dancing Script", cursive'
+
+  if (printSafe) {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  } else {
+    context.fillStyle = '#fffdf6'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    const topGlow = context.createRadialGradient(
+      canvas.width * 0.82,
+      canvas.height * 0.08,
+      0,
+      canvas.width * 0.82,
+      canvas.height * 0.08,
+      canvas.width * 0.55,
+    )
+    topGlow.addColorStop(0, 'rgba(245, 158, 51, 0.14)')
+    topGlow.addColorStop(1, 'rgba(245, 158, 51, 0)')
+    context.fillStyle = topGlow
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
 
   if (showFrame) {
     context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
-    context.lineWidth = 4 * scaleX
-    context.strokeRect(marginX, marginY, canvas.width - marginX * 2, canvas.height - marginY * 2)
+    context.lineWidth = Math.max(1, 0.35 * cqi)
+    context.strokeRect(padX * 0.35, padY * 0.35, canvas.width - padX * 0.7, canvas.height - padY * 0.7)
   }
 
-  context.fillStyle = '#2d6762'
   context.textAlign = 'center'
   context.textBaseline = 'top'
 
-  const bodyLineHeight = 64 * scaleY
-  const closingLineHeight = 57 * scaleY
-  const signatureLineHeight = 90 * scaleY
-  const afterGreetingGap = 36 * scaleY
-  const afterParagraphGap = 34 * scaleY
-  const beforeClosingGap = 72 * scaleY
-  const beforeSignatureGap = 28 * scaleY
-
-  context.font = `${Math.round(48 * scaleX)}px Georgia, serif`
+  context.font = `700 ${greetingFontSize}px ${serifFont}`
   const greetingLines = greeting.trim() ? wrapCanvasText(context, greeting.trim(), maxTextWidth) : []
-  context.font = `${Math.round(46 * scaleX)}px Georgia, serif`
+  context.font = `700 ${bodyFontSize}px ${serifFont}`
   const paragraphLineGroups = paragraphs.map((paragraph) => wrapCanvasText(context, paragraph, maxTextWidth))
-  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
-  const closingLines = wrapCanvasText(context, closing, maxTextWidth)
-  context.font = `${Math.round(77 * scaleX)}px cursive`
-  const signatureLines = wrapCanvasText(context, signature, maxTextWidth)
+  context.font = `700 ${closingFontSize}px ${serifFont}`
+  const closingLines = closing.trim() ? wrapCanvasText(context, closing.trim(), maxTextWidth) : []
+  context.font = `700 ${signatureFontSize}px ${scriptFont}`
+  const signatureLines = signature.trim() ? wrapCanvasText(context, signature.trim(), maxTextWidth) : []
 
   let contentHeight = 0
   if (greetingLines.length) {
-    contentHeight += greetingLines.length * bodyLineHeight + afterGreetingGap
+    contentHeight += greetingLines.length * greetingLineHeight + afterGreetingGap
   }
   paragraphLineGroups.forEach((lines, index) => {
     contentHeight += lines.length * bodyLineHeight
@@ -1106,42 +1138,101 @@ const createInsideImageUrl = ({
       contentHeight += afterParagraphGap
     }
   })
-  contentHeight += beforeClosingGap + closingLines.length * closingLineHeight
-  contentHeight += beforeSignatureGap + signatureLines.length * signatureLineHeight
+  if (closingLines.length) {
+    contentHeight += beforeClosingGap + closingLines.length * closingLineHeight
+  }
+  if (signatureLines.length) {
+    contentHeight += beforeSignatureGap + signatureLines.length * signatureLineHeight
+  }
 
-  const topBound = 160 * scaleY
-  const bottomBound = canvas.height - 160 * scaleY
-  const available = Math.max(0, bottomBound - topBound)
-  let y = topBound + Math.max(0, (available - contentHeight) / 2)
+  const contentTop = padY
+  const contentBottom = canvas.height - padY
+  const available = Math.max(0, contentBottom - contentTop)
+  let y = contentTop + Math.max(0, (available - contentHeight) / 2)
+  const centerX = canvas.width / 2
 
   if (greetingLines.length) {
     context.fillStyle = '#2d6762'
-    context.font = `${Math.round(48 * scaleX)}px Georgia, serif`
-    drawCenteredLines(context, greetingLines, canvas.width / 2, y, bodyLineHeight)
-    y += greetingLines.length * bodyLineHeight + afterGreetingGap
+    context.font = `700 ${greetingFontSize}px ${serifFont}`
+    drawCenteredLines(context, greetingLines, centerX, y, greetingLineHeight)
+    y += greetingLines.length * greetingLineHeight + afterGreetingGap
   }
 
   context.fillStyle = '#2d6762'
-  context.font = `${Math.round(46 * scaleX)}px Georgia, serif`
+  context.font = `700 ${bodyFontSize}px ${serifFont}`
   paragraphLineGroups.forEach((lines, index) => {
-    drawCenteredLines(context, lines, canvas.width / 2, y, bodyLineHeight)
+    drawCenteredLines(context, lines, centerX, y, bodyLineHeight)
     y += lines.length * bodyLineHeight
     if (index < paragraphLineGroups.length - 1) {
       y += afterParagraphGap
     }
   })
 
-  y += beforeClosingGap
-  context.fillStyle = '#2d6762'
-  context.font = `${Math.round(44 * scaleX)}px Georgia, serif`
-  drawCenteredLines(context, closingLines, canvas.width / 2, y, closingLineHeight)
-  y += closingLines.length * closingLineHeight + beforeSignatureGap
+  if (closingLines.length) {
+    y += beforeClosingGap
+    context.fillStyle = '#2d6762'
+    context.font = `700 ${closingFontSize}px ${serifFont}`
+    drawCenteredLines(context, closingLines, centerX, y, closingLineHeight)
+    y += closingLines.length * closingLineHeight
+  }
 
-  context.fillStyle = '#d88a31'
-  context.font = `${Math.round(77 * scaleX)}px cursive`
-  drawCenteredLines(context, signatureLines, canvas.width / 2, y, signatureLineHeight)
+  if (signatureLines.length) {
+    y += beforeSignatureGap
+    context.save()
+    context.fillStyle = '#d88a31'
+    context.font = `700 ${signatureFontSize}px ${scriptFont}`
+    context.translate(centerX, y + (signatureLines.length * signatureLineHeight) / 2)
+    context.rotate((-2 * Math.PI) / 180)
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    signatureLines.forEach((line, index) => {
+      const lineY = (index - (signatureLines.length - 1) / 2) * signatureLineHeight
+      context.fillText(line, 0, lineY)
+    })
+    context.restore()
+  }
 
   return canvas.toDataURL('image/png')
+}
+
+const buildPrintInsideImageUrl = async ({
+  greeting,
+  paragraphs,
+  closing,
+  signature,
+  density,
+}: {
+  greeting: string
+  paragraphs: string[]
+  closing: string
+  signature: string
+  density: InsideMessageDensity
+}) => {
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try {
+      await document.fonts.ready
+    } catch {
+      // Continue with fallback fonts if loading stalls.
+    }
+  }
+
+  const baseUrl = createInsideImageUrl({
+    greeting,
+    paragraphs,
+    closing,
+    signature,
+    width: CARD_COVER_WIDTH,
+    height: CARD_COVER_HEIGHT,
+    showFrame: false,
+    density,
+    printSafe: true,
+  })
+  if (!baseUrl) {
+    return ''
+  }
+
+  const image = await loadImageElement(baseUrl)
+  return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
 }
 
 function App() {
@@ -1389,9 +1480,10 @@ function App() {
             paragraphs: messageParagraphs,
             closing: cardClosing,
             signature: cardSignatureLabel,
+            density: messageDensity,
           })
         : '',
-    [card, cardSignatureLabel, cardClosing, insideGreeting, isRecipientView, messageParagraphs],
+    [card, cardSignatureLabel, cardClosing, insideGreeting, isRecipientView, messageDensity, messageParagraphs],
   )
   const generationLines = useMemo(
     () => [
@@ -2818,14 +2910,12 @@ function App() {
         throw new Error('Unable to prepare the print cover file.')
       }
 
-      const insideUrl = createInsideImageUrl({
+      const insideUrl = await buildPrintInsideImageUrl({
         greeting: insideGreeting,
         paragraphs: messageParagraphs,
         closing: cardClosing,
         signature: cardSignatureLabel,
-        width: PRINT_CARD_WIDTH,
-        height: PRINT_CARD_HEIGHT,
-        showFrame: false,
+        density: messageDensity,
       })
       if (!insideUrl) {
         throw new Error('Unable to prepare the print inside file.')
@@ -2929,29 +3019,37 @@ function App() {
       throw new Error('Unable to prepare the print cover file.')
     }
 
-    const insideUrl = createInsideImageUrl({
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      try {
+        await document.fonts.ready
+      } catch {
+        // Continue with fallback fonts if loading stalls.
+      }
+    }
+
+    const insideBaseUrl = createInsideImageUrl({
       greeting: insideGreeting,
       paragraphs: messageParagraphs,
       closing: cardClosing,
       signature: cardSignatureLabel,
-      width: PRINT_CARD_WIDTH,
-      height: PRINT_CARD_HEIGHT,
+      width: CARD_COVER_WIDTH,
+      height: CARD_COVER_HEIGHT,
       showFrame: false,
+      density: messageDensity,
+      printSafe: true,
     })
+    if (!insideBaseUrl) {
+      throw new Error('Unable to prepare the print inside file.')
+    }
+
+    const insideImage = await loadImageElement(insideBaseUrl)
+    const insideUrl = upscaleImageToDataUrl(insideImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
     if (!insideUrl) {
       throw new Error('Unable to prepare the print inside file.')
     }
 
     const coverThumbUrl = await createCoverThumbDataUrl(card.imageUrl)
-    const insideThumbUrl = createInsideImageUrl({
-      greeting: insideGreeting,
-      paragraphs: messageParagraphs,
-      closing: cardClosing,
-      signature: cardSignatureLabel,
-      width: 280,
-      height: 390,
-      showFrame: false,
-    })
+    const insideThumbUrl = upscaleImageToDataUrl(insideImage, 280, 390)
 
     return { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl }
   }
