@@ -1707,18 +1707,6 @@ textarea:focus {
   text-align: center;
 }
 
-@media (max-width: 720px) {
-  .open-card-message {
-    padding-left: 12.3cqi;
-    padding-right: 12.3cqi;
-  }
-
-  .editor-inside-preview .open-card-message {
-    padding-left: 12.3cqi;
-    padding-right: 12.3cqi;
-  }
-}
-
 .open-card-message span {
   color: var(--gcu-ink);
   font-family: "Playfair Display", Georgia, serif;
@@ -3298,7 +3286,7 @@ textarea:focus {
 }
 
 .editor-inside-preview .open-card-message {
-  padding: 10.7cqi 10.7cqi 9.3cqi;
+  padding: 12cqi 16cqi;
 }
 
 .refinement-panel {
@@ -4197,10 +4185,6 @@ textarea:focus {
   .card-open-scene.is-static-inside {
     min-height: auto;
     padding: 32px 14px 20px;
-  }
-
-  .open-card-message {
-    padding: 10cqi 8.5cqi 8.5cqi;
   }
 
   .proof-actions .secondary-button {
