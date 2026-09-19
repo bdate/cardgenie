@@ -3194,10 +3194,6 @@ const handleDeliverCard = async (request, env) => {
 }
 
 const handleOrderPrintCard = async (request, env) => {
-  if (!(await isAdminRequest(request, env))) {
-    return jsonResponse(request, env, { error: 'Not found.' }, 404)
-  }
-
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
     return jsonResponse(

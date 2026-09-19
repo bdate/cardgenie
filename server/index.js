@@ -360,8 +360,8 @@ app.post('/api/order-print-card', async (req, res) => {
 
     const token = readBearerToken(req)
     const session = token ? localAccountSessions.get(token) : null
-    if (!session || !localAdminPhones.has(session.phoneE164)) {
-      return res.status(404).json({ error: 'Not found.' })
+    if (!session) {
+      return res.status(401).json({ error: 'Confirm your mobile number before ordering a printed card.' })
     }
 
     const {

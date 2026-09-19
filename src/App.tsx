@@ -5822,7 +5822,7 @@ function App() {
                   </div>
                 )}
               </form>}
-              {showSendActions && !isRecipientView && !showEditor && isAdmin && (
+              {showSendActions && !isRecipientView && !showEditor && (
                 <section className="print-order-panel" aria-label="Mail a printed card">
                   {printOrderStep === 'closed' ? (
                     <div className="print-order-intro">
