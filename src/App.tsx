@@ -119,6 +119,15 @@ const defaultPrintMailFrom = {
   zip: '94526',
   country: 'US' as const,
 }
+const samplePrintShipTo = {
+  name: 'Alex Rivera',
+  line1: '482 Maple Street',
+  line2: 'Apt 3B',
+  city: 'Oakland',
+  state: 'CA',
+  zip: '94610',
+  country: 'US' as const,
+}
 type MailingAddress = {
   name: string
   line1: string
@@ -2865,6 +2874,16 @@ function App() {
     }, 60)
   }
 
+  const previewPrintEnvelope = () => {
+    setPrintShipTo({ ...samplePrintShipTo })
+    setPrintMailFrom({ ...defaultPrintMailFrom })
+    setPrintOrderStep('review')
+    setPrintOrderNotice('Preview only — sample addresses. You can still place a real order from here.')
+    window.setTimeout(() => {
+      document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }
+
   const submitPrintShipTo = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const validated = validateMailingAddress(printShipTo, 'recipient')
@@ -5454,6 +5473,10 @@ function App() {
                       {isPreparingAdminPrintFiles
                         ? 'Preparing print files…'
                         : 'Create print test files (1504×2096)'}
+                    </button>
+                    <span aria-hidden="true"> · </span>
+                    <button className="text-action-link" type="button" onClick={previewPrintEnvelope}>
+                      Preview envelope
                     </button>
                     {adminPrintFiles && (
                       <div className="admin-print-links" aria-label="Save print test files">
