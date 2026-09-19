@@ -2186,6 +2186,11 @@ textarea:focus {
   line-height: 1.45;
 }
 
+.print-order-message-note {
+  margin-top: 8px !important;
+  color: var(--gcu-ink) !important;
+}
+
 .print-order-form,
 .print-order-review {
   display: grid;

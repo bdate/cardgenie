@@ -1459,6 +1459,10 @@ function App() {
   const cardClosing = card?.closing ?? 'With love,'
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
   const messageDensity = cardMessage.length > 620 ? 'is-long' : cardMessage.length > 420 ? 'is-medium' : 'is-short'
+  const selectedMessageLengthId = (card?.selectedLength || 'medium') as MessageLengthId
+  const selectedMessageLengthLabel =
+    messageLengthChoices.find((choice) => choice.id === selectedMessageLengthId)?.label || 'Medium'
+  const isPrintOrderOpen = printOrderStep !== 'closed'
   const fileNameBase = useMemo(
     () => sanitizeFilePart(`${recipientLabel}-${details.occasion || 'card'}`),
     [details.occasion, recipientLabel],
@@ -5205,7 +5209,7 @@ function App() {
                       {messageLengthChoices.map((choice) => (
                         <button
                           key={choice.id}
-                          className={(card.selectedLength || 'medium') === choice.id ? 'is-selected' : ''}
+                          className={selectedMessageLengthId === choice.id ? 'is-selected' : ''}
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
@@ -5216,7 +5220,11 @@ function App() {
                         </button>
                       ))}
                     </div>
-                    <p className="message-length-hint">Message Length — pick the one you like.</p>
+                    <p className="message-length-hint">
+                      {isPrintOrderOpen
+                        ? `Printing uses the ${selectedMessageLengthLabel.toLowerCase()} message shown above.`
+                        : 'Message Length — pick the one you like.'}
+                    </p>
                   </div>
                 )}
               {showCoverWatermark &&
@@ -5715,6 +5723,10 @@ function App() {
                       <div>
                         <span className="delivery-kicker">Mail a printed card</span>
                         <p>Where should we ship this card? United States only.</p>
+                        <p className="print-order-message-note">
+                          Printing the <strong>{selectedMessageLengthLabel.toLowerCase()}</strong> inside message
+                          shown above. Switch Short / Medium / Long anytime before you place the order.
+                        </p>
                       </div>
                       {renderMailingAddressFields('ship-to', printShipTo, 'Recipient name')}
                       <div className="print-order-actions">
@@ -5766,6 +5778,9 @@ function App() {
                       <div>
                         <span className="delivery-kicker">Review envelope</span>
                         <p>Confirm the addresses, then place the print order.</p>
+                        <p className="print-order-message-note">
+                          Inside message for print: <strong>{selectedMessageLengthLabel}</strong>
+                        </p>
                       </div>
                       <div className="proof-stage envelope-scene print-order-envelope-scene">
                         <div className="envelope print-order-envelope">
