@@ -1735,7 +1735,7 @@ function App() {
       `Crafting a ${details.occasion || 'card'} cover for ${envelopeLabel}.`,
       `Writing a ${details.tone.toLowerCase()} note that sounds personal, not canned.`,
       `Blending the ${details.imageStyle.toLowerCase()} look with the story you shared.`,
-      'Sealing it into an envelope.',
+      'Sealing it into a digital envelope.',
     ],
     [details.imageStyle, details.occasion, details.tone, envelopeLabel],
   )
