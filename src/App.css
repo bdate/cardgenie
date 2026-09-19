@@ -2334,9 +2334,9 @@ textarea:focus {
   }
 
   .print-order-envelope .envelope-front-face > .print-order-to {
-    left: 46%;
+    left: 36%;
     top: 50%;
-    max-width: 48%;
+    max-width: 52%;
     font-size: 0.72rem;
   }
 
