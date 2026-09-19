@@ -904,19 +904,241 @@ const downloadImageFallback = (imageUrl: string, fileName: string) => {
   link.remove()
 }
 
-const loadImageElement = (imageUrl: string) =>
+const loadImageFromSrc = (imageUrl: string, useCors: boolean) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
-    if (!imageUrl.startsWith('data:')) {
+    if (useCors && !imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:')) {
       image.crossOrigin = 'anonymous'
     }
-    image.onload = () => resolve(image)
+    image.onload = () => {
+      if (image.naturalWidth < 1 || image.naturalHeight < 1) {
+        reject(new Error('Unable to load the cover image for print export.'))
+        return
+      }
+      resolve(image)
+    }
     image.onerror = () => reject(new Error('Unable to load the cover image for print export.'))
     image.src = imageUrl
   })
 
+type PrintImageSource = {
+  source: CanvasImageSource
+  width: number
+  height: number
+  dispose?: () => void
+}
+
+const canExportImageSource = (source: CanvasImageSource) => {
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = 8
+    canvas.height = 8
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return false
+    }
+    context.drawImage(source, 0, 0, 8, 8)
+    context.getImageData(0, 0, 1, 1)
+    return Boolean(canvas.toDataURL('image/jpeg', 0.5))
+  } catch {
+    return false
+  }
+}
+
+const getShareCoverImageUrl = (cardId: string) => apiUrl(`/c/${encodeURIComponent(cardId)}/cover`)
+
+const findDisplayedCoverImage = (imageUrl?: string): HTMLImageElement | null => {
+  const selectors = [
+    '.card-cover-frame img',
+    '.envelope-card-rise img',
+    '.card-opening-cover img',
+    '.editor-cover-frame img',
+    '.editor-cover-thumb img',
+    'img[alt*="Front of card"]',
+    'img[alt*="Cover preview"]',
+  ]
+
+  for (const selector of selectors) {
+    const image = document.querySelector<HTMLImageElement>(selector)
+    if (image?.complete && image.naturalWidth > 1 && canExportImageSource(image)) {
+      return image
+    }
+  }
+
+  if (!imageUrl) {
+    return null
+  }
+
+  const matches = Array.from(document.querySelectorAll<HTMLImageElement>('img')).filter(
+    (image) =>
+      image.complete &&
+      image.naturalWidth > 1 &&
+      (image.currentSrc === imageUrl || image.src === imageUrl),
+  )
+
+  return matches.find((image) => canExportImageSource(image)) || null
+}
+
+const loadImageViaBlobFetch = async (imageUrl: string): Promise<PrintImageSource> => {
+  const response = await fetch(imageUrl, {
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'force-cache',
+  })
+  if (!response.ok) {
+    throw new Error(`Unable to fetch cover image (${response.status}).`)
+  }
+
+  const blob = await response.blob()
+  if (!blob || blob.size < 32) {
+    throw new Error('Cover image response was empty.')
+  }
+
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(blob)
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        dispose: () => bitmap.close(),
+      }
+    } catch {
+      // Fall through to object-URL Image decode.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const image = await loadImageFromSrc(objectUrl, false)
+    return {
+      source: image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      dispose: () => URL.revokeObjectURL(objectUrl),
+    }
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl)
+    throw error
+  }
+}
+
+const loadImageElement = async (imageUrl: string) => {
+  if (!imageUrl) {
+    throw new Error('Unable to load the cover image for print export.')
+  }
+
+  // Prefer fetch→blob→object URL. Safari is much more reliable with this than huge data: URLs.
+  try {
+    const response = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'force-cache',
+    })
+    if (!response.ok) {
+      throw new Error(`Unable to fetch image (${response.status}).`)
+    }
+    const blob = await response.blob()
+    if (!blob || blob.size < 32) {
+      throw new Error('Image response was empty.')
+    }
+    const objectUrl = URL.createObjectURL(blob)
+    try {
+      const image = await loadImageFromSrc(objectUrl, false)
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
+      return image
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl)
+      throw error
+    }
+  } catch {
+    // Fall through to direct Image decode.
+  }
+
+  try {
+    return await loadImageFromSrc(imageUrl, true)
+  } catch {
+    return loadImageFromSrc(imageUrl, false)
+  }
+}
+
+const loadCoverImageForPrint = async ({
+  imageUrl,
+  cardId,
+}: {
+  imageUrl?: string
+  cardId?: string
+}): Promise<PrintImageSource> => {
+  const candidates = [
+    cardId ? getShareCoverImageUrl(cardId) : '',
+    imageUrl || '',
+  ].filter(Boolean)
+
+  const tryCandidates = async () => {
+    const displayed = findDisplayedCoverImage(imageUrl)
+    if (displayed) {
+      return {
+        source: displayed,
+        width: displayed.naturalWidth,
+        height: displayed.naturalHeight,
+      }
+    }
+
+    for (const candidate of candidates) {
+      try {
+        return await loadImageViaBlobFetch(candidate)
+      } catch {
+        // Try the next strategy.
+      }
+
+      for (const useCors of [true, false]) {
+        try {
+          const image = await loadImageFromSrc(candidate, useCors)
+          if (!canExportImageSource(image)) {
+            throw new Error('Cover image is not exportable (canvas security).')
+          }
+          return {
+            source: image,
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+          }
+        } catch {
+          // Try the next strategy.
+        }
+      }
+    }
+
+    const anyDisplayed = findDisplayedCoverImage()
+    if (anyDisplayed) {
+      return {
+        source: anyDisplayed,
+        width: anyDisplayed.naturalWidth,
+        height: anyDisplayed.naturalHeight,
+      }
+    }
+
+    throw new Error(
+      'Unable to prepare the cover for printing. Please keep this page open and try again.',
+    )
+  }
+
+  try {
+    return await tryCandidates()
+  } catch (firstError) {
+    // Brief pause then retry — helps right after save when the cover URL becomes available.
+    await new Promise((resolve) => window.setTimeout(resolve, 450))
+    try {
+      return await tryCandidates()
+    } catch {
+      throw firstError instanceof Error
+        ? firstError
+        : new Error('Unable to prepare the cover for printing. Please keep this page open and try again.')
+    }
+  }
+}
+
 const upscaleImageToDataUrl = (
-  image: HTMLImageElement,
+  image: CanvasImageSource,
   width: number,
   height: number,
   mimeType: 'image/png' | 'image/jpeg' = 'image/png',
@@ -932,29 +1154,26 @@ const upscaleImageToDataUrl = (
 
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
-  context.drawImage(image, 0, 0, width, height)
-  return mimeType === 'image/jpeg' ? canvas.toDataURL('image/jpeg', quality) : canvas.toDataURL('image/png')
+  try {
+    context.drawImage(image, 0, 0, width, height)
+    return mimeType === 'image/jpeg' ? canvas.toDataURL('image/jpeg', quality) : canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
 }
 
 const COVER_THUMB_MAX_EDGE = 320
 
-const createCoverThumbDataUrl = async (imageUrl: string) => {
-  const image = await loadImageElement(imageUrl)
-  const scale = Math.min(1, COVER_THUMB_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight))
-  const width = Math.max(1, Math.round(image.naturalWidth * scale))
-  const height = Math.max(1, Math.round(image.naturalHeight * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext('2d')
-  if (!context) {
-    return ''
+const createCoverThumbDataUrl = async (imageUrl: string, cardId?: string) => {
+  const loaded = await loadCoverImageForPrint({ imageUrl, cardId })
+  try {
+    const scale = Math.min(1, COVER_THUMB_MAX_EDGE / Math.max(loaded.width, loaded.height))
+    const width = Math.max(1, Math.round(loaded.width * scale))
+    const height = Math.max(1, Math.round(loaded.height * scale))
+    return upscaleImageToDataUrl(loaded.source, width, height, 'image/jpeg', 0.72)
+  } finally {
+    loaded.dispose?.()
   }
-
-  context.imageSmoothingEnabled = true
-  context.imageSmoothingQuality = 'high'
-  context.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL('image/jpeg', 0.72)
 }
 
 const isMobileDevice = () =>
@@ -3277,8 +3496,16 @@ function App() {
     setAdminPrintFiles(null)
 
     try {
-      const coverImage = await loadImageElement(card.imageUrl)
-      const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+      const loaded = await loadCoverImageForPrint({
+        imageUrl: card.imageUrl,
+        cardId: sharedCard?.id,
+      })
+      let coverUrl = ''
+      try {
+        coverUrl = upscaleImageToDataUrl(loaded.source, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+      } finally {
+        loaded.dispose?.()
+      }
       if (!coverUrl) {
         throw new Error('Unable to prepare the print cover file.')
       }
@@ -3381,15 +3608,33 @@ function App() {
     setPrintOrderNotice('')
   }
 
-  const preparePrintOrderImages = async () => {
+  const preparePrintOrderImages = async (cardId?: string) => {
     if (!card) {
       throw new Error('Create a card before ordering a print.')
     }
 
-    const coverImage = await loadImageElement(card.imageUrl)
-    const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT, 'image/jpeg', 0.92)
+    const loaded = await loadCoverImageForPrint({
+      imageUrl: card.imageUrl,
+      cardId: cardId || sharedCard?.id,
+    })
+    let coverUrl = ''
+    let coverThumbUrl = ''
+    try {
+      coverUrl = upscaleImageToDataUrl(loaded.source, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT, 'image/jpeg', 0.92)
+      if (!coverUrl) {
+        coverUrl = upscaleImageToDataUrl(loaded.source, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT, 'image/jpeg', 0.82)
+      }
+      const thumbScale = Math.min(1, 320 / Math.max(loaded.width, loaded.height))
+      const thumbWidth = Math.max(1, Math.round(loaded.width * thumbScale))
+      const thumbHeight = Math.max(1, Math.round(loaded.height * thumbScale))
+      coverThumbUrl = upscaleImageToDataUrl(loaded.source, thumbWidth, thumbHeight, 'image/jpeg', 0.72)
+    } finally {
+      loaded.dispose?.()
+    }
     if (!coverUrl) {
-      throw new Error('Unable to prepare the print cover file.')
+      throw new Error(
+        'Unable to prepare the print cover file. Please keep this page open and try Mail printed card again.',
+      )
     }
 
     const insideUrl = await buildPrintInsideImageUrl({
@@ -3400,12 +3645,26 @@ function App() {
       density: messageDensity,
     })
     if (!insideUrl) {
-      throw new Error('Unable to prepare the print inside file.')
+      throw new Error(
+        'Unable to prepare the print inside file. Please keep this page open and try Mail printed card again.',
+      )
     }
 
-    const insideImage = await loadImageElement(insideUrl)
-    const coverThumbUrl = await createCoverThumbDataUrl(card.imageUrl)
-    const insideThumbUrl = upscaleImageToDataUrl(insideImage, 280, 390)
+    if (!coverThumbUrl) {
+      try {
+        coverThumbUrl = await createCoverThumbDataUrl(coverUrl, cardId || sharedCard?.id)
+      } catch {
+        coverThumbUrl = ''
+      }
+    }
+
+    let insideThumbUrl = ''
+    try {
+      const insideImage = await loadImageElement(insideUrl)
+      insideThumbUrl = upscaleImageToDataUrl(insideImage, 280, 390)
+    } catch {
+      insideThumbUrl = ''
+    }
 
     return { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl }
   }
@@ -3457,7 +3716,7 @@ function App() {
 
     try {
       const shared = await saveCurrentCard()
-      const { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl } = await preparePrintOrderImages()
+      const { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl } = await preparePrintOrderImages(shared.id)
       const response = await fetch(apiUrl('/api/order-print-card'), {
         method: 'POST',
         headers: {
@@ -3986,7 +4245,7 @@ function App() {
   const saveCurrentCard = async () => {
     let coverThumb = ''
     try {
-      coverThumb = await createCoverThumbDataUrl(card!.imageUrl)
+      coverThumb = await createCoverThumbDataUrl(card!.imageUrl, sharedCard?.id)
     } catch {
       coverThumb = ''
     }
