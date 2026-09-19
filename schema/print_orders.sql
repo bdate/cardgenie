@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS print_orders (
   ship_to_name TEXT,
   ship_to_json TEXT NOT NULL,
   mail_from_json TEXT NOT NULL,
+  shopper_email TEXT,
   status TEXT NOT NULL DEFAULT 'submitted',
   credit_cost INTEGER NOT NULL DEFAULT 10
 );

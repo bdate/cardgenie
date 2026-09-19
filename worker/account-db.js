@@ -1069,6 +1069,7 @@ const ensurePrintOrderTables = async (db) => {
         ship_to_name TEXT,
         ship_to_json TEXT NOT NULL,
         mail_from_json TEXT NOT NULL,
+        shopper_email TEXT,
         status TEXT NOT NULL DEFAULT 'submitted',
         credit_cost INTEGER NOT NULL DEFAULT 10
       )
@@ -1076,12 +1077,42 @@ const ensurePrintOrderTables = async (db) => {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_user_id ON print_orders (user_id, created_at)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_card_id ON print_orders (card_id)`),
   ])
+
+  try {
+    await db.prepare(`ALTER TABLE print_orders ADD COLUMN shopper_email TEXT`).run()
+  } catch {
+    // Column already exists.
+  }
+}
+
+export const saveAccountEmail = async (env, { userId, email }) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  const normalized = String(email || '').trim().toLowerCase()
+  if (!normalized || !normalized.includes('@')) {
+    return null
+  }
+
+  const now = isoNow()
+  await env.ACCOUNT_DB.prepare(
+    `UPDATE users
+     SET email = ?,
+         email_updated_at = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(normalized, now, now, userId)
+    .run()
+
+  return normalized
 }
 
 /** Allocate the next sequential print order number (1001+) and store the order. */
 export const createPrintOrder = async (
   env,
-  { userId, cardId, mailFrom, shipTo, creditCost = 10, status = 'submitted' },
+  { userId, cardId, mailFrom, shipTo, shopperEmail = '', creditCost = 10, status = 'submitted' },
 ) => {
   if (!env.ACCOUNT_DB || !cardId) {
     return null
@@ -1102,10 +1133,11 @@ export const createPrintOrder = async (
   }
 
   const now = isoNow()
+  const email = String(shopperEmail || '').trim().toLowerCase()
   await env.ACCOUNT_DB.prepare(
     `INSERT INTO print_orders (
-      order_number, user_id, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, status, credit_cost
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      order_number, user_id, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, shopper_email, status, credit_cost
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       orderNumber,
@@ -1115,6 +1147,7 @@ export const createPrintOrder = async (
       shipTo?.name || null,
       JSON.stringify(shipTo || {}),
       JSON.stringify(mailFrom || {}),
+      email || null,
       status,
       Math.max(0, Math.floor(Number(creditCost) || 0)),
     )
@@ -1124,5 +1157,6 @@ export const createPrintOrder = async (
     orderNumber,
     orderCode: String(orderNumber),
     createdAt: now,
+    shopperEmail: email || '',
   }
 }

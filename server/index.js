@@ -364,7 +364,16 @@ app.post('/api/order-print-card', async (req, res) => {
       return res.status(404).json({ error: 'Not found.' })
     }
 
-    const { cardId, mailFrom: rawMailFrom, shipTo: rawShipTo, coverImage, insideImage } = req.body || {}
+    const {
+      cardId,
+      mailFrom: rawMailFrom,
+      shipTo: rawShipTo,
+      shopperEmail: rawShopperEmail,
+      coverImage,
+      insideImage,
+      coverThumbImage,
+      insideThumbImage,
+    } = req.body || {}
     const record = cardStore.get(cardId)
 
     if (!record) {
@@ -373,11 +382,23 @@ app.post('/api/order-print-card', async (req, res) => {
 
     const mailFrom = normalizeMailingAddress(rawMailFrom, 'mail-from')
     const shipTo = normalizeMailingAddress(rawShipTo, 'ship-to')
+    const shopperEmail = normalizeEmailAddress(rawShopperEmail)
     const cover = parseDataUrlImage(coverImage, 'cover')
     const inside = parseDataUrlImage(insideImage, 'inside')
+    const coverThumb = coverThumbImage
+      ? parseDataUrlImage(coverThumbImage, 'cover thumbnail')
+      : { type: cover.type || 'image/png', content: cover.content }
+    const insideThumb = insideThumbImage
+      ? parseDataUrlImage(insideThumbImage, 'inside thumbnail')
+      : { type: inside.type || 'image/png', content: inside.content }
     const shareUrl = getShareUrl(req, record.id)
     const orderNumber = allocateLocalPrintOrderNumber()
     const orderCode = String(orderNumber)
+    session.email = shopperEmail
+    const localUser = localAccountUsers.get(session.phoneE164)
+    if (localUser) {
+      localUser.email = shopperEmail
+    }
     const copy = buildPrintOrderEmailCopy({
       cardId: record.id,
       orderCode,
@@ -385,6 +406,7 @@ app.post('/api/order-print-card', async (req, res) => {
       mailFrom,
       shipTo,
       details: record.details || {},
+      shopperEmail,
     })
 
     await sendEmailDelivery({
@@ -404,18 +426,49 @@ app.post('/api/order-print-card', async (req, res) => {
       ],
     })
 
+    try {
+      const confirmationCopy = buildPrintOrderConfirmationCopy({
+        orderCode,
+        shipTo,
+        details: record.details || {},
+      })
+      await sendEmailDelivery({
+        to: shopperEmail,
+        copy: confirmationCopy,
+        attachments: [
+          {
+            filename: 'print-cover-thumb.jpg',
+            type: coverThumb.type || 'image/jpeg',
+            content: coverThumb.content,
+            disposition: 'inline',
+            contentId: 'print-cover-thumb',
+          },
+          {
+            filename: 'print-inside-thumb.png',
+            type: insideThumb.type || 'image/png',
+            content: insideThumb.content,
+            disposition: 'inline',
+            contentId: 'print-inside-thumb',
+          },
+        ],
+      })
+    } catch (confirmationError) {
+      console.error('Unable to send print order confirmation email.', confirmationError)
+    }
+
     return res.json({
       ok: true,
       orderCode,
       orderNumber,
       creditCost: PRINT_CARD_CREDIT_COST,
+      shopperEmail,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
       message: `Print order ${orderCode} sent. We'll mail the card shortly.`,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to place the print order.'
     const isValidation =
-      /enter|choose|provide|valid|united states|zip|state|street|name|city|image/i.test(message) &&
+      /enter|choose|provide|valid|united states|zip|state|street|name|city|image|email|@/i.test(message) &&
       !/SendGrid|Postmark|configured/i.test(message)
 
     return res.status(isValidation ? 400 : 500).json({ error: message })
@@ -1642,7 +1695,8 @@ const sendSendGridEmailDelivery = async ({ to, copy, attachments = [] }) => {
       content: attachment.content,
       filename: attachment.filename,
       type: attachment.type || 'application/octet-stream',
-      disposition: 'attachment',
+      disposition: attachment.disposition === 'inline' ? 'inline' : 'attachment',
+      ...(attachment.contentId ? { content_id: attachment.contentId } : {}),
     }))
   }
 
@@ -1682,6 +1736,12 @@ const sendPostmarkEmailDelivery = async ({ to, copy, attachments = [] }) => {
       Name: attachment.filename,
       Content: attachment.content,
       ContentType: attachment.type || 'application/octet-stream',
+      ...(attachment.contentId
+        ? {
+            ContentID: attachment.contentId,
+            Disposition: 'inline',
+          }
+        : {}),
     }))
   }
 
@@ -1793,7 +1853,7 @@ const formatMailingAddressBlock = (address) =>
     .filter(Boolean)
     .join('\n')
 
-const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipTo, details }) => {
+const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipTo, details, shopperEmail }) => {
   const occasion = String(details?.occasion || '').trim() || 'greeting card'
   const recipient = String(details?.recipientName || shipTo.name || 'recipient').trim()
   const subject = `Print card order · ${orderCode} · ${shipTo.name}`
@@ -1802,6 +1862,7 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
     '',
     `Order number: ${orderCode}`,
     `Card ID: ${cardId}`,
+    shopperEmail ? `Shopper email: ${shopperEmail}` : null,
     '',
     'Mail from:',
     formatMailingAddressBlock(mailFrom),
@@ -1825,7 +1886,8 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
       <h2 style="margin: 0 0 12px;">New printed card order</h2>
       <p style="margin: 0 0 16px;">A shopper requested a physical greeting card mailing.</p>
       <p style="margin: 0 0 4px; font-size: 1.15rem;"><strong>Order number:</strong> ${orderCode}</p>
-      <p style="margin: 0 0 16px;"><strong>Card ID:</strong> ${cardId}</p>
+      <p style="margin: 0 0 4px;"><strong>Card ID:</strong> ${cardId}</p>
+      ${shopperEmail ? `<p style="margin: 0 0 16px;"><strong>Shopper email:</strong> ${shopperEmail}</p>` : '<p style="margin: 0 0 16px;"></p>'}
       <p style="margin: 0 0 6px;"><strong>Mail from</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(mailFrom)}</pre>
       <p style="margin: 0 0 6px;"><strong>Ship to</strong></p>
@@ -1834,6 +1896,54 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
       <p style="margin: 0 0 4px;"><strong>Card recipient name:</strong> ${recipient}</p>
       ${shareUrl ? `<p style="margin: 0 0 16px;"><strong>Share link:</strong> <a href="${shareUrl}">${shareUrl}</a></p>` : ''}
       <p style="margin: 0;">Print files are attached as <strong>print-cover.png</strong> and <strong>print-inside.png</strong>.</p>
+    </div>
+  `
+
+  return { subject, text, html }
+}
+
+const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, details }) => {
+  const occasion = String(details?.occasion || '').trim() || 'greeting card'
+  const shipToBlock = formatMailingAddressBlock(shipTo)
+  const subject = `Your Card Genie print order ${orderCode}`
+  const text = [
+    'Thanks for your Card Genie print order.',
+    '',
+    `Order number: ${orderCode}`,
+    `Occasion: ${occasion}`,
+    '',
+    'Shipping to:',
+    shipToBlock,
+    '',
+    "We'll print your card and send it out next business day via USPS.",
+    "Once mailed, it'll take 3 to 6 business days for delivery.",
+    '',
+    'Previews of your card cover and inside are included in this email.',
+  ].join('\n')
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
+      <h2 style="margin: 0 0 12px;">Thanks for your print order</h2>
+      <p style="margin: 0 0 12px;">We've received your Card Genie print order.</p>
+      <p style="margin: 0 0 4px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 16px;"><strong>Occasion:</strong> ${occasion}</p>
+      <p style="margin: 0 0 6px;"><strong>Shipping to</strong></p>
+      <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${shipToBlock}</pre>
+      <p style="margin: 0 0 16px;">We'll print your card and send it out next business day via USPS. Once mailed, it'll take 3 to 6 business days for delivery.</p>
+      <p style="margin: 0 0 8px;"><strong>Your card preview</strong></p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="padding: 0 12px 0 0; vertical-align: top;">
+            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Cover</p>
+            <img src="cid:print-cover-thumb" alt="Card cover" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;border-radius:8px;" />
+          </td>
+          <td style="padding: 0; vertical-align: top;">
+            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Inside</p>
+            <img src="cid:print-inside-thumb" alt="Card inside" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;border-radius:8px;" />
+          </td>
+        </tr>
+      </table>
+      <p style="margin: 18px 0 0; color: #666; font-size: 0.9rem;">Questions? Email support@card-genie.com and include your order number.</p>
     </div>
   `
 

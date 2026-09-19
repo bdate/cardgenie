@@ -2228,6 +2228,19 @@ textarea:focus {
   gap: 14px;
 }
 
+.print-shopper-email {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 2px;
+  font-size: 0.92rem;
+  color: var(--ink, #16272b);
+}
+
+.print-shopper-email input {
+  width: 100%;
+  max-width: 28rem;
+}
+
 .print-order-actions .primary-button {
   width: min(320px, 100%);
 }

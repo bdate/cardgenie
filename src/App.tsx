@@ -1250,6 +1250,7 @@ function App() {
   const [printOrderStep, setPrintOrderStep] = useState<PrintOrderStep>('closed')
   const [printShipTo, setPrintShipTo] = useState<MailingAddress>(emptyMailingAddress)
   const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>({ ...defaultPrintMailFrom })
+  const [printShopperEmail, setPrintShopperEmail] = useState('')
   const [printOrderNotice, setPrintOrderNotice] = useState('')
   const [isOrderingPrint, setIsOrderingPrint] = useState(false)
   const [showSenderCopyField, setShowSenderCopyField] = useState(false)
@@ -1449,6 +1450,7 @@ function App() {
         setAccountPhone(formatPhoneNumberDisplay(parsed.phoneE164))
         if (parsed.copyEmail) {
           setSenderCopyEmail(parsed.copyEmail)
+          setPrintShopperEmail(parsed.copyEmail)
         }
 
         const response = await fetch(apiUrl('/api/account'), {
@@ -1471,6 +1473,10 @@ function App() {
         }
         setAccountSession(session)
         window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+        if (copyEmail) {
+          setSenderCopyEmail(copyEmail)
+          setPrintShopperEmail(copyEmail)
+        }
         if (parseCreditBalance(data.creditBalance) !== null) {
           const accountCredits = parseCreditBalance(data.creditBalance) as number
           setCredits(accountCredits)
@@ -2849,7 +2855,14 @@ function App() {
     setPrintOrderNotice('')
   }
 
+  const resolveKnownShopperEmail = () =>
+    formatEmailAddress(accountSession?.copyEmail || senderCopyEmail || printShopperEmail || '')
+
   const openPrintOrder = () => {
+    const knownEmail = resolveKnownShopperEmail()
+    if (knownEmail) {
+      setPrintShopperEmail(knownEmail)
+    }
     setPrintOrderStep('ship-to')
     setPrintOrderNotice('')
     window.setTimeout(() => {
@@ -2866,6 +2879,10 @@ function App() {
 
     setPrintShipTo({ ...samplePrintShipTo })
     setPrintMailFrom({ ...defaultPrintMailFrom })
+    const knownEmail = resolveKnownShopperEmail()
+    if (knownEmail) {
+      setPrintShopperEmail(knownEmail)
+    }
     setPrintOrderStep('review')
     setPrintOrderNotice('Preview only — sample addresses. You can still place a real order from here.')
     window.setTimeout(() => {
@@ -2881,6 +2898,10 @@ function App() {
       return
     }
     setPrintShipTo(validated.value)
+    const knownEmail = resolveKnownShopperEmail()
+    if (knownEmail && !printShopperEmail.trim()) {
+      setPrintShopperEmail(knownEmail)
+    }
     setPrintOrderStep('review')
     setPrintOrderNotice('')
   }
@@ -2921,7 +2942,18 @@ function App() {
       throw new Error('Unable to prepare the print inside file.')
     }
 
-    return { coverUrl, insideUrl }
+    const coverThumbUrl = await createCoverThumbDataUrl(card.imageUrl)
+    const insideThumbUrl = createInsideImageUrl({
+      greeting: insideGreeting,
+      paragraphs: messageParagraphs,
+      closing: cardClosing,
+      signature: cardSignatureLabel,
+      width: 280,
+      height: 390,
+      showFrame: false,
+    })
+
+    return { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl }
   }
 
   const confirmPrintOrder = async () => {
@@ -2938,6 +2970,16 @@ function App() {
     if (!mailFrom.ok) {
       setPrintOrderNotice(mailFrom.message)
       setPrintOrderStep('mail-from')
+      return
+    }
+
+    const shopperEmail = validateEmailAddress(printShopperEmail)
+    if (!shopperEmail.ok) {
+      setPrintOrderNotice(
+        shopperEmail.message
+          .replace(/the recipient email address/i, 'your email address')
+          .replace(/Recipient email/i, 'Your email'),
+      )
       return
     }
 
@@ -2961,7 +3003,7 @@ function App() {
 
     try {
       const shared = await saveCurrentCard()
-      const { coverUrl, insideUrl } = await preparePrintOrderImages()
+      const { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl } = await preparePrintOrderImages()
       const response = await fetch(apiUrl('/api/order-print-card'), {
         method: 'POST',
         headers: {
@@ -2972,8 +3014,11 @@ function App() {
           cardId: shared.id,
           mailFrom: mailFrom.value,
           shipTo: shipTo.value,
+          shopperEmail: shopperEmail.value,
           coverImage: coverUrl,
           insideImage: insideUrl,
+          coverThumbImage: coverThumbUrl || undefined,
+          insideThumbImage: insideThumbUrl || undefined,
         }),
       })
       const data = await getApiJson(response, 'Unable to place the print order.')
@@ -2990,10 +3035,17 @@ function App() {
       void syncAccountCredits({ balance: nextCredits, reason: 'print_card_order' })
       const orderCode =
         typeof data.orderCode === 'string' && data.orderCode.trim() ? data.orderCode.trim() : ''
+      saveAccountSession({
+        token: accountSession.token,
+        phoneE164: accountSession.phoneE164,
+        copyEmail: shopperEmail.value,
+      })
+      setPrintShopperEmail(shopperEmail.value)
       setPrintOrderNotice(
         [
           `Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`,
           orderCode ? `Order number: ${orderCode}` : null,
+          `A confirmation was emailed to ${shopperEmail.value}.`,
         ]
           .filter(Boolean)
           .join('\n\n'),
@@ -5654,6 +5706,33 @@ function App() {
                           </div>
                         </div>
                       </div>
+                      <label className="print-shopper-email">
+                        Your email for order confirmation
+                        <input
+                          type="email"
+                          inputMode="email"
+                          autoComplete="email"
+                          value={printShopperEmail}
+                          onChange={(event) => {
+                            setPrintShopperEmail(event.target.value)
+                            if (printOrderNotice) {
+                              setPrintOrderNotice('')
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = printShopperEmail.trim()
+                            if (!trimmed) {
+                              return
+                            }
+                            const validated = validateEmailAddress(printShopperEmail)
+                            if (validated.ok) {
+                              setPrintShopperEmail(validated.value)
+                            }
+                          }}
+                          placeholder="your-email@example.com"
+                          disabled={isOrderingPrint}
+                        />
+                      </label>
                       <div className="print-order-actions">
                         <button
                           className="primary-button"
