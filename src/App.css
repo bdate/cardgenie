@@ -597,6 +597,23 @@ textarea:focus {
   opacity: 0.86;
 }
 
+.credit-action-block {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.credits-left-hint {
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
 .error-message {
   border: 1px solid rgba(196, 47, 86, 0.25);
   border-radius: 18px;
@@ -2151,6 +2168,14 @@ textarea:focus {
   width: min(320px, 100%);
 }
 
+.delivery-panel .credit-action-block {
+  width: min(320px, 100%);
+}
+
+.delivery-panel .credit-action-block .primary-button {
+  width: 100%;
+}
+
 .print-order-panel {
   display: grid;
   gap: 14px;
@@ -2241,6 +2266,14 @@ textarea:focus {
 
 .print-order-actions .primary-button {
   width: min(320px, 100%);
+}
+
+.print-order-actions .credit-action-block {
+  width: min(320px, 100%);
+}
+
+.print-order-actions .credit-action-block .primary-button {
+  width: 100%;
 }
 
 /* Keep print envelope inside the panel (not 90vw of the whole phone). */
@@ -3336,6 +3369,15 @@ textarea:focus {
   justify-self: start;
 }
 
+.refinement-card .credit-action-block {
+  width: min(260px, 100%);
+  justify-self: start;
+}
+
+.refinement-card .credit-action-block .primary-button {
+  width: 100%;
+}
+
 .mode-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4210,6 +4252,11 @@ textarea:focus {
   }
 
   .delivery-panel .primary-button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .delivery-panel .credit-action-block {
     width: 100%;
     max-width: 100%;
   }

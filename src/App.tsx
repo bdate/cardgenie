@@ -359,7 +359,34 @@ type CheckoutResumeState = {
   showSenderCopyField: boolean
   senderCopyEmail: string
   smsConsentConfirmed: boolean
+  printOrderStep?: PrintOrderStep
+  printShipTo?: MailingAddress
+  printMailFrom?: MailingAddress
+  printShopperEmail?: string
 }
+
+const normalizeResumeMailingAddress = (
+  value: unknown,
+  fallback: MailingAddress,
+): MailingAddress => {
+  if (!value || typeof value !== 'object') {
+    return { ...fallback }
+  }
+
+  const raw = value as Record<string, unknown>
+  return {
+    name: typeof raw.name === 'string' ? raw.name : fallback.name,
+    line1: typeof raw.line1 === 'string' ? raw.line1 : fallback.line1,
+    line2: typeof raw.line2 === 'string' ? raw.line2 : fallback.line2,
+    city: typeof raw.city === 'string' ? raw.city : fallback.city,
+    state: typeof raw.state === 'string' ? raw.state : fallback.state,
+    zip: typeof raw.zip === 'string' ? raw.zip : fallback.zip,
+    country: 'US',
+  }
+}
+
+const isPrintOrderStep = (value: unknown): value is PrintOrderStep =>
+  value === 'closed' || value === 'ship-to' || value === 'mail-from' || value === 'review'
 
 const isCheckoutResumeCardId = (value: unknown) =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim())
@@ -1892,6 +1919,25 @@ function App() {
         setSenderCopyEmail(storedResume.senderCopyEmail || '')
         setSmsConsentConfirmed(Boolean(storedResume.smsConsentConfirmed))
       }
+      if (storedResume) {
+        if (isPrintOrderStep(storedResume.printOrderStep)) {
+          setPrintOrderStep(storedResume.printOrderStep)
+        }
+        if (storedResume.printShipTo) {
+          setPrintShipTo(normalizeResumeMailingAddress(storedResume.printShipTo, emptyMailingAddress()))
+        }
+        if (storedResume.printMailFrom) {
+          setPrintMailFrom(
+            normalizeResumeMailingAddress(storedResume.printMailFrom, { ...defaultPrintMailFrom }),
+          )
+        }
+        if (typeof storedResume.printShopperEmail === 'string') {
+          setPrintShopperEmail(storedResume.printShopperEmail)
+        }
+        if (storedResume.printOrderStep && storedResume.printOrderStep !== 'closed') {
+          setPrintOrderNotice('')
+        }
+      }
       setHasViewedFront(true)
       setHasViewedInside(true)
       setShowEditor(false)
@@ -1975,9 +2021,18 @@ function App() {
       setStep(resume.hasViewedInside || resume.step === 'inside' ? 'inside' : 'front')
       clearCheckoutResume()
       clearCheckoutResumeQueryParam()
-      setDeliveryNotice('Welcome back — your card and recipients are ready to send.')
+      const restoredPrintStep =
+        storedResume && isPrintOrderStep(storedResume.printOrderStep) ? storedResume.printOrderStep : 'closed'
+      const restoredPrintOrder = restoredPrintStep !== 'closed'
+      setDeliveryNotice(
+        restoredPrintOrder
+          ? 'Welcome back — your credits are updated and your print order details are ready.'
+          : 'Welcome back — your card and recipients are ready to send.',
+      )
       window.setTimeout(() => {
-        document.querySelector('.delivery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document
+          .querySelector(restoredPrintOrder ? '.print-order-panel' : '.delivery-panel')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 250)
     }
 
@@ -2833,6 +2888,10 @@ function App() {
           showSenderCopyField,
           senderCopyEmail,
           smsConsentConfirmed,
+          printOrderStep,
+          printShipTo,
+          printMailFrom,
+          printShopperEmail,
         }
 
         try {
@@ -3564,6 +3623,10 @@ function App() {
         Buy more credits
       </button>
     </div>
+  )
+
+  const renderCreditsLeft = () => (
+    <p className="credits-left-hint">Credits left: {credits}</p>
   )
 
   const dismissFeedbackPrompt = () => {
@@ -5891,20 +5954,23 @@ function App() {
                     )}
                   </>
                 )}
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
-                  aria-busy={isDelivering}
-                >
-                  {isDelivering
-                    ? plannedRecipientCount > 1
-                      ? 'Sending your cards...'
-                      : 'Sending your card...'
-                    : plannedRecipientCount > 1
-                      ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
-                      : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
-                </button>
+                <div className="credit-action-block">
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
+                    aria-busy={isDelivering}
+                  >
+                    {isDelivering
+                      ? plannedRecipientCount > 1
+                        ? 'Sending your cards...'
+                        : 'Sending your card...'
+                      : plannedRecipientCount > 1
+                        ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
+                        : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
+                  </button>
+                  {renderCreditsLeft()}
+                </div>
                 {sharedCard && isAdmin && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
                     Open shareable card link
@@ -6009,9 +6075,12 @@ function App() {
                 <section className="print-order-panel" aria-label="Mail a printed card">
                   {printOrderStep === 'closed' ? (
                     <div className="print-order-intro">
-                      <button className="text-action-link" type="button" onClick={openPrintOrder}>
-                        Mail a printed card ({printCardCreditCost} credits)
-                      </button>
+                      <div className="credit-action-block">
+                        <button className="text-action-link" type="button" onClick={openPrintOrder}>
+                          Mail a printed card ({printCardCreditCost} credits)
+                        </button>
+                        {renderCreditsLeft()}
+                      </div>
                       <p>
                         Your card will be mailed out the next business day via USPS regular mail, from Northern
                         California. Once mailed, it&apos;ll take 3 to 7 business days for delivery.
@@ -6153,17 +6222,20 @@ function App() {
                         />
                       </label>
                       <div className="print-order-actions">
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={isOrderingPrint || !accountSession}
-                          aria-busy={isOrderingPrint}
-                          onClick={() => void confirmPrintOrder()}
-                        >
-                          {isOrderingPrint
-                            ? 'Sending print order…'
-                            : `Mail printed card · ${printCardCreditCost} credits`}
-                        </button>
+                        <div className="credit-action-block">
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={isOrderingPrint || !accountSession}
+                            aria-busy={isOrderingPrint}
+                            onClick={() => void confirmPrintOrder()}
+                          >
+                            {isOrderingPrint
+                              ? 'Sending print order…'
+                              : `Mail printed card · ${printCardCreditCost} credits`}
+                          </button>
+                          {renderCreditsLeft()}
+                        </div>
                         <button
                           className="text-action-link"
                           type="button"
@@ -6308,24 +6380,27 @@ function App() {
                                 : 'Example: create a completely different cover concept with a sunny garden party and elegant birthday text.'
                             }
                           />
-                          <button
-                            className="primary-button cost-button"
-                            type="button"
-                            disabled={isRefiningImage || !imageRefinement.trim()}
-                            aria-busy={isRefiningImage}
-                            onClick={refineImage}
-                          >
-                            {isRefiningImage ? (
-                              'Updating cover...'
-                            ) : (
-                              <>
-                                <span>
-                                  {coverRefinementMode === 'revise' ? 'Revise Card Image' : 'Create New Card Image'}
-                                </span>
-                                <span className="button-points">{coverRevisionCost} credit</span>
-                              </>
-                            )}
-                          </button>
+                          <div className="credit-action-block">
+                            <button
+                              className="primary-button cost-button"
+                              type="button"
+                              disabled={isRefiningImage || !imageRefinement.trim()}
+                              aria-busy={isRefiningImage}
+                              onClick={refineImage}
+                            >
+                              {isRefiningImage ? (
+                                'Updating cover...'
+                              ) : (
+                                <>
+                                  <span>
+                                    {coverRefinementMode === 'revise' ? 'Revise Card Image' : 'Create New Card Image'}
+                                  </span>
+                                  <span className="button-points">{coverRevisionCost} credit</span>
+                                </>
+                              )}
+                            </button>
+                            {renderCreditsLeft()}
+                          </div>
                           {refinementNotice && editorTab === 'front' && renderCreditNeedNotice(refinementNotice)}
                         </div>
                       ) : (
@@ -6392,22 +6467,25 @@ function App() {
                                   placeholder="Example: make it shorter, warmer, and mention pickleball."
                                 />
                               </label>
-                              <button
-                                className="primary-button cost-button"
-                                type="button"
-                                disabled={isRefiningCopy || !copyRefinement.trim()}
-                                aria-busy={isRefiningCopy}
-                                onClick={refineCopy}
-                              >
-                                {isRefiningCopy ? (
-                                  'Rewriting inside...'
-                                ) : (
-                                  <>
-                                    <span>Rewrite with AI</span>
-                                    <span className="button-points">{aiCopyCost} credit</span>
-                                  </>
-                                )}
-                              </button>
+                              <div className="credit-action-block">
+                                <button
+                                  className="primary-button cost-button"
+                                  type="button"
+                                  disabled={isRefiningCopy || !copyRefinement.trim()}
+                                  aria-busy={isRefiningCopy}
+                                  onClick={refineCopy}
+                                >
+                                  {isRefiningCopy ? (
+                                    'Rewriting inside...'
+                                  ) : (
+                                    <>
+                                      <span>Rewrite with AI</span>
+                                      <span className="button-points">{aiCopyCost} credit</span>
+                                    </>
+                                  )}
+                                </button>
+                                {renderCreditsLeft()}
+                              </div>
                               {refinementNotice && editorTab === 'inside' && renderCreditNeedNotice(refinementNotice)}
                             </div>
                           )}
