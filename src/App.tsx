@@ -1152,13 +1152,13 @@ const createInsideImageUrl = ({
   const centerX = canvas.width / 2
 
   if (greetingLines.length) {
-    context.fillStyle = '#2d6762'
+    context.fillStyle = '#315f5b'
     context.font = `700 ${greetingFontSize}px ${serifFont}`
     drawCenteredLines(context, greetingLines, centerX, y, greetingLineHeight)
     y += greetingLines.length * greetingLineHeight + afterGreetingGap
   }
 
-  context.fillStyle = '#2d6762'
+  context.fillStyle = '#315f5b'
   context.font = `700 ${bodyFontSize}px ${serifFont}`
   paragraphLineGroups.forEach((lines, index) => {
     drawCenteredLines(context, lines, centerX, y, bodyLineHeight)
@@ -1170,7 +1170,7 @@ const createInsideImageUrl = ({
 
   if (closingLines.length) {
     y += beforeClosingGap
-    context.fillStyle = '#2d6762'
+    context.fillStyle = '#315f5b'
     context.font = `700 ${closingFontSize}px ${serifFont}`
     drawCenteredLines(context, closingLines, centerX, y, closingLineHeight)
     y += closingLines.length * closingLineHeight
