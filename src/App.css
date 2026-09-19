@@ -2312,11 +2312,11 @@ textarea:focus {
     gap: 2px;
   }
 
-  /* Match desktop relative X (~38.5%); nudge further right per mobile feedback */
-  .print-order-envelope .print-order-to {
-    left: 42%;
+  /* Mobile To: start near horizontal mid of envelope (desktop ~38%; was stuck at 12% in cached builds) */
+  .print-order-envelope .envelope-front-face > .print-order-to {
+    left: 48%;
     top: 52%;
-    max-width: 48%;
+    max-width: 46%;
     font-size: 0.78rem;
     line-height: 1.25;
     transform: none;
@@ -2333,10 +2333,10 @@ textarea:focus {
     max-width: 38%;
   }
 
-  .print-order-envelope .print-order-to {
-    left: 40%;
+  .print-order-envelope .envelope-front-face > .print-order-to {
+    left: 46%;
     top: 50%;
-    max-width: 50%;
+    max-width: 48%;
     font-size: 0.72rem;
   }
 
