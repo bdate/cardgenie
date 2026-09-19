@@ -2094,6 +2094,10 @@ textarea:focus {
   border: 1px solid rgba(143, 208, 201, 0.34);
   border-radius: 24px;
   padding: 20px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: clip;
   background:
     radial-gradient(circle at top right, rgba(245, 158, 51, 0.14), transparent 34%),
     rgba(255, 255, 255, 0.72);
@@ -2122,17 +2126,20 @@ textarea:focus {
 }
 
 .delivery-methods {
-  max-width: 360px;
+  max-width: min(360px, 100%);
+  min-width: 0;
 }
 
 .delivery-recipients {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .delivery-recipient-field {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .delivery-recipient-label-row {
@@ -2463,15 +2470,18 @@ textarea:focus {
 
 .account-confirmed {
   margin: 0;
+  max-width: 100%;
+  min-width: 0;
   color: var(--gcu-dark-teal);
-  font-size: 0.86rem;
+  font-size: clamp(0.66rem, 2.9vw, 0.86rem);
   font-weight: 800;
-  white-space: nowrap;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 430px) {
   .account-confirmed {
-    font-size: 0.78rem;
+    font-size: 0.7rem;
   }
 }
 
@@ -4036,6 +4046,10 @@ textarea:focus {
   .card-panel {
     border-radius: 24px;
     padding: 18px;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: clip;
   }
 
   .panel-heading {
@@ -4183,10 +4197,19 @@ textarea:focus {
   .delivery-panel {
     border-radius: 20px;
     padding: 16px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   .delivery-panel .primary-button {
     width: 100%;
+    max-width: 100%;
+  }
+
+  .delivery-methods.mode-toggle {
+    width: 100%;
+    max-width: 100%;
   }
 
   .card-editor {
