@@ -5712,8 +5712,8 @@ function App() {
                         Mail a printed card ({printCardCreditCost} credits)
                       </button>
                       <p>
-                        We&apos;ll print your card and send out next business day via USPS. Once mailed, it&apos;ll
-                        take 3 to 6 business days for delivery.
+                        Your card will be mailed out the next business day via USPS regular mail, from Northern
+                        California. Once mailed, it&apos;ll take 3 to 7 business days for delivery.
                       </p>
                     </div>
                   ) : null}

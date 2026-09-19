@@ -430,7 +430,6 @@ app.post('/api/order-print-card', async (req, res) => {
       const confirmationCopy = buildPrintOrderConfirmationCopy({
         orderCode,
         shipTo,
-        details: record.details || {},
       })
       await sendEmailDelivery({
         to: shopperEmail,
@@ -1902,21 +1901,20 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
   return { subject, text, html }
 }
 
-const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, details }) => {
-  const occasion = String(details?.occasion || '').trim() || 'greeting card'
+const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
   const shipToBlock = formatMailingAddressBlock(shipTo)
-  const subject = `Your Card Genie print order ${orderCode}`
+  const subject = `Your Card Genie printed card order - ${orderCode}`
+  const deliveryCopy =
+    "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
   const text = [
     'Thanks for your Card Genie print order.',
     '',
     `Order number: ${orderCode}`,
-    `Occasion: ${occasion}`,
     '',
     'Shipping to:',
     shipToBlock,
     '',
-    "We'll print your card and send it out next business day via USPS.",
-    "Once mailed, it'll take 3 to 6 business days for delivery.",
+    deliveryCopy,
     '',
     'Previews of your card cover and inside are included in this email.',
   ].join('\n')
@@ -1925,12 +1923,10 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, details }) => {
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
       <h2 style="margin: 0 0 12px;">Thanks for your print order</h2>
       <p style="margin: 0 0 12px;">We've received your Card Genie print order.</p>
-      <p style="margin: 0 0 4px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
-      <p style="margin: 0 0 16px;"><strong>Occasion:</strong> ${occasion}</p>
+      <p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
       <p style="margin: 0 0 6px;"><strong>Shipping to</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${shipToBlock}</pre>
-      <p style="margin: 0 0 16px;">We'll print your card and send it out next business day via USPS. Once mailed, it'll take 3 to 6 business days for delivery.</p>
-      <p style="margin: 0 0 8px;"><strong>Your card preview</strong></p>
+      <p style="margin: 0 0 16px;">${deliveryCopy}</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
         <tr>
           <td style="padding: 0 12px 0 0; vertical-align: top;">
@@ -1939,7 +1935,7 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, details }) => {
           </td>
           <td style="padding: 0; vertical-align: top;">
             <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Inside</p>
-            <img src="cid:print-inside-thumb" alt="Card inside" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;border-radius:8px;" />
+            <img src="cid:print-inside-thumb" alt="Card inside" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:1px solid #d0d0d0;border-radius:8px;" />
           </td>
         </tr>
       </table>
