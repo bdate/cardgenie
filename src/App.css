@@ -2144,6 +2144,136 @@ textarea:focus {
   width: min(320px, 100%);
 }
 
+.print-order-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  border: 1px solid rgba(143, 208, 201, 0.34);
+  border-radius: 24px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top left, rgba(63, 155, 145, 0.12), transparent 36%),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(63, 155, 145, 0.1);
+}
+
+.print-order-intro {
+  display: grid;
+  gap: 6px;
+}
+
+.print-order-intro .text-action-link {
+  justify-self: start;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.print-order-intro p,
+.print-order-form > div > p,
+.print-order-review > div > p {
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.print-order-form,
+.print-order-review {
+  display: grid;
+  gap: 14px;
+}
+
+.print-address-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.print-address-fields .field-optional {
+  color: var(--gcu-grey);
+  font-weight: 500;
+}
+
+.print-address-city-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(88px, 0.7fr) minmax(96px, 0.8fr);
+  gap: 12px;
+}
+
+.print-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.print-order-actions .primary-button {
+  width: min(320px, 100%);
+}
+
+.print-order-envelope-scene {
+  margin: 0;
+  padding: 8px 0 0;
+}
+
+.print-order-envelope .envelope-from.print-order-from {
+  display: grid;
+  gap: 4px;
+  max-width: 46%;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* print-order To: left 200px, top 54px */
+.print-order-envelope .print-order-to {
+  position: absolute;
+  left: 200px;
+  top: 54px;
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  max-width: 64%;
+  margin: 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(0.95rem, 2.1vw, 1.15rem);
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  transform: translateY(-50%);
+}
+
+.print-order-address-block {
+  white-space: pre-line;
+}
+
+.print-order-change {
+  justify-self: start;
+  font-size: 0.78rem;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 720px) {
+  .print-address-city-row {
+    grid-template-columns: 1fr;
+  }
+
+  .print-order-envelope .envelope-from.print-order-from {
+    top: 28px;
+    left: 24px;
+    max-width: 48%;
+    font-size: 0.64rem;
+  }
+
+  .print-order-envelope .print-order-to {
+    left: 200px;
+    top: 54px;
+    max-width: 70%;
+    font-size: 0.88rem;
+  }
+}
+
 .sms-consent {
   display: grid;
   grid-template-columns: auto 1fr;

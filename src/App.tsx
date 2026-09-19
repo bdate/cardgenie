@@ -104,6 +104,89 @@ const sendCreditCostPerRecipient = 2
 const maxDeliveryRecipients = 10
 const coverRevisionCost = 1
 const aiCopyCost = 1
+const printCardCreditCost = 10
+const usStateOptions = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
+  'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
+  'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+] as const
+const defaultPrintMailFrom = {
+  name: 'Card Genie',
+  line1: '154 East Prospect Ave',
+  line2: '',
+  city: 'Danville',
+  state: 'CA',
+  zip: '94526',
+  country: 'US' as const,
+}
+type MailingAddress = {
+  name: string
+  line1: string
+  line2: string
+  city: string
+  state: string
+  zip: string
+  country: 'US'
+}
+type PrintOrderStep = 'closed' | 'ship-to' | 'mail-from' | 'review'
+
+const emptyMailingAddress = (): MailingAddress => ({
+  name: '',
+  line1: '',
+  line2: '',
+  city: '',
+  state: '',
+  zip: '',
+  country: 'US',
+})
+
+const formatMailingAddressLines = (address: MailingAddress) =>
+  [
+    address.name,
+    address.line1,
+    address.line2.trim() || null,
+    `${address.city}, ${address.state} ${address.zip}`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+const validateMailingAddress = (address: MailingAddress, label: string) => {
+  const name = address.name.trim()
+  const line1 = address.line1.trim()
+  const line2 = address.line2.trim()
+  const city = address.city.trim()
+  const state = address.state.trim().toUpperCase()
+  const zip = address.zip.trim().replace(/\s+/g, '')
+
+  if (!name) {
+    return { ok: false as const, message: `Enter the ${label} name.` }
+  }
+  if (!line1) {
+    return { ok: false as const, message: `Enter the ${label} street address.` }
+  }
+  if (!city) {
+    return { ok: false as const, message: `Enter the ${label} city.` }
+  }
+  if (!(usStateOptions as readonly string[]).includes(state)) {
+    return { ok: false as const, message: `Choose a valid ${label} US state.` }
+  }
+  if (!/^\d{5}(-\d{4})?$/.test(zip)) {
+    return { ok: false as const, message: `Enter a valid ${label} ZIP code.` }
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      name,
+      line1,
+      line2,
+      city,
+      state,
+      zip,
+      country: 'US' as const,
+    },
+  }
+}
 
 const getSendCreditCost = (recipientCount: number) => {
   const count = Math.max(0, Math.floor(recipientCount))
@@ -1172,6 +1255,11 @@ function App() {
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
   const [deliveryDestinations, setDeliveryDestinations] = useState<string[]>([''])
+  const [printOrderStep, setPrintOrderStep] = useState<PrintOrderStep>('closed')
+  const [printShipTo, setPrintShipTo] = useState<MailingAddress>(emptyMailingAddress)
+  const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>({ ...defaultPrintMailFrom })
+  const [printOrderNotice, setPrintOrderNotice] = useState('')
+  const [isOrderingPrint, setIsOrderingPrint] = useState(false)
   const [showSenderCopyField, setShowSenderCopyField] = useState(false)
   const [senderCopyEmail, setSenderCopyEmail] = useState('')
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
@@ -2755,6 +2843,232 @@ function App() {
       setIsPreparingAdminPrintFiles(false)
     }
   }
+
+  const updatePrintAddressField = (
+    which: 'ship-to' | 'mail-from',
+    field: keyof MailingAddress,
+    value: string,
+  ) => {
+    const setter = which === 'ship-to' ? setPrintShipTo : setPrintMailFrom
+    setter((current) => ({
+      ...current,
+      [field]: field === 'state' ? value.toUpperCase() : field === 'country' ? 'US' : value,
+    }))
+    setPrintOrderNotice('')
+  }
+
+  const openPrintOrder = () => {
+    setPrintOrderStep('ship-to')
+    setPrintOrderNotice('')
+    window.setTimeout(() => {
+      document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }
+
+  const submitPrintShipTo = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const validated = validateMailingAddress(printShipTo, 'recipient')
+    if (!validated.ok) {
+      setPrintOrderNotice(validated.message)
+      return
+    }
+    setPrintShipTo(validated.value)
+    setPrintOrderStep('review')
+    setPrintOrderNotice('')
+  }
+
+  const submitPrintMailFrom = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const validated = validateMailingAddress(printMailFrom, 'mail-from')
+    if (!validated.ok) {
+      setPrintOrderNotice(validated.message)
+      return
+    }
+    setPrintMailFrom(validated.value)
+    setPrintOrderStep('review')
+    setPrintOrderNotice('')
+  }
+
+  const preparePrintOrderImages = async () => {
+    if (!card) {
+      throw new Error('Create a card before ordering a print.')
+    }
+
+    const coverImage = await loadImageElement(card.imageUrl)
+    const coverUrl = upscaleImageToDataUrl(coverImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
+    if (!coverUrl) {
+      throw new Error('Unable to prepare the print cover file.')
+    }
+
+    const insideUrl = createInsideImageUrl({
+      greeting: insideGreeting,
+      paragraphs: messageParagraphs,
+      closing: cardClosing,
+      signature: cardSignatureLabel,
+      width: PRINT_CARD_WIDTH,
+      height: PRINT_CARD_HEIGHT,
+      showFrame: false,
+    })
+    if (!insideUrl) {
+      throw new Error('Unable to prepare the print inside file.')
+    }
+
+    return { coverUrl, insideUrl }
+  }
+
+  const confirmPrintOrder = async () => {
+    setPrintOrderNotice('')
+
+    const shipTo = validateMailingAddress(printShipTo, 'recipient')
+    if (!shipTo.ok) {
+      setPrintOrderNotice(shipTo.message)
+      setPrintOrderStep('ship-to')
+      return
+    }
+
+    const mailFrom = validateMailingAddress(printMailFrom, 'mail-from')
+    if (!mailFrom.ok) {
+      setPrintOrderNotice(mailFrom.message)
+      setPrintOrderStep('mail-from')
+      return
+    }
+
+    if (!accountSession?.token) {
+      setPrintOrderNotice('Confirm your mobile number before ordering a printed card.')
+      return
+    }
+
+    if (credits < printCardCreditCost) {
+      promptNeedCredits(
+        `You need ${printCardCreditCost} credits to mail a printed card. You currently have ${credits}. Buy more credits to keep going.`,
+        'send',
+      )
+      setPrintOrderNotice(
+        `You need ${printCardCreditCost} credits to mail a printed card. You currently have ${credits}.`,
+      )
+      return
+    }
+
+    setIsOrderingPrint(true)
+
+    try {
+      const shared = await saveCurrentCard()
+      const { coverUrl, insideUrl } = await preparePrintOrderImages()
+      const response = await fetch(apiUrl('/api/order-print-card'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accountSession.token}`,
+        },
+        body: JSON.stringify({
+          cardId: shared.id,
+          mailFrom: mailFrom.value,
+          shipTo: shipTo.value,
+          coverImage: coverUrl,
+          insideImage: insideUrl,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to place the print order.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to place the print order.')
+      }
+
+      const chargedCredits =
+        typeof data.creditCost === 'number' && Number.isFinite(data.creditCost)
+          ? data.creditCost
+          : printCardCreditCost
+      const nextCredits = rememberCredits(credits - chargedCredits)
+      setCreditNotice(`${chargedCredits} credits used to order a printed card.`)
+      void syncAccountCredits({ balance: nextCredits, reason: 'print_card_order' })
+      setPrintOrderNotice(
+        typeof data.message === 'string' && data.message
+          ? data.message
+          : `Print order sent. We'll mail the card to ${shipTo.value.name}.`,
+      )
+      setPrintOrderStep('closed')
+      setPrintShipTo(emptyMailingAddress())
+      setPrintMailFrom({ ...defaultPrintMailFrom })
+    } catch (caughtError) {
+      setPrintOrderNotice(getFriendlyErrorMessage(caughtError, 'Unable to place the print order.'))
+    } finally {
+      setIsOrderingPrint(false)
+    }
+  }
+
+  const renderMailingAddressFields = (
+    which: 'ship-to' | 'mail-from',
+    address: MailingAddress,
+    nameLabel: string,
+  ) => (
+    <div className="print-address-fields">
+      <label>
+        {nameLabel}
+        <input
+          value={address.name}
+          onChange={(event) => updatePrintAddressField(which, 'name', event.target.value)}
+          autoComplete={which === 'ship-to' ? 'shipping name' : 'name'}
+          placeholder="Full name"
+        />
+      </label>
+      <label>
+        Address line 1
+        <input
+          value={address.line1}
+          onChange={(event) => updatePrintAddressField(which, 'line1', event.target.value)}
+          autoComplete={which === 'ship-to' ? 'shipping address-line1' : 'street-address'}
+          placeholder="Street address"
+        />
+      </label>
+      <label>
+        Address line 2 <span className="field-optional">(optional)</span>
+        <input
+          value={address.line2}
+          onChange={(event) => updatePrintAddressField(which, 'line2', event.target.value)}
+          autoComplete={which === 'ship-to' ? 'shipping address-line2' : 'address-line2'}
+          placeholder="Apt, suite, unit"
+        />
+      </label>
+      <div className="print-address-city-row">
+        <label>
+          City
+          <input
+            value={address.city}
+            onChange={(event) => updatePrintAddressField(which, 'city', event.target.value)}
+            autoComplete={which === 'ship-to' ? 'shipping address-level2' : 'address-level2'}
+          />
+        </label>
+        <label>
+          State
+          <select
+            value={address.state}
+            onChange={(event) => updatePrintAddressField(which, 'state', event.target.value)}
+            autoComplete={which === 'ship-to' ? 'shipping address-level1' : 'address-level1'}
+          >
+            <option value="">Select</option>
+            {usStateOptions.map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          ZIP
+          <input
+            value={address.zip}
+            onChange={(event) => updatePrintAddressField(which, 'zip', event.target.value)}
+            autoComplete={which === 'ship-to' ? 'shipping postal-code' : 'postal-code'}
+            inputMode="numeric"
+            placeholder="94526"
+          />
+        </label>
+      </div>
+      <label>
+        Country
+        <input value="United States" disabled readOnly />
+      </label>
+    </div>
+  )
 
   const acceptEditorChanges = () => {
     setShowEditor(false)
@@ -5215,6 +5529,148 @@ function App() {
                   </div>
                 )}
               </form>}
+              {showSendActions && !isRecipientView && !showEditor && isAdmin && (
+                <section className="print-order-panel" aria-label="Mail a printed card">
+                  {printOrderStep === 'closed' ? (
+                    <div className="print-order-intro">
+                      <button className="text-action-link" type="button" onClick={openPrintOrder}>
+                        Mail a printed card ({printCardCreditCost} credits)
+                      </button>
+                      <p>We’ll print your cover and inside message and mail it to you or someone else in the US.</p>
+                    </div>
+                  ) : null}
+
+                  {printOrderStep === 'ship-to' && (
+                    <form className="print-order-form" onSubmit={submitPrintShipTo}>
+                      <div>
+                        <span className="delivery-kicker">Mail a printed card</span>
+                        <p>Where should we ship this card? United States only.</p>
+                      </div>
+                      {renderMailingAddressFields('ship-to', printShipTo, 'Recipient name')}
+                      <div className="print-order-actions">
+                        <button className="primary-button" type="submit">
+                          Continue to envelope
+                        </button>
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          onClick={() => {
+                            setPrintOrderStep('closed')
+                            setPrintOrderNotice('')
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {printOrderStep === 'mail-from' && (
+                    <form className="print-order-form" onSubmit={submitPrintMailFrom}>
+                      <div>
+                        <span className="delivery-kicker">Mail from address</span>
+                        <p>This appears as the return address on the envelope.</p>
+                      </div>
+                      {renderMailingAddressFields('mail-from', printMailFrom, 'From name')}
+                      <div className="print-order-actions">
+                        <button className="primary-button" type="submit">
+                          Save from address
+                        </button>
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          onClick={() => {
+                            setPrintMailFrom({ ...defaultPrintMailFrom })
+                            setPrintOrderStep('review')
+                            setPrintOrderNotice('')
+                          }}
+                        >
+                          Use Card Genie address
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {printOrderStep === 'review' && (
+                    <div className="print-order-review">
+                      <div>
+                        <span className="delivery-kicker">Review envelope</span>
+                        <p>Confirm the addresses, then place the print order.</p>
+                      </div>
+                      <div className="proof-stage envelope-scene print-order-envelope-scene">
+                        <div className="envelope print-order-envelope">
+                          <div className="envelope-front-face">
+                            <img className="envelope-stamp" src={stampSrc} alt="" aria-hidden="true" />
+                            <div className="envelope-from print-order-from">
+                              <span className="print-order-address-block">
+                                {formatMailingAddressLines(printMailFrom)}
+                              </span>
+                              <button
+                                className="text-action-link print-order-change"
+                                type="button"
+                                onClick={() => {
+                                  setPrintOrderStep('mail-from')
+                                  setPrintOrderNotice('')
+                                }}
+                              >
+                                Change
+                              </button>
+                            </div>
+                            <div className="envelope-front-address print-order-to is-long">
+                              <span className="print-order-address-block">
+                                {formatMailingAddressLines(printShipTo)}
+                              </span>
+                              <button
+                                className="text-action-link print-order-change"
+                                type="button"
+                                onClick={() => {
+                                  setPrintOrderStep('ship-to')
+                                  setPrintOrderNotice('')
+                                }}
+                              >
+                                Change
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="print-order-actions">
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={isOrderingPrint || !accountSession}
+                          aria-busy={isOrderingPrint}
+                          onClick={() => void confirmPrintOrder()}
+                        >
+                          {isOrderingPrint
+                            ? 'Sending print order…'
+                            : `Mail printed card · ${printCardCreditCost} credits`}
+                        </button>
+                        <button
+                          className="text-action-link"
+                          type="button"
+                          disabled={isOrderingPrint}
+                          onClick={() => {
+                            setPrintOrderStep('closed')
+                            setPrintOrderNotice('')
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {printOrderNotice &&
+                    (credits < printCardCreditCost && /need .* credits/i.test(printOrderNotice)
+                      ? renderCreditNeedNotice(printOrderNotice)
+                      : (
+                        <div className="delivery-notice">
+                          <div>{printOrderNotice}</div>
+                        </div>
+                      ))}
+                </section>
+              )}
                 </>
               )}
 

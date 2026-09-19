@@ -1269,7 +1269,7 @@ const parseEmailSender = (from = '') => {
   }
 }
 
-const sendSendGridEmailDelivery = async ({ env, to, copy }) => {
+const sendSendGridEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
   if (!env.SENDGRID_API_KEY || !env.EMAIL_FROM) {
     throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
   }
@@ -1294,6 +1294,15 @@ const sendSendGridEmailDelivery = async ({ env, to, copy }) => {
     },
   }
 
+  if (attachments.length) {
+    payload.attachments = attachments.map((attachment) => ({
+      content: attachment.content,
+      filename: attachment.filename,
+      type: attachment.type || 'application/octet-stream',
+      disposition: 'attachment',
+    }))
+  }
+
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
@@ -1311,9 +1320,26 @@ const sendSendGridEmailDelivery = async ({ env, to, copy }) => {
   return to
 }
 
-const sendPostmarkEmailDelivery = async ({ env, to, copy }) => {
+const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
   if (!env.POSTMARK_SERVER_TOKEN || !env.EMAIL_FROM) {
     throw new Error('Email delivery is not configured. Add POSTMARK_SERVER_TOKEN and EMAIL_FROM.')
+  }
+
+  const payload = {
+    From: env.EMAIL_FROM,
+    To: to,
+    Subject: copy.subject,
+    TextBody: copy.text,
+    HtmlBody: copy.html,
+    MessageStream: env.POSTMARK_MESSAGE_STREAM || 'outbound',
+  }
+
+  if (attachments.length) {
+    payload.Attachments = attachments.map((attachment) => ({
+      Name: attachment.filename,
+      Content: attachment.content,
+      ContentType: attachment.type || 'application/octet-stream',
+    }))
   }
 
   const response = await fetch('https://api.postmarkapp.com/email', {
@@ -1323,14 +1349,7 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy }) => {
       'Content-Type': 'application/json',
       'X-Postmark-Server-Token': env.POSTMARK_SERVER_TOKEN,
     },
-    body: JSON.stringify({
-      From: env.EMAIL_FROM,
-      To: to,
-      Subject: copy.subject,
-      TextBody: copy.text,
-      HtmlBody: copy.html,
-      MessageStream: env.POSTMARK_MESSAGE_STREAM || 'outbound',
-    }),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
@@ -1341,16 +1360,131 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy }) => {
   return to
 }
 
-const sendEmailDelivery = async ({ env, to, copy }) => {
+const sendEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
   if (env.SENDGRID_API_KEY) {
-    return sendSendGridEmailDelivery({ env, to, copy })
+    return sendSendGridEmailDelivery({ env, to, copy, attachments })
   }
 
   if (env.POSTMARK_SERVER_TOKEN) {
-    return sendPostmarkEmailDelivery({ env, to, copy })
+    return sendPostmarkEmailDelivery({ env, to, copy, attachments })
   }
 
   throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
+}
+
+const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
+const PRINT_CARD_CREDIT_COST = 10
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
+  'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
+  'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+])
+
+const parseDataUrlImage = (value, label) => {
+  const match = String(value || '').match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/)
+  if (!match) {
+    throw new Error(`Provide a valid ${label} print image.`)
+  }
+
+  return {
+    type: match[1],
+    content: match[2],
+  }
+}
+
+const normalizeMailingAddress = (raw, label) => {
+  const address = raw && typeof raw === 'object' ? raw : {}
+  const name = String(address.name || '').trim()
+  const line1 = String(address.line1 || '').trim()
+  const line2 = String(address.line2 || '').trim()
+  const city = String(address.city || '').trim()
+  const state = String(address.state || '').trim().toUpperCase()
+  const zip = String(address.zip || '').trim().replace(/\s+/g, '')
+  const country = String(address.country || 'US').trim().toUpperCase()
+
+  if (!name) {
+    throw new Error(`Enter the ${label} name.`)
+  }
+  if (!line1) {
+    throw new Error(`Enter the ${label} street address.`)
+  }
+  if (!city) {
+    throw new Error(`Enter the ${label} city.`)
+  }
+  if (!US_STATE_CODES.has(state)) {
+    throw new Error(`Choose a valid ${label} US state.`)
+  }
+  if (!/^\d{5}(-\d{4})?$/.test(zip)) {
+    throw new Error(`Enter a valid ${label} ZIP code.`)
+  }
+  if (country !== 'US' && country !== 'USA' && country !== 'UNITED STATES') {
+    throw new Error('Printed cards can only be mailed within the United States right now.')
+  }
+
+  return {
+    name,
+    line1,
+    line2,
+    city,
+    state,
+    zip,
+    country: 'US',
+  }
+}
+
+const formatMailingAddressBlock = (address) =>
+  [
+    address.name,
+    address.line1,
+    address.line2 || null,
+    `${address.city}, ${address.state} ${address.zip}`,
+    'United States',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+const buildPrintOrderEmailCopy = ({ cardId, shareUrl, mailFrom, shipTo, details }) => {
+  const occasion = String(details?.occasion || '').trim() || 'greeting card'
+  const recipient = String(details?.recipientName || shipTo.name || 'recipient').trim()
+  const subject = `Print card order · ${shipTo.name} · ${cardId}`
+  const text = [
+    'New printed card order from Card Genie.',
+    '',
+    'Mail from:',
+    formatMailingAddressBlock(mailFrom),
+    '',
+    'Ship to:',
+    formatMailingAddressBlock(shipTo),
+    '',
+    `Card ID: ${cardId}`,
+    `Occasion: ${occasion}`,
+    `Card recipient name: ${recipient}`,
+    shareUrl ? `Share link: ${shareUrl}` : null,
+    '',
+    'Print files are attached:',
+    '- print-cover.png',
+    '- print-inside.png',
+  ]
+    .filter((line) => line !== null)
+    .join('\n')
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
+      <h2 style="margin: 0 0 12px;">New printed card order</h2>
+      <p style="margin: 0 0 16px;">A shopper requested a physical greeting card mailing.</p>
+      <p style="margin: 0 0 6px;"><strong>Mail from</strong></p>
+      <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(mailFrom)}</pre>
+      <p style="margin: 0 0 6px;"><strong>Ship to</strong></p>
+      <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${formatMailingAddressBlock(shipTo)}</pre>
+      <p style="margin: 0 0 4px;"><strong>Card ID:</strong> ${cardId}</p>
+      <p style="margin: 0 0 4px;"><strong>Occasion:</strong> ${occasion}</p>
+      <p style="margin: 0 0 4px;"><strong>Card recipient name:</strong> ${recipient}</p>
+      ${shareUrl ? `<p style="margin: 0 0 16px;"><strong>Share link:</strong> <a href="${shareUrl}">${shareUrl}</a></p>` : ''}
+      <p style="margin: 0;">Print files are attached as <strong>print-cover.png</strong> and <strong>print-inside.png</strong>.</p>
+    </div>
+  `
+
+  return { subject, text, html }
 }
 
 const getTwilioAuthCredentials = (env) => {
@@ -2999,6 +3133,77 @@ const handleDeliverCard = async (request, env) => {
   })
 }
 
+const handleOrderPrintCard = async (request, env) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Confirm your mobile number before ordering a printed card.' },
+      401,
+    )
+  }
+
+  try {
+    const body = (await readJson(request)) || {}
+    const { cardId, mailFrom: rawMailFrom, shipTo: rawShipTo, coverImage, insideImage } = body
+    const record = await getCardRecord(env, cardId)
+
+    if (!record) {
+      return jsonResponse(request, env, { error: 'Save the card before ordering a print.' }, 404)
+    }
+
+    const mailFrom = normalizeMailingAddress(rawMailFrom, 'mail-from')
+    const shipTo = normalizeMailingAddress(rawShipTo, 'ship-to')
+    const cover = parseDataUrlImage(coverImage, 'cover')
+    const inside = parseDataUrlImage(insideImage, 'inside')
+    const shareUrl = getShareUrl(request, env, record.id)
+    const copy = buildPrintOrderEmailCopy({
+      cardId: record.id,
+      shareUrl,
+      mailFrom,
+      shipTo,
+      details: record.details || {},
+    })
+
+    await sendEmailDelivery({
+      env,
+      to: PRINT_ORDER_SUPPORT_EMAIL,
+      copy,
+      attachments: [
+        {
+          filename: 'print-cover.png',
+          type: cover.type || 'image/png',
+          content: cover.content,
+        },
+        {
+          filename: 'print-inside.png',
+          type: inside.type || 'image/png',
+          content: inside.content,
+        },
+      ],
+    })
+
+    return jsonResponse(request, env, {
+      ok: true,
+      creditCost: PRINT_CARD_CREDIT_COST,
+      mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
+      message: `Print order sent to ${PRINT_ORDER_SUPPORT_EMAIL}. We'll mail the card shortly.`,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to place the print order.'
+    const isValidation =
+      /enter|choose|provide|valid|united states|zip|state|street|name|city|image/i.test(message) &&
+      !/SendGrid|Postmark|configured/i.test(message)
+
+    return jsonResponse(request, env, { error: message }, isValidation ? 400 : 500)
+  }
+}
+
 const handleGenerateCard = async (request, env, ctx) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
   if (missingKeyResponse) {
@@ -3312,6 +3517,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/deliver-card') {
     return handleDeliverCard(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/order-print-card') {
+    return handleOrderPrintCard(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/generate-card') {
