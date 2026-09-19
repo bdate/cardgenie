@@ -1068,7 +1068,7 @@ const createInsideImageUrl = ({
   }
 
   const cqi = width / 100
-  const padX = 10.7 * cqi
+  const padX = 13 * cqi
   const padY = 12 * cqi
   const maxTextWidth = Math.max(1, width - padX * 2)
 
