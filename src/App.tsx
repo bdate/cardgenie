@@ -2980,11 +2980,7 @@ function App() {
       const nextCredits = rememberCredits(credits - chargedCredits)
       setCreditNotice(`${chargedCredits} credits used to order a printed card.`)
       void syncAccountCredits({ balance: nextCredits, reason: 'print_card_order' })
-      setPrintOrderNotice(
-        typeof data.message === 'string' && data.message
-          ? data.message
-          : `Print order sent. We'll mail the card to ${shipTo.value.name}.`,
-      )
+      setPrintOrderNotice(`Your card will be mailed to:\n${formatMailingAddressLines(shipTo.value)}`)
       setPrintOrderStep('closed')
       setPrintShipTo(emptyMailingAddress())
       setPrintMailFrom({ ...defaultPrintMailFrom })
@@ -5536,7 +5532,10 @@ function App() {
                       <button className="text-action-link" type="button" onClick={openPrintOrder}>
                         Mail a printed card ({printCardCreditCost} credits)
                       </button>
-                      <p>We’ll print your cover and inside message and mail it to you or someone else in the US.</p>
+                      <p>
+                        We&apos;ll print your card and send out next business day via USPS. Once mailed, it&apos;ll
+                        take 3 to 6 business days for delivery.
+                      </p>
                     </div>
                   ) : null}
 
@@ -5616,7 +5615,7 @@ function App() {
                                 Change
                               </button>
                             </div>
-                            <div className="envelope-front-address print-order-to is-long">
+                            <div className="print-order-to">
                               <span className="print-order-address-block">
                                 {formatMailingAddressLines(printShipTo)}
                               </span>
@@ -5666,7 +5665,7 @@ function App() {
                       ? renderCreditNeedNotice(printOrderNotice)
                       : (
                         <div className="delivery-notice">
-                          <div>{printOrderNotice}</div>
+                          <div className="print-order-success-notice">{printOrderNotice}</div>
                         </div>
                       ))}
                 </section>
