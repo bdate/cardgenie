@@ -1909,7 +1909,7 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
   const deliveryCopy =
     "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
   const text = [
-    'Thanks for your Card Genie print order.',
+    "We've received your Card Genie print order. Thank you!",
     '',
     `Order number: ${orderCode}`,
     '',
@@ -1923,8 +1923,7 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
-      <h2 style="margin: 0 0 12px;">Thanks for your print order</h2>
-      <p style="margin: 0 0 12px;">We've received your Card Genie print order.</p>
+      <p style="margin: 0 0 12px;">We've received your Card Genie print order. Thank you!</p>
       <p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
       <p style="margin: 0 0 6px;"><strong>Shipping to</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${shipToBlock}</pre>
