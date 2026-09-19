@@ -2312,11 +2312,11 @@ textarea:focus {
     gap: 2px;
   }
 
-  /* Classic mobile mail layout: To sits below From, clear of stamp */
+  /* Match desktop relative X (~38.5%); nudge further right per mobile feedback */
   .print-order-envelope .print-order-to {
-    left: 12%;
+    left: 42%;
     top: 52%;
-    max-width: 62%;
+    max-width: 48%;
     font-size: 0.78rem;
     line-height: 1.25;
     transform: none;
@@ -2334,9 +2334,9 @@ textarea:focus {
   }
 
   .print-order-envelope .print-order-to {
-    left: 10%;
+    left: 40%;
     top: 50%;
-    max-width: 64%;
+    max-width: 50%;
     font-size: 0.72rem;
   }
 
