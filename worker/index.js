@@ -2445,13 +2445,18 @@ const handleCreateCheckoutSession = async (request, env) => {
 
   const appUrl = getCheckoutReturnBaseUrl(request, env)
   const integrationSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const resumeCardId = String(body.resumeCardId || '').trim()
+  const resumeQuery =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resumeCardId)
+      ? `&resume=${encodeURIComponent(resumeCardId)}`
+      : ''
 
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: pack.priceId, quantity: 1 }],
-      success_url: `${appUrl}/?billing=success`,
-      cancel_url: `${appUrl}/?billing=cancel`,
+      success_url: `${appUrl}/?billing=success${resumeQuery}`,
+      cancel_url: `${appUrl}/?billing=cancel${resumeQuery}`,
       client_reference_id: session.userId,
       metadata: {
         userId: session.userId,
@@ -2459,6 +2464,7 @@ const handleCreateCheckoutSession = async (request, env) => {
         credits: String(pack.credits),
         packId: pack.id,
         priceId: pack.priceId,
+        ...(resumeQuery ? { resumeCardId } : {}),
       },
       integration_identifier: `card-genie-credits-${integrationSuffix}`,
     })

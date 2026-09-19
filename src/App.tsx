@@ -361,13 +361,31 @@ type CheckoutResumeState = {
   smsConsentConfirmed: boolean
 }
 
-const readCheckoutResume = (): CheckoutResumeState | null => {
-  try {
-    const raw = window.sessionStorage.getItem(checkoutResumeStorageKey)
-    if (!raw) {
-      return null
-    }
+const isCheckoutResumeCardId = (value: unknown) =>
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim())
 
+/** Drop huge data-URL covers — they exceed storage quotas and are recoverable via cardId. */
+const slimCheckoutResumeCard = (card?: GeneratedCard | null): GeneratedCard | undefined => {
+  if (!card?.message) {
+    return undefined
+  }
+
+  const imageUrl = card.imageUrl?.startsWith('data:') ? '' : card.imageUrl || ''
+  return {
+    imageUrl,
+    message: card.message,
+    closing: card.closing,
+    messageVariants: card.messageVariants,
+    selectedLength: card.selectedLength,
+  }
+}
+
+const parseCheckoutResume = (raw: string | null): CheckoutResumeState | null => {
+  if (!raw) {
+    return null
+  }
+
+  try {
     const parsed = JSON.parse(raw) as CheckoutResumeState
     if (parsed?.version !== 1 || !parsed.details) {
       return null
@@ -375,7 +393,6 @@ const readCheckoutResume = (): CheckoutResumeState | null => {
 
     // Ignore stale snapshots older than 6 hours.
     if (parsed.savedAt && Date.now() - parsed.savedAt > 6 * 60 * 60 * 1000) {
-      window.sessionStorage.removeItem(checkoutResumeStorageKey)
       return null
     }
 
@@ -385,16 +402,82 @@ const readCheckoutResume = (): CheckoutResumeState | null => {
   }
 }
 
+const readCheckoutResume = (): CheckoutResumeState | null => {
+  try {
+    // Prefer localStorage — Stripe redirects often wipe sessionStorage on mobile browsers.
+    const localRaw = window.localStorage.getItem(checkoutResumeStorageKey)
+    const localResume = parseCheckoutResume(localRaw)
+    if (localRaw && !localResume) {
+      window.localStorage.removeItem(checkoutResumeStorageKey)
+    }
+    if (localResume) {
+      return localResume
+    }
+
+    const sessionRaw = window.sessionStorage.getItem(checkoutResumeStorageKey)
+    const sessionResume = parseCheckoutResume(sessionRaw)
+    if (sessionRaw && !sessionResume) {
+      window.sessionStorage.removeItem(checkoutResumeStorageKey)
+    }
+    return sessionResume
+  } catch {
+    return null
+  }
+}
+
 const writeCheckoutResume = (state: CheckoutResumeState) => {
-  const payload = JSON.stringify(state)
-  window.sessionStorage.setItem(checkoutResumeStorageKey, payload)
+  const slimCard = slimCheckoutResumeCard(state.card)
+  const payload = JSON.stringify({
+    ...state,
+    ...(slimCard ? { card: slimCard } : { card: undefined }),
+  })
+  let wrote = false
+
+  try {
+    window.localStorage.setItem(checkoutResumeStorageKey, payload)
+    wrote = true
+  } catch {
+    // Private browsing or full storage — try sessionStorage next.
+  }
+
+  try {
+    window.sessionStorage.setItem(checkoutResumeStorageKey, payload)
+    wrote = true
+  } catch {
+    // Ignore session storage failures; localStorage may still hold the resume.
+  }
+
+  if (!wrote) {
+    throw new Error('Unable to stash checkout resume state.')
+  }
 }
 
 const clearCheckoutResume = () => {
   try {
+    window.localStorage.removeItem(checkoutResumeStorageKey)
+  } catch {
+    // Ignore storage failures.
+  }
+
+  try {
     window.sessionStorage.removeItem(checkoutResumeStorageKey)
   } catch {
     // Ignore storage failures.
+  }
+}
+
+const clearCheckoutResumeQueryParam = () => {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('resume')) {
+      return
+    }
+    params.delete('resume')
+    const nextQuery = params.toString()
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`
+    window.history.replaceState({}, '', nextUrl)
+  } catch {
+    // Ignore history failures.
   }
 }
 
@@ -1718,33 +1801,73 @@ function App() {
       return
     }
 
-    const resume = readCheckoutResume()
-    if (!resume || (!resume.cardId && !resume.card)) {
+    const params = new URLSearchParams(window.location.search)
+    const urlResumeCardId = params.get('resume')
+    const storedResume = readCheckoutResume()
+    const resumeCardId =
+      (isCheckoutResumeCardId(urlResumeCardId) && urlResumeCardId.trim()) ||
+      (isCheckoutResumeCardId(storedResume?.cardId) && storedResume?.cardId) ||
+      ''
+
+    const resume: CheckoutResumeState | null = storedResume
+      ? {
+          ...storedResume,
+          cardId: resumeCardId || storedResume.cardId,
+        }
+      : resumeCardId
+        ? {
+            version: 1,
+            savedAt: Date.now(),
+            cardId: resumeCardId,
+            details: initialDetails,
+            step: 'inside',
+            hasViewedFront: true,
+            hasViewedInside: true,
+            hasSentCurrentCard: false,
+            deliveryMethod: 'email',
+            deliveryDestinations: [''],
+            showSenderCopyField: false,
+            senderCopyEmail: '',
+            smsConsentConfirmed: false,
+          }
+        : null
+
+    if (!resume || (!resume.cardId && !resume.card?.message)) {
       return
     }
 
     let cancelled = false
 
     const restoreAfterCheckout = async () => {
-      setDetails(resume.details)
-      setCardGreeting(resume.greeting ?? null)
-      setCardSignature(resume.signature ?? null)
+      const hasStoredDetails = Boolean(
+        storedResume &&
+          (storedResume.details.recipientName ||
+            storedResume.details.senderName ||
+            storedResume.details.occasion ||
+            storedResume.details.keyDetails),
+      )
+      if (hasStoredDetails && storedResume) {
+        setDetails(storedResume.details)
+        setCardGreeting(storedResume.greeting ?? null)
+        setCardSignature(storedResume.signature ?? null)
+        setHasSentCurrentCard(Boolean(storedResume.hasSentCurrentCard))
+        setDeliveryMethod(storedResume.deliveryMethod === 'text' ? 'text' : 'email')
+        setDeliveryDestinations(
+          Array.isArray(storedResume.deliveryDestinations) && storedResume.deliveryDestinations.length > 0
+            ? storedResume.deliveryDestinations
+            : [''],
+        )
+        setShowSenderCopyField(Boolean(storedResume.showSenderCopyField))
+        setSenderCopyEmail(storedResume.senderCopyEmail || '')
+        setSmsConsentConfirmed(Boolean(storedResume.smsConsentConfirmed))
+      }
       setHasViewedFront(true)
       setHasViewedInside(true)
-      setHasSentCurrentCard(Boolean(resume.hasSentCurrentCard))
-      setDeliveryMethod(resume.deliveryMethod === 'text' ? 'text' : 'email')
-      setDeliveryDestinations(
-        Array.isArray(resume.deliveryDestinations) && resume.deliveryDestinations.length > 0
-          ? resume.deliveryDestinations
-          : [''],
-      )
-      setShowSenderCopyField(Boolean(resume.showSenderCopyField))
-      setSenderCopyEmail(resume.senderCopyEmail || '')
-      setSmsConsentConfirmed(Boolean(resume.smsConsentConfirmed))
       setShowEditor(false)
       setShowAccountPage(false)
 
-      let restoredCard: GeneratedCard | null = resume.card || null
+      let restoredCard: GeneratedCard | null =
+        resume.card?.imageUrl && !resume.card.imageUrl.startsWith('data:') ? resume.card : null
       let restoredShared: SharedCard | null = null
 
       if (resume.cardId) {
@@ -1765,6 +1888,17 @@ function App() {
               ...shared.card,
               message: copy.message,
               closing: copy.closing,
+              messageVariants: resume.card?.messageVariants,
+              selectedLength: resume.card?.selectedLength,
+            }
+            if (!hasStoredDetails) {
+              setDetails((current) => ({
+                ...current,
+                recipientName: shared.details.recipientName || current.recipientName,
+                recipientType: shared.details.recipientType || current.recipientType,
+                senderName: shared.details.senderName || current.senderName,
+                occasion: shared.details.occasion || current.occasion,
+              }))
             }
             if (shared.greeting) {
               setCardGreeting(shared.greeting)
@@ -1782,7 +1916,14 @@ function App() {
         return
       }
 
-      if (!restoredCard) {
+      if (!restoredCard?.imageUrl) {
+        if (hasStoredDetails) {
+          clearCheckoutResume()
+          clearCheckoutResumeQueryParam()
+          setDeliveryNotice(
+            'Welcome back — your recipients were restored, but we could not reload the card cover. Open the card link from your account or generate again.',
+          )
+        }
         return
       }
 
@@ -1802,6 +1943,7 @@ function App() {
 
       setStep(resume.hasViewedInside || resume.step === 'inside' ? 'inside' : 'front')
       clearCheckoutResume()
+      clearCheckoutResumeQueryParam()
       setDeliveryNotice('Welcome back — your card and recipients are ready to send.')
       window.setTimeout(() => {
         document.querySelector('.delivery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -2621,8 +2763,10 @@ function App() {
 
     try {
       // Stripe leaves the page — stash card + recipients so checkout return can restore them.
+      let resumeCardId: string | undefined
+
       if (card) {
-        let resumeCardId = sharedCard?.id
+        resumeCardId = sharedCard?.id
         let resumeShareUrl = sharedCard?.shareUrl
 
         try {
@@ -2630,7 +2774,13 @@ function App() {
           resumeCardId = shared.id
           resumeShareUrl = shared.shareUrl
         } catch {
-          // Still try to resume from in-memory card if save fails.
+          // Keep any previously saved card id; otherwise refuse to leave the page.
+          if (!resumeCardId) {
+            setCreditNotice(
+              'Could not save your card before checkout. Please try again so it is not lost when you return.',
+            )
+            return
+          }
         }
 
         const resumeBase: CheckoutResumeState = {
@@ -2639,6 +2789,8 @@ function App() {
           cardId: resumeCardId,
           shareUrl: resumeShareUrl,
           details,
+          // Never persist the full data-URL cover — localStorage quotas wipe the whole snapshot.
+          card: slimCheckoutResumeCard(card),
           greeting: cardGreeting,
           signature: cardSignature,
           step: hasViewedInside ? 'inside' : hasViewedFront ? 'front' : step,
@@ -2653,13 +2805,9 @@ function App() {
         }
 
         try {
-          writeCheckoutResume({ ...resumeBase, card })
+          writeCheckoutResume(resumeBase)
         } catch {
-          try {
-            writeCheckoutResume(resumeBase)
-          } catch {
-            // If storage is full, checkout still proceeds; restore may be incomplete.
-          }
+          // Resume URL still carries cardId; recipients may be lost but the card can reload.
         }
       }
 
@@ -2669,7 +2817,11 @@ function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accountSession.token}`,
         },
-        body: JSON.stringify({ packId: pack.id, priceId: pack.priceId }),
+        body: JSON.stringify({
+          packId: pack.id,
+          priceId: pack.priceId,
+          ...(resumeCardId ? { resumeCardId } : {}),
+        }),
       })
       const data = await getApiJson(response, 'Unable to start checkout.')
       if (!response.ok || !data.url) {
