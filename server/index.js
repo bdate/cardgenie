@@ -1218,10 +1218,8 @@ Rules:
 
 const generateImageFromPrompt = async (openai, prompt) => {
   const imageResponse = await openai.images.generate({
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
+    ...buildImageModelParams(),
     prompt,
-    size: COVER_IMAGE_SIZE,
-    quality: 'medium',
   })
 
   return getGeneratedImageUrl(imageResponse, 'OpenAI did not return an image.')
@@ -1247,17 +1245,41 @@ const generateImage = async (
   return generateImageFromPrompt(openai, prompt)
 }
 
-const getGeneratedImageUrl = (imageResponse, fallbackMessage) => {
-  const imageBase64 = imageResponse.data?.[0]?.b64_json
-  const imageUrl = imageBase64
-    ? `data:image/png;base64,${imageBase64}`
-    : imageResponse.data?.[0]?.url
+const isGptImageModel = (model) => /gpt-image/i.test(String(model || ''))
 
-  if (!imageUrl) {
-    throw new Error(fallbackMessage)
+const buildImageModelParams = () => {
+  const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare'
+  const params = {
+    model,
+    size: COVER_IMAGE_SIZE,
+    quality: 'medium',
   }
 
-  return imageUrl
+  if (!isGptImageModel(model)) {
+    params.response_format = 'b64_json'
+  }
+
+  return params
+}
+
+/** Always return a data URL so browsers never depend on expiring/CORS-blocked OpenAI URLs. */
+const getGeneratedImageUrl = async (imageResponse, fallbackMessage) => {
+  const item = imageResponse?.data?.[0]
+  if (item?.b64_json) {
+    return `data:image/png;base64,${item.b64_json}`
+  }
+
+  if (item?.url) {
+    const response = await fetch(item.url)
+    if (!response.ok) {
+      throw new Error(fallbackMessage)
+    }
+    const contentType = (response.headers.get('content-type') || 'image/png').split(';')[0].trim() || 'image/png'
+    const base64 = Buffer.from(await response.arrayBuffer()).toString('base64')
+    return `data:${contentType};base64,${base64}`
+  }
+
+  throw new Error(fallbackMessage)
 }
 
 const imageUrlToFile = async (imageUrl, fileName = 'current-cover.png') => {
@@ -1288,18 +1310,33 @@ const referenceImagesToFiles = (referenceImages) =>
 
 const editImageWithFiles = async (openai, prompt, imageFiles) => {
   const imageResponse = await openai.images.edit({
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
+    ...buildImageModelParams(),
     image: imageFiles,
     prompt,
-    size: COVER_IMAGE_SIZE,
-    quality: 'medium',
   })
 
   return getGeneratedImageUrl(imageResponse, 'OpenAI did not return an edited image.')
 }
 
-const editImage = async (openai, details, refinement, currentImageUrl, referenceImages = [], likenessBrief = '') => {
-  const currentImage = await imageUrlToFile(currentImageUrl)
+const editImage = async (
+  openai,
+  details,
+  refinement,
+  currentImageUrl,
+  referenceImages = [],
+  likenessBrief = '',
+  resolveCurrentImageUrl,
+) => {
+  let sourceUrl = typeof currentImageUrl === 'string' ? currentImageUrl.trim() : ''
+  if ((!sourceUrl || sourceUrl.length < 64) && typeof resolveCurrentImageUrl === 'function') {
+    sourceUrl = (await resolveCurrentImageUrl()) || ''
+  }
+
+  if (!sourceUrl) {
+    throw new Error('Unable to load the current cover image for editing.')
+  }
+
+  const currentImage = await imageUrlToFile(sourceUrl)
   const referenceFiles = await referenceImagesToFiles(referenceImages)
   const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details.imageStyle)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
@@ -2315,7 +2352,8 @@ app.post('/api/refine-image', async (req, res) => {
     })
   }
 
-  const { details, refinement, imageMode, currentImageUrl, referenceImages: rawReferenceImages } = req.body
+  const { details, refinement, imageMode, currentImageUrl, cardId, referenceImages: rawReferenceImages } =
+    req.body
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
 
@@ -2337,7 +2375,21 @@ app.post('/api/refine-image', async (req, res) => {
     const imageUrl =
       imageMode === 'new'
         ? await generateImage(openai, details, refinement, 'new', referenceImages, likenessBrief)
-        : await editImage(openai, details, refinement, currentImageUrl, referenceImages, likenessBrief)
+        : await editImage(
+            openai,
+            details,
+            refinement,
+            currentImageUrl,
+            referenceImages,
+            likenessBrief,
+            async () => {
+              const id = typeof cardId === 'string' ? cardId.trim() : ''
+              if (!id) {
+                return ''
+              }
+              return cardStore.get(id)?.card?.imageUrl?.trim() || ''
+            },
+          )
 
     res.json({ imageUrl })
   } catch (error) {

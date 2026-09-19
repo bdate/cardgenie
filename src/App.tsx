@@ -803,9 +803,32 @@ const getImageMimeType = (imageUrl: string) => {
 }
 
 const imageUrlToFile = async (imageUrl: string, fileName: string) => {
-  const response = await fetch(imageUrl)
-  const blob = await response.blob()
-  return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
+  // Prefer blob decode so Safari can share/save large covers reliably.
+  try {
+    const response = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'force-cache',
+    })
+    if (!response.ok) {
+      throw new Error(`Unable to fetch image (${response.status}).`)
+    }
+    const blob = await response.blob()
+    if (!blob || blob.size < 32) {
+      throw new Error('Image response was empty.')
+    }
+    return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
+  } catch {
+    // Fall through for cases fetch cannot handle.
+  }
+
+  if (imageUrl.startsWith('data:')) {
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+    return new File([blob], fileName, { type: blob.type || getImageMimeType(imageUrl) })
+  }
+
+  throw new Error('Unable to prepare that image for saving.')
 }
 
 const assertUsableReferencePhoto = (width: number, height: number) => {
@@ -1171,6 +1194,25 @@ const createCoverThumbDataUrl = async (imageUrl: string, cardId?: string) => {
     const width = Math.max(1, Math.round(loaded.width * scale))
     const height = Math.max(1, Math.round(loaded.height * scale))
     return upscaleImageToDataUrl(loaded.source, width, height, 'image/jpeg', 0.72)
+  } finally {
+    loaded.dispose?.()
+  }
+}
+
+/** Compact JPEG cover for API revise/save — avoids shipping multi‑MB PNG data URLs on mobile. */
+const COVER_API_MAX_EDGE = 1280
+
+const prepareCoverJpegForApi = async (imageUrl?: string, cardId?: string) => {
+  const loaded = await loadCoverImageForPrint({ imageUrl, cardId })
+  try {
+    const scale = Math.min(1, COVER_API_MAX_EDGE / Math.max(loaded.width, loaded.height))
+    const width = Math.max(1, Math.round(loaded.width * scale))
+    const height = Math.max(1, Math.round(loaded.height * scale))
+    const jpeg = upscaleImageToDataUrl(loaded.source, width, height, 'image/jpeg', 0.88)
+    if (!jpeg) {
+      throw new Error('Unable to prepare the current cover for editing.')
+    }
+    return jpeg
   } finally {
     loaded.dispose?.()
   }
@@ -3454,9 +3496,31 @@ function App() {
     setSaveNotice('')
     setAdminPrintNotice('')
 
+    const resolveShareFile = async () => {
+      try {
+        return await imageUrlToFile(imageUrl, fileName)
+      } catch {
+        const loaded = await loadCoverImageForPrint({
+          imageUrl,
+          cardId: sharedCard?.id,
+        })
+        try {
+          const jpeg =
+            upscaleImageToDataUrl(loaded.source, loaded.width, loaded.height, 'image/jpeg', 0.92) ||
+            upscaleImageToDataUrl(loaded.source, loaded.width, loaded.height, 'image/png')
+          if (!jpeg) {
+            throw new Error('Unable to prepare that image for saving.')
+          }
+          return imageUrlToFile(jpeg, fileName.replace(/\.\w+$/, '.jpg'))
+        } finally {
+          loaded.dispose?.()
+        }
+      }
+    }
+
     if (prefersPhotoSave) {
       try {
-        const imageFile = await imageUrlToFile(imageUrl, fileName)
+        const imageFile = await resolveShareFile()
 
         if (
           typeof navigator.share === 'function' &&
@@ -4109,6 +4173,30 @@ function App() {
     setIsRefiningImage(true)
 
     try {
+      let reviseCardId = sharedCard?.id
+      let currentImageUrl: string | undefined
+
+      if (coverRefinementMode === 'revise') {
+        try {
+          currentImageUrl = await prepareCoverJpegForApi(card.imageUrl, sharedCard?.id)
+        } catch {
+          currentImageUrl = undefined
+        }
+
+        if (!reviseCardId) {
+          try {
+            const shared = await saveCurrentCard()
+            reviseCardId = shared.id
+          } catch {
+            // Continue with the compressed cover alone if save fails.
+          }
+        }
+
+        if (!currentImageUrl && !reviseCardId) {
+          throw new Error('Unable to prepare the current cover for editing. Please try again.')
+        }
+      }
+
       const response = await fetch(apiUrl('/api/refine-image'), {
         method: 'POST',
         headers: {
@@ -4118,7 +4206,12 @@ function App() {
           details,
           refinement: imageRefinement,
           imageMode: coverRefinementMode,
-          currentImageUrl: coverRefinementMode === 'revise' ? card.imageUrl : undefined,
+          ...(coverRefinementMode === 'revise'
+            ? {
+                ...(currentImageUrl ? { currentImageUrl } : {}),
+                ...(reviseCardId ? { cardId: reviseCardId } : {}),
+              }
+            : {}),
           referenceImages: referenceImagePayload,
         }),
       })
@@ -4225,7 +4318,7 @@ function App() {
     }
   }
 
-  const buildCurrentCardPayload = () => {
+  const buildCurrentCardPayload = (coverImageUrl?: string) => {
     if (!card) {
       throw new Error('Create a card before delivering it.')
     }
@@ -4233,7 +4326,7 @@ function App() {
     return {
       details,
       card: {
-        imageUrl: card.imageUrl,
+        imageUrl: coverImageUrl || card.imageUrl,
         message: cardMessage,
         closing: cardClosing,
       },
@@ -4244,8 +4337,14 @@ function App() {
 
   const saveCurrentCard = async () => {
     let coverThumb = ''
+    let storedCover = card!.imageUrl
     try {
-      coverThumb = await createCoverThumbDataUrl(card!.imageUrl, sharedCard?.id)
+      storedCover = await prepareCoverJpegForApi(card!.imageUrl, sharedCard?.id)
+    } catch {
+      storedCover = card!.imageUrl
+    }
+    try {
+      coverThumb = await createCoverThumbDataUrl(storedCover, sharedCard?.id)
     } catch {
       coverThumb = ''
     }
@@ -4256,7 +4355,7 @@ function App() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        ...buildCurrentCardPayload(),
+        ...buildCurrentCardPayload(storedCover),
         ...(coverThumb ? { coverThumb } : {}),
       }),
     })

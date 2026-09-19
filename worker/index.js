@@ -1795,17 +1795,53 @@ Rules:
   }
 }
 
-const getImageUrl = (imageResponse, fallbackMessage) => {
-  const imageBase64 = imageResponse.data?.[0]?.b64_json
-  const imageUrl = imageBase64
-    ? `data:image/png;base64,${imageBase64}`
-    : imageResponse.data?.[0]?.url
+const arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize)
+    binary += String.fromCharCode.apply(null, chunk)
+  }
+  return btoa(binary)
+}
 
-  if (!imageUrl) {
-    throw new Error(fallbackMessage)
+const isGptImageModel = (model) => /gpt-image/i.test(String(model || ''))
+
+const buildImageModelParams = (env) => {
+  const model = env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare'
+  const params = {
+    model,
+    size: COVER_IMAGE_SIZE,
+    quality: 'medium',
   }
 
-  return imageUrl
+  // DALL·E defaults to temporary URLs — force base64. GPT Image already returns b64_json.
+  if (!isGptImageModel(model)) {
+    params.response_format = 'b64_json'
+  }
+
+  return params
+}
+
+/** Always return a data URL so browsers never depend on expiring/CORS-blocked OpenAI URLs. */
+const getImageUrl = async (imageResponse, fallbackMessage) => {
+  const item = imageResponse?.data?.[0]
+  if (item?.b64_json) {
+    return `data:image/png;base64,${item.b64_json}`
+  }
+
+  if (item?.url) {
+    const response = await fetch(item.url)
+    if (!response.ok) {
+      throw new Error(fallbackMessage)
+    }
+    const contentType = (response.headers.get('content-type') || 'image/png').split(';')[0].trim() || 'image/png'
+    const base64 = arrayBufferToBase64(await response.arrayBuffer())
+    return `data:${contentType};base64,${base64}`
+  }
+
+  throw new Error(fallbackMessage)
 }
 
 const generateImage = async (
@@ -1827,10 +1863,8 @@ const generateImage = async (
   }
 
   const imageResponse = await openai.images.generate({
-    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
+    ...buildImageModelParams(env),
     prompt,
-    size: COVER_IMAGE_SIZE,
-    quality: 'medium',
   })
 
   return getImageUrl(imageResponse, 'OpenAI did not return an image.')
@@ -1874,11 +1908,9 @@ const referenceImagesToFiles = (referenceImages) =>
 
 const editImageWithFiles = async (openai, env, prompt, imageFiles) => {
   const imageResponse = await openai.images.edit({
-    model: env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
+    ...buildImageModelParams(env),
     image: imageFiles,
     prompt,
-    size: COVER_IMAGE_SIZE,
-    quality: 'medium',
   })
 
   return getImageUrl(imageResponse, 'OpenAI did not return an edited image.')
@@ -1892,8 +1924,20 @@ const editImage = async (
   currentImageUrl,
   referenceImages = [],
   likenessBrief = '',
+  cardId = '',
 ) => {
-  const currentImage = await imageUrlToFile(currentImageUrl)
+  let sourceUrl = typeof currentImageUrl === 'string' ? currentImageUrl.trim() : ''
+
+  if ((!sourceUrl || sourceUrl.length < 64) && cardId) {
+    const record = await getCardRecord(env, cardId)
+    sourceUrl = record?.card?.imageUrl?.trim() || ''
+  }
+
+  if (!sourceUrl) {
+    throw new Error('Unable to load the current cover image for editing.')
+  }
+
+  const currentImage = await imageUrlToFile(sourceUrl)
   const referenceFiles = await referenceImagesToFiles(referenceImages)
   const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details.imageStyle)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
@@ -3455,7 +3499,7 @@ const handleRefineImage = async (request, env) => {
     return missingKeyResponse
   }
 
-  const { details, refinement, imageMode, currentImageUrl, referenceImages: rawReferenceImages } =
+  const { details, refinement, imageMode, currentImageUrl, cardId, referenceImages: rawReferenceImages } =
     (await readJson(request)) || {}
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
@@ -3474,7 +3518,16 @@ const handleRefineImage = async (request, env) => {
     const imageUrl =
       imageMode === 'new'
         ? await generateImage(openai, env, details, refinement, 'new', referenceImages, likenessBrief)
-        : await editImage(openai, env, details, refinement, currentImageUrl, referenceImages, likenessBrief)
+        : await editImage(
+            openai,
+            env,
+            details,
+            refinement,
+            currentImageUrl,
+            referenceImages,
+            likenessBrief,
+            typeof cardId === 'string' ? cardId.trim() : '',
+          )
 
     return jsonResponse(request, env, { imageUrl })
   } catch (error) {
