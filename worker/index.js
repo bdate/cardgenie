@@ -1483,7 +1483,7 @@ const isDefaultPrintMailFrom = (mailFrom) => {
 const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipTo, details, shopperEmail }) => {
   const occasion = String(details?.occasion || '').trim() || 'greeting card'
   const recipient = String(details?.recipientName || shipTo.name || 'recipient').trim()
-  const subject = `Print card order · ${orderCode} · ${shipTo.name}`
+  const subject = `Genie card order · ${orderCode} · ${shipTo.name}`
   const text = [
     'New printed card order from Card Genie.',
     '',
