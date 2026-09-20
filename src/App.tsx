@@ -2087,6 +2087,7 @@ function App() {
   const interviewListenDesiredRef = useRef(false)
   const interviewBaseDraftRef = useRef('')
   const interviewLatestDraftRef = useRef('')
+  const interviewThreadRef = useRef<HTMLDivElement | null>(null)
   const isInterviewingRef = useRef(false)
   const showCardInterviewRef = useRef(false)
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
@@ -3079,6 +3080,14 @@ function App() {
     setError('')
   }
 
+  const scrollInterviewThreadToBottom = () => {
+    const thread = interviewThreadRef.current
+    if (!thread) {
+      return
+    }
+    thread.scrollTop = thread.scrollHeight
+  }
+
   const stopInterviewListening = () => {
     interviewListenDesiredRef.current = false
     const recognition = interviewRecognitionRef.current
@@ -3312,8 +3321,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: nextMessages,
-          // "I'm done" means fill the form now — don't keep asking follow-ups.
-          forceReady: true,
+          // After one follow-up answer, finish with best effort so we don't loop forever.
+          forceReady: nextMessages.filter((entry) => entry.role === 'user').length >= 2,
         }),
       })
       const data = await getApiJson(response, 'Unable to continue that conversation.')
@@ -3325,7 +3334,7 @@ function App() {
         data.details && typeof data.details === 'object'
           ? (data.details as Partial<CardDetails>)
           : null
-      const isReady = data.status === 'ready' || Boolean(details)
+      const isReady = data.status === 'ready'
 
       const assistantMessage =
         typeof data.assistantMessage === 'string' && data.assistantMessage.trim()
@@ -3335,8 +3344,11 @@ function App() {
             : 'Tell me a bit more so I can fill in the form.'
       setInterviewMessages((current) => [...current, { role: 'assistant', content: assistantMessage }])
 
-      if (isReady && details) {
+      if (details) {
         applyInterviewDetails(details)
+      }
+
+      if (isReady && details) {
         setInterviewComplete(true)
         setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
         window.setTimeout(() => {
@@ -3344,7 +3356,11 @@ function App() {
         }, 80)
       } else {
         setInterviewComplete(false)
-        setInterviewNotice('Genie has a quick follow-up in the chat. Type your reply, then tap I’m done.')
+        setInterviewNotice(
+          details
+            ? 'I filled in what I know below — answer the follow-up, then tap I’m done again.'
+            : 'Genie has a quick follow-up — answer it, then tap I’m done again.',
+        )
         startInterviewListening({ announce: false })
       }
     } catch (caughtError) {
@@ -3364,6 +3380,13 @@ function App() {
       stopInterviewListening()
     }
   }, [])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      scrollInterviewThreadToBottom()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [interviewMessages, interviewNotice, isInterviewing])
 
   const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
 
@@ -6693,7 +6716,7 @@ function App() {
                   Close
                 </button>
               </div>
-              <div className="card-interview-thread" aria-live="polite">
+              <div className="card-interview-thread" aria-live="polite" ref={interviewThreadRef}>
                 {interviewMessages.map((entry, index) => (
                   <div
                     className={`card-interview-bubble is-${entry.role}`}

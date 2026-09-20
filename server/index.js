@@ -2788,7 +2788,7 @@ app.post('/api/card-interview', async (req, res) => {
     return res.status(400).json({ error: 'Tell me about the card you want to create.' })
   }
 
-  const shouldForceReady = forceReady || userTurns >= 3
+  const shouldForceReady = forceReady || userTurns >= 2
 
   try {
     const openai = getOpenAI()
@@ -2803,7 +2803,10 @@ app.post('/api/card-interview', async (req, res) => {
           role: 'system',
           content: `You help shoppers fill out a greeting-card form for Card Genie.
 Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
-Ask at most 1 clarifying question, and only if recipient or occasion is missing. Prefer status "ready" when you know who it's for, the occasion, and the story. Leave senderName blank if unknown — do not ask only for the sender's name.
+Essentials for "ready": senderName, recipientName, occasion, keyDetails.
+If an essential is missing, status "ask" with one short question (prefer asking for the sender name when that is missing).
+If all essentials are known, status "ready" immediately — no optional follow-ups (do not ask who else to include, tone, or relation).
+Guess recipientType when unclear. Fill details as far as you can even when asking.
 assistantMessage is a short chat reply, not the card message body.
 tone must be one of: ${localInterviewTones.join(', ')}.
 ${shouldForceReady ? 'You MUST return status "ready" now with best-effort details.' : ''}`,
@@ -2855,7 +2858,10 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       keyDetails: String(parsed.details?.keyDetails || '').trim(),
     }
     let status = String(parsed.status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
-    if (shouldForceReady || (details.recipientName && details.occasion && details.keyDetails)) {
+    if (
+      shouldForceReady ||
+      (details.senderName && details.recipientName && details.occasion && details.keyDetails)
+    ) {
       status = 'ready'
     }
 

@@ -3706,7 +3706,7 @@ const CARD_INTERVIEW_TONES = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Roman
 const CARD_INTERVIEW_MAX_USER_TURNS = 3
 
 const cardInterviewSystemPrompt = `You help shoppers fill out a greeting-card form for Card Genie.
-Have a short mini-interview: understand their story, ask at most 1 clarifying question only when something essential is missing, then fill the form.
+They tap “I’m done” after speaking. You either ask one short follow-up for a missing essential, or fill the form.
 
 Return ONLY valid JSON with this shape:
 {
@@ -3722,18 +3722,20 @@ Return ONLY valid JSON with this shape:
   }
 }
 
+Essentials for status "ready": senderName, recipientName, occasion, and useful keyDetails.
 Rules:
-- status "ready" when you know who the card is for, the occasion, and have useful keyDetails. senderName may be left blank if they did not give a name.
-- Do NOT ask only for the sender's name or whether anyone else should be included — leave senderName empty and still return "ready".
-- If relation is unclear, make a reasonable guess (friends, couple, family, coworkers) rather than asking.
+- If an essential is missing, return status "ask" with exactly one short question in assistantMessage about the most important gap (prefer asking for the sender name if that is missing).
+- If all essentials are present, return status "ready" immediately — do not ask optional or polite follow-ups.
+- Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
+- If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
-- keyDetails should be a concise single-paragraph summary of memories/scene ideas for the cover and message. Do not write the finished inside note.
-- assistantMessage is your short chat reply to the shopper (acknowledgment or one question). Never put the greeting-card message body in assistantMessage.
-- If the shopper already gave a full story (who it's for + what happened), go straight to status "ready".
+- keyDetails should be a concise single-paragraph summary of memories/scene ideas. Do not write the finished inside note.
+- assistantMessage is your short chat reply (acknowledgment + one question, or “I filled the form”). Never put the card message body there.
 - Never invent trademarks, celebrity likenesses, or private facts they did not share.
-- Keep assistantMessage warm, brief, and conversational (1-3 sentences).
-- When status is "ready", say you filled the form and they can edit anything before creating the card.
-- Output compact JSON on one logical structure. Escape any newlines inside strings.`
+- Keep assistantMessage warm and brief (1-3 sentences).
+- When status is "ready", say you filled the form and they can edit before creating the card.
+- Fill details as far as you can even when status is "ask".
+- Output compact JSON. Escape any newlines inside strings.`
 
 const normalizeInterviewDetails = (raw = {}) => {
   const toneRaw = String(raw.tone || 'Heartfelt').trim()
@@ -3751,7 +3753,7 @@ const normalizeInterviewDetails = (raw = {}) => {
 }
 
 const interviewDetailsAreReady = (details) =>
-  Boolean(details.recipientName && details.occasion && details.keyDetails)
+  Boolean(details.senderName && details.recipientName && details.occasion && details.keyDetails)
 
 const getInterviewResponseText = (response) => {
   const direct = String(response?.output_text || '').trim()
@@ -3844,7 +3846,7 @@ const handleCardInterview = async (request, env) => {
     return jsonResponse(request, env, { error: 'Let’s finish this in the form below.' }, 400)
   }
 
-  const shouldForceReady = forceReady || userTurns >= CARD_INTERVIEW_MAX_USER_TURNS
+  const shouldForceReady = forceReady || userTurns >= 2
   const transcript = messages
     .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
     .join('\n')
