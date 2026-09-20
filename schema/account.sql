@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_error_code TEXT,
   admin_notes TEXT,
   mailing_address_json TEXT,
+  preferred_name TEXT,
   updated_at TEXT NOT NULL
 );
 

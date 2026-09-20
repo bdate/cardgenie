@@ -49,6 +49,11 @@ const ensureUserProfileColumns = async (db) => {
   } catch {
     // Column already exists.
   }
+  try {
+    await db.prepare(`ALTER TABLE users ADD COLUMN preferred_name TEXT`).run()
+  } catch {
+    // Column already exists.
+  }
 }
 
 const DEFAULT_PROFILE_MAIL_FROM = {
@@ -247,6 +252,7 @@ const mapUser = (row) => {
     id: row.id,
     phoneE164: row.phone_e164,
     email: row.email || '',
+    preferredName: String(row.preferred_name || '').trim(),
     mailingAddress: parseMailingAddressJson(row.mailing_address_json),
     creditBalance: row.credit_balance ?? 0,
     creditsGranted: row.credits_granted ?? 0,
@@ -1389,7 +1395,7 @@ export const saveAccountEmail = async (env, { userId, email }) => {
   return normalized
 }
 
-export const updateAccountProfile = async (env, { userId, email, mailingAddress }) => {
+export const updateAccountProfile = async (env, { userId, email, preferredName, mailingAddress }) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
   }
@@ -1415,6 +1421,11 @@ export const updateAccountProfile = async (env, { userId, email, mailingAddress 
       nextEmail = ''
       emailUpdatedAt = null
     }
+  }
+
+  let nextPreferredName = String(existing.preferred_name || '').trim()
+  if (typeof preferredName === 'string') {
+    nextPreferredName = preferredName.trim().replace(/\s+/g, ' ').slice(0, 60)
   }
 
   let mailingJson = existing.mailing_address_json || null
@@ -1461,17 +1472,19 @@ export const updateAccountProfile = async (env, { userId, email, mailingAddress 
     `UPDATE users
      SET email = ?,
          email_updated_at = ?,
+         preferred_name = ?,
          mailing_address_json = ?,
          updated_at = ?
      WHERE id = ?`,
   )
-    .bind(nextEmail || null, emailUpdatedAt, mailingJson, now, userId)
+    .bind(nextEmail || null, emailUpdatedAt, nextPreferredName || null, mailingJson, now, userId)
     .run()
 
   return mapUser({
     ...existing,
     email: nextEmail,
     email_updated_at: emailUpdatedAt,
+    preferred_name: nextPreferredName || null,
     mailing_address_json: mailingJson,
     updated_at: now,
   })

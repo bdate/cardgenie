@@ -25,6 +25,7 @@
   padding: 0;
   background: transparent;
   border-radius: 0;
+  align-items: center;
 }
 
 .brand-lockup-link {
@@ -74,6 +75,8 @@
 }
 
 .brand-wordmark-link {
+  display: inline-flex;
+  align-items: center;
   color: inherit;
   text-decoration: none;
   border-radius: 12px;
@@ -92,6 +95,8 @@
   line-height: 1;
   text-transform: none;
   padding-bottom: 4px;
+  position: relative;
+  top: 14px;
 }
 
 .brand:hover,
@@ -172,6 +177,91 @@
   gap: 8px;
   margin: 14px auto 0;
   max-width: 720px;
+}
+
+.preferred-name-prompt {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(63, 155, 145, 0.28);
+  border-radius: 16px;
+  padding: 12px 14px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.credit-details-toggle {
+  display: inline;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+.credit-details-panel {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(63, 155, 145, 0.28);
+  border-radius: 16px;
+  padding: 12px 36px 12px 14px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.credit-details-panel ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--gcu-dark-grey);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.credit-details-panel li + li {
+  margin-top: 4px;
+}
+
+.credit-details-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gcu-dark-teal);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.credit-details-close:hover,
+.credit-details-close:focus-visible {
+  background: rgba(63, 155, 145, 0.14);
+}
+
+.preferred-name-prompt p {
+  margin: 0;
+  color: var(--gcu-ink);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.preferred-name-prompt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.preferred-name-prompt-row input {
+  flex: 1 1 160px;
+  min-width: 140px;
 }
 
 .credit-wallet {

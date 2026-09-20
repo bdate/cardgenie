@@ -533,6 +533,15 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
 }
 
 const maxReferenceImages = 3
+const aiChoosesStyleLabel = 'AI chooses the best style for this card'
+const aiChoosesIllustratedStyles = [
+  'Watercolor greeting card illustration',
+  'Whimsical storybook illustration',
+  'Elegant botanical paper-cut style',
+  'Minimal modern flat vector art',
+  'Soft pastel nursery-book illustration',
+  'Premium editorial illustration',
+]
 
 const normalizeReferenceImages = (value) => {
   if (!Array.isArray(value)) {
@@ -544,7 +553,24 @@ const normalizeReferenceImages = (value) => {
     .slice(0, maxReferenceImages)
 }
 
-const buildImagePrompt = (details, refinement = '', imageMode = 'new') => `
+const isAiChoosesImageStyle = (imageStyle = '') => {
+  const style = String(imageStyle || '').trim()
+  return !style || /AI chooses the best style/i.test(style)
+}
+
+const buildAiChoosesStyleGuidance = (imageStyle = '', hasReferenceImages = false) => {
+  if (!isAiChoosesImageStyle(imageStyle)) {
+    return `- Use the selected visual style as the primary art direction: "${String(imageStyle).trim()}".`
+  }
+
+  if (hasReferenceImages) {
+    return `- The shopper left style as "${aiChoosesStyleLabel}" and provided people photos. Prefer "Photorealistic warm portrait photography" so likeness reads clearly. You may instead choose one illustrated medium from this list if it clearly fits better: ${aiChoosesIllustratedStyles.join('; ')}.`
+  }
+
+  return `- The shopper left style as "${aiChoosesStyleLabel}" and did not provide people photos. You MUST choose exactly one illustrated medium from this list: ${aiChoosesIllustratedStyles.join('; ')}. Do NOT use photorealistic or photographic styles.`
+}
+
+const buildImagePrompt = (details, refinement = '', imageMode = 'new', hasReferenceImages = false) => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
 The generated image must be portrait artwork at ${COVER_IMAGE_WIDTH}px wide by ${COVER_IMAGE_HEIGHT}px tall, composed for a greeting-card cover in standard 5x7 proportions. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
@@ -553,7 +579,7 @@ Occasion: ${details.occasion}
 Recipient: ${details.recipientName || details.recipientType}
 Relationship: ${details.recipientType}
 Tone: ${details.tone}
-Visual style: ${details.imageStyle || 'AI chooses the best style for this card'}
+Visual style: ${details.imageStyle || aiChoosesStyleLabel}
 Important personal context: ${details.keyDetails}
 
 Physical appearance from personal details:
@@ -581,7 +607,7 @@ Composition requirements:
 
 Cover text direction:
 - Use judgment based on the occasion, tone, recipient, and personal context.
-- Use the selected visual style as the primary art direction. If the style is "AI chooses the best style for this card", choose the medium that best fits the occasion and tone.
+${buildAiChoosesStyleGuidance(details.imageStyle, hasReferenceImages)}
 - For photorealistic styles, make it look like a natural, real photographed greeting-card cover scene with believable lighting, skin texture, fabric, and imperfections.
 - For "Comic book art", the entire cover must read as printed comic-book illustration: inked linework, color holds, screentone or halftone, and comic anatomy. If people are described from reference photos, they must appear as comic characters with a recognizable stylized likeness, never as photographed people.
 - For other illustrated styles such as vector, storybook, watercolor, paper-cut, poster, collage, or 3D, make the medium unmistakable and consistent across the whole image.
@@ -595,7 +621,9 @@ Cover text direction:
 Copyright and identity:
 - Do not depict trademarked superheroes, movie characters, logos, brands, or celebrity likenesses even if they are mentioned in the personal context.
 - If the sender mentions a copyrighted character or brand, translate it into original greeting-card imagery with the same feeling. For example, a heroic inventor in original red-and-gold armor rather than a trademarked superhero.
-- Stay in the selected art style. Never output a photograph unless the selected style is photorealistic.
+- Stay in the selected art style. Never output a photograph unless the selected style is photorealistic${
+  hasReferenceImages ? '' : ' (and never when no people photos were provided and style was left to AI)'
+}.
 
 Negative requirements:
 - No text, letters, numbers, captions, signs, banners, labels, posters, plaques, handwriting, or decorative typography within the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
@@ -1904,7 +1932,7 @@ const generateImage = async (
 ) => {
   const photoGuidance = buildAttachedPhotoGuidance(referenceImages.length > 0)
   const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
-  const prompt = `${buildImagePrompt(details, refinement, imageMode)}${photoGuidance}${likenessSection}`
+  const prompt = `${buildImagePrompt(details, refinement, imageMode, referenceImages.length > 0)}${photoGuidance}${likenessSection}`
   const referenceFiles = referenceImages.length > 0 ? await referenceImagesToFiles(referenceImages) : []
 
   if (referenceFiles.length > 0) {
@@ -2460,6 +2488,7 @@ const handleVerifyAccountOtp = async (request, env) => {
       token,
       phoneE164,
       email: user.email || '',
+      preferredName: user.preferredName || '',
       creditBalance: user.creditBalance ?? 2,
       isNew: account?.isNew === true,
       phoneVerifyBonusCredits: account?.isNew ? account.phoneVerifyBonusCredits || 2 : 0,
@@ -2866,6 +2895,7 @@ const handleGetAccount = async (request, env) => {
     ok: true,
     phoneE164: session.phoneE164,
     email: account?.email || '',
+    preferredName: account?.preferredName || '',
     mailingAddress: account?.mailingAddress || null,
     creditBalance: account?.creditBalance ?? null,
   })
@@ -2884,6 +2914,7 @@ const handleUpdateAccountProfile = async (request, env) => {
   try {
     const body = (await readJson(request)) || {}
     const email = typeof body.email === 'string' ? body.email : undefined
+    const preferredName = typeof body.preferredName === 'string' ? body.preferredName : undefined
     const mailingAddress =
       body.mailingAddress === null
         ? null
@@ -2894,6 +2925,7 @@ const handleUpdateAccountProfile = async (request, env) => {
     const account = await updateAccountProfile(env, {
       userId: session.userId,
       email,
+      preferredName,
       mailingAddress,
     })
 
@@ -2904,6 +2936,7 @@ const handleUpdateAccountProfile = async (request, env) => {
     return jsonResponse(request, env, {
       ok: true,
       email: account.email || '',
+      preferredName: account.preferredName || '',
       mailingAddress: account.mailingAddress || null,
       account,
     })

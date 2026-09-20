@@ -340,6 +340,8 @@ const staticPageRedirects: Record<string, string> = {
 const supportEmail = 'support@card-genie.com'
 const supportMailto = `mailto:${supportEmail}`
 const accountSessionStorageKey = 'cardGenieAccountSession'
+const preferredNamePromptStorageKey = (phoneE164: string) =>
+  `cardGeniePreferredNamePrompt:${String(phoneE164 || '').trim()}`
 const feedbackDismissStorageKey = 'cardGenieFeedbackDismissed'
 const feedbackCommentMaxLength = 280
 const thankYouPresets = [
@@ -1980,6 +1982,7 @@ function App() {
     return Number.isFinite(parsed) ? parsed : initialCreditBalance
   })
   const [showCreditMenu, setShowCreditMenu] = useState(false)
+  const [showCreditDetails, setShowCreditDetails] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
   const [adminView, setAdminView] = useState<'analytics' | 'reviews' | null>(null)
   const [accountHistory, setAccountHistory] = useState<{
@@ -1991,6 +1994,7 @@ function App() {
       creditsSpent?: number
       createdAt?: string
       email?: string
+      preferredName?: string
       mailingAddress?: MailingAddress | null
     } | null
     creditEvents?: Array<{
@@ -2046,6 +2050,10 @@ function App() {
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
   const [accountProfileEmail, setAccountProfileEmail] = useState('')
+  const [accountPreferredName, setAccountPreferredName] = useState('')
+  const [preferredNamePromptDraft, setPreferredNamePromptDraft] = useState('')
+  const [showPreferredNamePrompt, setShowPreferredNamePrompt] = useState(false)
+  const [isSavingPreferredNamePrompt, setIsSavingPreferredNamePrompt] = useState(false)
   const [accountProfileMailing, setAccountProfileMailing] = useState<MailingAddress>(() => emptyMailingAddress())
   const [accountProfileNotice, setAccountProfileNotice] = useState('')
   const [isSavingAccountProfile, setIsSavingAccountProfile] = useState(false)
@@ -2129,6 +2137,7 @@ function App() {
     token: string
     phoneE164: string
     copyEmail?: string
+    preferredName?: string
     mailingAddress?: MailingAddress | null
   } | null>(null)
   const [isSendingAccountCode, setIsSendingAccountCode] = useState(false)
@@ -2295,6 +2304,23 @@ function App() {
   const hasEnoughCreditsForCover = credits >= coverRevisionCost
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
+  const isSignedIn = Boolean(accountSession?.token)
+  const accountFirstName = (
+    accountPreferredName.trim() ||
+    accountSession?.preferredName?.trim() ||
+    accountProfileMailing.name.trim() ||
+    accountSession?.mailingAddress?.name?.trim() ||
+    details.senderName.trim() ||
+    ''
+  )
+    .split(/\s+/)
+    .find(Boolean) || ''
+  const creditsSummary = isSignedIn
+    ? accountFirstName
+      ? `Hi ${accountFirstName}. ${credits} credits in your account`
+      : `${credits} credits in your account`
+    : `${credits} credits on this device`
+  const accountButtonLabel = isSignedIn ? 'My account' : 'Sign in'
   const adminMetricsPeriodLabel =
     adminMetricsPeriod === 'today'
       ? 'today'
@@ -2352,6 +2378,7 @@ function App() {
 
         const data = await getApiJson(response, 'Unable to load the saved account.')
         const copyEmail = String(data.email || parsed.copyEmail || '')
+        const preferredName = String(data.preferredName || '').trim()
         const mailingAddress = normalizeResumeMailingAddress(
           data.mailingAddress,
           emptyMailingAddress(),
@@ -2361,6 +2388,7 @@ function App() {
           token: parsed.token,
           phoneE164: String(data.phoneE164 || parsed.phoneE164),
           copyEmail,
+          preferredName,
           mailingAddress: hasMailing ? mailingAddress : null,
         }
         setAccountSession(session)
@@ -2382,7 +2410,22 @@ function App() {
           )
         }
         setAccountProfileEmail(copyEmail)
+        setAccountPreferredName(preferredName)
         setAccountProfileMailing(hasMailing ? mailingAddress : emptyMailingAddress())
+        if (!preferredName) {
+          try {
+            const dismissed =
+              window.localStorage.getItem(preferredNamePromptStorageKey(session.phoneE164)) === '1'
+            if (!dismissed) {
+              setPreferredNamePromptDraft('')
+              setShowPreferredNamePrompt(true)
+            }
+          } catch {
+            setShowPreferredNamePrompt(true)
+          }
+        } else {
+          setShowPreferredNamePrompt(false)
+        }
         if (parseCreditBalance(data.creditBalance) !== null) {
           const accountCredits = parseCreditBalance(data.creditBalance) as number
           setCredits(accountCredits)
@@ -3672,12 +3715,14 @@ function App() {
         rememberCredits(serverBalance)
       }
       const profileEmail = String(data.account?.email || '')
+      const profilePreferredName = String(data.account?.preferredName || '').trim()
       const profileMailing = normalizeResumeMailingAddress(
         data.account?.mailingAddress,
         emptyMailingAddress(),
       )
       const hasMailing = !isMailingAddressBlank(profileMailing)
       setAccountProfileEmail(profileEmail)
+      setAccountPreferredName(profilePreferredName)
       setAccountProfileMailing(hasMailing ? profileMailing : emptyMailingAddress())
       setAccountProfileNotice('')
       setAccountSession((current) => {
@@ -3688,6 +3733,7 @@ function App() {
           ...current,
           phoneE164: String(data.phoneE164 || current.phoneE164),
           copyEmail: profileEmail || current.copyEmail || '',
+          preferredName: profilePreferredName || current.preferredName || '',
           mailingAddress: hasMailing ? profileMailing : null,
         }
         window.localStorage.setItem(
@@ -3700,6 +3746,9 @@ function App() {
         )
         return next
       })
+      if (profilePreferredName) {
+        setShowPreferredNamePrompt(false)
+      }
       if (profileEmail) {
         setSenderCopyEmail((current) => current || profileEmail)
         setPrintShopperEmail((current) => current || profileEmail)
@@ -5320,6 +5369,7 @@ function App() {
     token: string
     phoneE164: string
     copyEmail?: string
+    preferredName?: string
     mailingAddress?: MailingAddress | null
   }) => {
     setAccountSession(session)
@@ -5334,6 +5384,53 @@ function App() {
     if (session.copyEmail) {
       setSenderCopyEmail((current) => current || session.copyEmail || '')
       setPrintShopperEmail((current) => current || session.copyEmail || '')
+    }
+    if (typeof session.preferredName === 'string') {
+      setAccountPreferredName(session.preferredName.trim())
+    }
+  }
+
+  const dismissPreferredNamePrompt = (phoneE164: string) => {
+    setShowPreferredNamePrompt(false)
+    setPreferredNamePromptDraft('')
+    try {
+      window.localStorage.setItem(preferredNamePromptStorageKey(phoneE164), '1')
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  const savePreferredNameFromPrompt = async () => {
+    if (!accountSession?.token) {
+      return
+    }
+    const name = preferredNamePromptDraft.trim().replace(/\s+/g, ' ').slice(0, 60)
+    if (!name) {
+      return
+    }
+
+    setIsSavingPreferredNamePrompt(true)
+    try {
+      const response = await fetch(apiUrl('/api/account/profile'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accountSession.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ preferredName: name }),
+      })
+      const data = await getApiJson(response, 'Unable to save your name.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save your name.')
+      }
+      const savedName = String(data.preferredName || name).trim()
+      setAccountPreferredName(savedName)
+      setAccountSession((current) => (current ? { ...current, preferredName: savedName } : current))
+      dismissPreferredNamePrompt(accountSession.phoneE164)
+    } catch (caughtError) {
+      setCreditNotice(caughtError instanceof Error ? caughtError.message : 'Unable to save your name.')
+    } finally {
+      setIsSavingPreferredNamePrompt(false)
     }
   }
 
@@ -5394,6 +5491,7 @@ function App() {
         },
         body: JSON.stringify({
           email: emailTrimmed,
+          preferredName: accountPreferredName.trim(),
           mailingAddress: mailingPayload,
         }),
       })
@@ -5403,12 +5501,14 @@ function App() {
       }
 
       const savedEmail = String(data.email || emailTrimmed || '')
+      const savedPreferredName = String(data.preferredName || accountPreferredName || '').trim()
       const savedMailing = normalizeResumeMailingAddress(
         data.mailingAddress,
         mailingPayload || emptyMailingAddress(),
       )
       const hasMailing = !isMailingAddressBlank(savedMailing)
       setAccountProfileEmail(savedEmail)
+      setAccountPreferredName(savedPreferredName)
       setAccountProfileMailing(hasMailing ? savedMailing : emptyMailingAddress())
       setAccountHistory((current) =>
         current
@@ -5417,6 +5517,7 @@ function App() {
               account: {
                 ...(current.account || {}),
                 email: savedEmail,
+                preferredName: savedPreferredName,
                 mailingAddress: hasMailing ? savedMailing : null,
               },
             }
@@ -5426,8 +5527,17 @@ function App() {
         token: accountSession.token,
         phoneE164: accountSession.phoneE164,
         copyEmail: savedEmail,
+        preferredName: savedPreferredName,
         mailingAddress: hasMailing ? savedMailing : null,
       })
+      if (savedPreferredName) {
+        setShowPreferredNamePrompt(false)
+        try {
+          window.localStorage.setItem(preferredNamePromptStorageKey(accountSession.phoneE164), '1')
+        } catch {
+          // Ignore storage failures.
+        }
+      }
       if (hasMailing) {
         applySavedMailingAddressToPrint(savedMailing)
       }
@@ -5524,11 +5634,14 @@ function App() {
 
       const token = String(data.token)
       const signingInFromAccount = showAccountPage
+      const preferredName = String(data.preferredName || '').trim()
       saveAccountSession({
         token,
         phoneE164: String(data.phoneE164 || validated.value),
         copyEmail: String(data.email || ''),
+        preferredName,
       })
+      setAccountPreferredName(preferredName)
       if (parseCreditBalance(data.creditBalance) !== null) {
         rememberCredits(parseCreditBalance(data.creditBalance) as number)
       }
@@ -5547,6 +5660,23 @@ function App() {
         if (data.isNew && bonusCredits > 0) {
           setCreditNotice(`+${bonusCredits} credits for confirming your mobile number.`)
         }
+      }
+      if (!preferredName) {
+        try {
+          const dismissed =
+            window.localStorage.getItem(
+              preferredNamePromptStorageKey(String(data.phoneE164 || validated.value)),
+            ) === '1'
+          if (!dismissed) {
+            setPreferredNamePromptDraft('')
+            setShowPreferredNamePrompt(true)
+          }
+        } catch {
+          setPreferredNamePromptDraft('')
+          setShowPreferredNamePrompt(true)
+        }
+      } else {
+        setShowPreferredNamePrompt(false)
       }
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Unable to confirm that code.'
@@ -5918,16 +6048,23 @@ function App() {
             </p>
             <div className="credit-wallet" aria-label="Wish balance">
               <div>
-                <strong>{credits} credits in your account</strong>
+                <strong>{creditsSummary}</strong>
                 <small>
-                  Creating a card is free. You start with 2 credits. Confirm your mobile number to get 2 more.
-                  Sending uses 3 credits. Cover and AI text changes use 1 credit.
+                  Creating a card is free.{' '}
+                  <button
+                    className="text-action-link credit-details-toggle"
+                    type="button"
+                    aria-expanded={showCreditDetails}
+                    onClick={() => setShowCreditDetails((current) => !current)}
+                  >
+                    Click here for more details.
+                  </button>
                 </small>
               </div>
               <div className="credit-buy">
                 <div className="credit-buy-actions">
                   <button className="secondary-button" type="button" onClick={() => void openAccountPage()}>
-                    My account
+                    {accountButtonLabel}
                   </button>
                   <button
                     className="secondary-button"
@@ -5974,6 +6111,61 @@ function App() {
                 )}
               </div>
             </div>
+            {showCreditDetails && (
+              <div className="credit-details-panel" role="region" aria-label="Credit details">
+                <button
+                  className="credit-details-close"
+                  type="button"
+                  aria-label="Close credit details"
+                  onClick={() => setShowCreditDetails(false)}
+                >
+                  ×
+                </button>
+                <ul>
+                  <li>You start with 2 credits on this device.</li>
+                  <li>Sign in with your mobile number to get 2 more and keep credits across devices.</li>
+                  <li>Sending a card uses 3 credits (2 more for each extra recipient).</li>
+                  <li>Cover changes and AI text changes use 1 credit each.</li>
+                  <li>Mailing a printed card uses {printCardCreditCost} credits.</li>
+                </ul>
+              </div>
+            )}
+            {isSignedIn && showPreferredNamePrompt && !accountPreferredName.trim() && (
+              <div className="preferred-name-prompt" aria-label="What should we call you">
+                <p>What should we call you?</p>
+                <div className="preferred-name-prompt-row">
+                  <input
+                    type="text"
+                    autoComplete="given-name"
+                    value={preferredNamePromptDraft}
+                    onChange={(event) => setPreferredNamePromptDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void savePreferredNameFromPrompt()
+                      }
+                    }}
+                    placeholder="Example: Mindy"
+                    maxLength={60}
+                  />
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={isSavingPreferredNamePrompt || !preferredNamePromptDraft.trim()}
+                    onClick={() => void savePreferredNameFromPrompt()}
+                  >
+                    {isSavingPreferredNamePrompt ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    className="text-action-link"
+                    type="button"
+                    onClick={() => dismissPreferredNamePrompt(accountSession?.phoneE164 || '')}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -6128,10 +6320,25 @@ function App() {
               <div className="account-block account-profile-block">
                 <h3>Your details</h3>
                 <p className="field-help">
-                  Saved here for order confirmations and as the default return address on printed cards. Email is also
-                  filled in the first time you use Send me a copy.
+                  First name is for greetings like “Hi Mindy.” Email and mailing address are saved for order
+                  confirmations and as the default return address on printed cards. Email is also filled the first time
+                  you use Send me a copy.
                 </p>
                 <form className="account-profile-form" onSubmit={(event) => void saveAccountProfile(event)}>
+                  <label>
+                    First name
+                    <input
+                      type="text"
+                      autoComplete="given-name"
+                      value={accountPreferredName}
+                      onChange={(event) => {
+                        setAccountPreferredName(event.target.value)
+                        setAccountProfileNotice('')
+                      }}
+                      placeholder="Example: Mindy"
+                      maxLength={60}
+                    />
+                  </label>
                   <label>
                     Email
                     <input
@@ -6156,7 +6363,7 @@ function App() {
                       placeholder="you@example.com"
                     />
                   </label>
-                  {renderMailingAddressFields('account', accountProfileMailing, 'Name')}
+                  {renderMailingAddressFields('account', accountProfileMailing, 'Mailing name')}
                   <div className="account-profile-actions">
                     <button
                       className="secondary-button"
@@ -8204,7 +8411,7 @@ function App() {
         <div className="footer-primary">
           {!isRecipientView && (
             <button type="button" onClick={() => void openAccountPage()}>
-              My account
+              {accountButtonLabel}
             </button>
           )}
           <a href={supportMailto}>Email us</a>
