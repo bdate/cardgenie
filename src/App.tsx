@@ -6400,7 +6400,7 @@ function App() {
                   </div>
                 )}
                 {deliveryNotice &&
-                  (!hasEnoughCreditsToSend
+                  (/need .+ credits?/i.test(deliveryNotice)
                     ? renderCreditNeedNotice(deliveryNotice)
                     : (
                       <div className="delivery-notice">
