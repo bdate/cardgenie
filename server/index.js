@@ -2838,6 +2838,130 @@ app.post('/api/refine-copy', async (req, res) => {
 })
 
 const localInterviewTones = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
+const localAmbiguousRecipientTokens = new Set([
+  'him',
+  'her',
+  'them',
+  'he',
+  'she',
+  'they',
+  'his',
+  'hers',
+  'himself',
+  'herself',
+  'someone',
+  'somebody',
+  'guy',
+  'girl',
+  'dude',
+  'person',
+])
+
+const localInterviewRecipientLooksAmbiguous = (name) => {
+  const parts = String(name || '')
+    .split(/[\s,&/]+/)
+    .map((part) => part.toLowerCase().replace(/[^a-z'-]/g, ''))
+    .filter(Boolean)
+  if (parts.length === 0) {
+    return false
+  }
+  return parts.some((part) => localAmbiguousRecipientTokens.has(part))
+}
+
+const localInferInterviewOccasion = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (/\bthank[\s-]?you\b|\bthanks\b/.test(value)) return 'Thank You'
+  if (/\bbirthday\b|\bb\-?day\b/.test(value)) return 'Birthday'
+  if (/\banniversary\b/.test(value)) return 'Anniversary'
+  if (/\bcongratulat|\bcongrats\b/.test(value)) return 'Congratulations'
+  if (/\bget[\s-]?well\b/.test(value)) return 'Get Well'
+  if (/\bsympathy\b|\bcondolence/.test(value)) return 'Sympathy'
+  if (/\bvalentine/.test(value)) return 'Valentine'
+  if (/\bwedding\b/.test(value)) return 'Wedding'
+  if (/\bbaby\b|\bnewborn\b|\bshower\b/.test(value)) return 'New Baby'
+  return ''
+}
+
+const localScrubAmbiguousRecipientName = (name) => {
+  const kept = String(name || '')
+    .split(/([\s,&/]+)/)
+    .map((part) => {
+      const cleaned = part.toLowerCase().replace(/[^a-z'-]/g, '')
+      if (localAmbiguousRecipientTokens.has(cleaned)) {
+        return ''
+      }
+      return part
+    })
+    .join('')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^\s*and\s+|\s+and\s*$/gi, '')
+    .replace(/^[\s,&/]+|[\s,&/]+$/g, '')
+    .trim()
+  return kept
+}
+
+const localTranscriptHasAmbiguousRecipientCue = (text) =>
+  /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
+  /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
+
+const localRefineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady }) => {
+  const next = { ...details }
+  if (!next.occasion) {
+    next.occasion = localInferInterviewOccasion(transcript)
+  }
+  const ambiguousRecipient =
+    localInterviewRecipientLooksAmbiguous(next.recipientName) ||
+    localTranscriptHasAmbiguousRecipientCue(transcript)
+  if (localInterviewRecipientLooksAmbiguous(next.recipientName)) {
+    next.recipientName = localScrubAmbiguousRecipientName(next.recipientName)
+  }
+
+  let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
+  let nextAssistant = String(assistantMessage || '').trim()
+
+  if (ambiguousRecipient && !shouldForceReady) {
+    nextStatus = 'ask'
+    nextAssistant =
+      'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
+  } else if (!next.recipientName && !shouldForceReady) {
+    nextStatus = 'ask'
+    if (!nextAssistant || /occasion/i.test(nextAssistant)) {
+      nextAssistant = 'Who should the card be to?'
+    }
+  } else if (!next.senderName && !shouldForceReady) {
+    nextStatus = 'ask'
+    nextAssistant = 'Can you tell me who the card should be from?'
+  } else if (!next.occasion && !shouldForceReady) {
+    nextStatus = 'ask'
+  } else if (
+    shouldForceReady ||
+    (next.senderName &&
+      next.recipientName &&
+      !localInterviewRecipientLooksAmbiguous(next.recipientName) &&
+      next.occasion &&
+      next.keyDetails)
+  ) {
+    nextStatus = 'ready'
+  }
+
+  if (nextStatus === 'ask' && /occasion/i.test(nextAssistant) && next.occasion) {
+    if (ambiguousRecipient || !next.recipientName) {
+      nextAssistant =
+        'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
+    } else if (!next.senderName) {
+      nextAssistant = 'Can you tell me who the card should be from?'
+    }
+  }
+
+  if (!nextAssistant) {
+    nextAssistant =
+      nextStatus === 'ready'
+        ? 'I filled in the form below. Tweak anything you want, then create your card.'
+        : 'Tell me a bit more so I can fill in the form.'
+  }
+
+  return { details: next, status: nextStatus, assistantMessage: nextAssistant }
+}
 
 app.post('/api/card-interview', async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
@@ -2875,14 +2999,17 @@ app.post('/api/card-interview', async (req, res) => {
           role: 'system',
           content: `You help shoppers fill out a greeting-card form for Card Genie.
 Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
-Essentials for "ready": senderName, recipientName, occasion, keyDetails.
-If an essential is missing, status "ask" with one short question.
-When senderName is missing, ask exactly: "Can you tell me who the card should be from?" Do not ask for "your name", and do not add "so I can fill out the form".
-If all essentials are known, status "ready" immediately — no optional follow-ups (do not ask who else to include, tone, or relation).
+Essentials for "ready": senderName, a clear recipientName, occasion, keyDetails.
+Shoppers often speak, so text may have speech-to-text mistakes.
+Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for occasion when it is already clear.
+Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
+Ask about unclear names before sender or occasion.
+When senderName is missing and recipient/occasion are clear, ask: "Can you tell me who the card should be from?"
+If all essentials are known with real names, status "ready" immediately — no optional follow-ups.
 Guess recipientType when unclear. Fill details as far as you can even when asking.
 assistantMessage is a short chat reply, not the card message body.
 tone must be one of: ${localInterviewTones.join(', ')}.
-${shouldForceReady ? 'You MUST return status "ready" now with best-effort details.' : ''}`,
+${shouldForceReady ? 'You MUST return status "ready" now with best-effort details, but still never invent a real name for a pronoun like him/her.' : ''}`,
         },
         {
           role: 'user',
@@ -2930,23 +3057,19 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       tone: localInterviewTones.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt',
       keyDetails: String(parsed.details?.keyDetails || '').trim(),
     }
-    let status = String(parsed.status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
-    if (
-      shouldForceReady ||
-      (details.senderName && details.recipientName && details.occasion && details.keyDetails)
-    ) {
-      status = 'ready'
-    }
+    const refined = localRefineInterviewResult({
+      details,
+      status: String(parsed.status || '').toLowerCase() === 'ready' ? 'ready' : 'ask',
+      assistantMessage: String(parsed.assistantMessage || '').trim(),
+      transcript,
+      shouldForceReady,
+    })
 
     return res.json({
       ok: true,
-      status,
-      assistantMessage:
-        String(parsed.assistantMessage || '').trim() ||
-        (status === 'ready'
-          ? 'I filled in the form below. Tweak anything you want, then create your card.'
-          : 'Tell me a bit more so I can fill in the form.'),
-      details,
+      status: refined.status,
+      assistantMessage: refined.assistantMessage,
+      details: refined.details,
     })
   } catch (error) {
     console.error(error)

@@ -3737,9 +3737,27 @@ const handleRefineCopy = async (request, env) => {
 
 const CARD_INTERVIEW_TONES = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
 const CARD_INTERVIEW_MAX_USER_TURNS = 3
+const AMBIGUOUS_RECIPIENT_TOKENS = new Set([
+  'him',
+  'her',
+  'them',
+  'he',
+  'she',
+  'they',
+  'his',
+  'hers',
+  'himself',
+  'herself',
+  'someone',
+  'somebody',
+  'guy',
+  'girl',
+  'dude',
+  'person',
+])
 
 const cardInterviewSystemPrompt = `You help shoppers fill out a greeting-card form for Card Genie.
-They tap “I’m done” after speaking. You either ask one short follow-up for a missing essential, or fill the form.
+They often speak into the mic, so the text may include speech-to-text mistakes. You either ask one short follow-up for the most important gap, or fill the form.
 
 Return ONLY valid JSON with this shape:
 {
@@ -3755,11 +3773,15 @@ Return ONLY valid JSON with this shape:
   }
 }
 
-Essentials for status "ready": senderName, recipientName, occasion, and useful keyDetails.
+Essentials for status "ready": senderName, a clear recipientName, occasion, and useful keyDetails.
 Rules:
-- If an essential is missing, return status "ask" with exactly one short question in assistantMessage about the most important gap.
-- When senderName is missing, ask exactly: "Can you tell me who the card should be from?" Do not ask for "your name", and do not add phrases like "so I can fill out the form".
-- If all essentials are present, return status "ready" immediately — do not ask optional or polite follow-ups.
+- Infer occasion from phrases like "thank you card", "thanks", "birthday card", "anniversary", "congratulations". Do NOT ask for occasion when it is already clear. Example: "send a thank you card" means occasion "Thank You".
+- Treat pronouns or vague words as UNCLEAR recipient names, not real names: him, her, them, he, she, they, someone, guy, etc. Examples: "him and Anita", "her and Bob", "them". Status must be "ask". Ask to confirm the people's actual names. Prefer: "I want to make sure I have the names right — who is the card for?"
+- Never put "him", "her", or "them" into recipientName as if they were names. Leave recipientName with only confirmed proper names, or empty while asking.
+- Ask about unclear names BEFORE asking about sender, occasion, or other gaps.
+- If an essential is missing, return status "ask" with exactly one short question about the most important gap.
+- When senderName is missing and recipient/occasion are clear, ask exactly: "Can you tell me who the card should be from?"
+- If all essentials are present and names look like real names, return status "ready" immediately — no optional follow-ups.
 - Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
 - If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
@@ -3786,8 +3808,145 @@ const normalizeInterviewDetails = (raw = {}) => {
   }
 }
 
+const interviewRecipientNameLooksAmbiguous = (name) => {
+  const parts = String(name || '')
+    .split(/[\s,&/]+/)
+    .map((part) => part.toLowerCase().replace(/[^a-z'-]/g, ''))
+    .filter(Boolean)
+  if (parts.length === 0) {
+    return false
+  }
+  return parts.some((part) => AMBIGUOUS_RECIPIENT_TOKENS.has(part))
+}
+
+const inferInterviewOccasionFromText = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (/\bthank[\s-]?you\b|\bthanks\b/.test(value)) {
+    return 'Thank You'
+  }
+  if (/\bbirthday\b|\bb\-?day\b/.test(value)) {
+    return 'Birthday'
+  }
+  if (/\banniversary\b/.test(value)) {
+    return 'Anniversary'
+  }
+  if (/\bcongratulat|\bcongrats\b/.test(value)) {
+    return 'Congratulations'
+  }
+  if (/\bget[\s-]?well\b/.test(value)) {
+    return 'Get Well'
+  }
+  if (/\bsympathy\b|\bcondolence/.test(value)) {
+    return 'Sympathy'
+  }
+  if (/\bvalentine/.test(value)) {
+    return 'Valentine'
+  }
+  if (/\bwedding\b/.test(value)) {
+    return 'Wedding'
+  }
+  if (/\bbaby\b|\bnewborn\b|\bshower\b/.test(value)) {
+    return 'New Baby'
+  }
+  return ''
+}
+
+const scrubAmbiguousRecipientName = (name) => {
+  const kept = String(name || '')
+    .split(/([\s,&/]+)/)
+    .map((part) => {
+      const cleaned = part.toLowerCase().replace(/[^a-z'-]/g, '')
+      if (AMBIGUOUS_RECIPIENT_TOKENS.has(cleaned)) {
+        return ''
+      }
+      return part
+    })
+    .join('')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^\s*and\s+|\s+and\s*$/gi, '')
+    .replace(/^[\s,&/]+|[\s,&/]+$/g, '')
+    .trim()
+  return kept
+}
+
+const transcriptHasAmbiguousRecipientCue = (text) =>
+  /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
+  /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
+
+const refineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady }) => {
+  const next = { ...details }
+  const shopperText = String(transcript || '')
+
+  if (!next.occasion) {
+    next.occasion = inferInterviewOccasionFromText(shopperText)
+  }
+
+  const ambiguousRecipient =
+    interviewRecipientNameLooksAmbiguous(next.recipientName) ||
+    transcriptHasAmbiguousRecipientCue(shopperText)
+  if (interviewRecipientNameLooksAmbiguous(next.recipientName)) {
+    next.recipientName = scrubAmbiguousRecipientName(next.recipientName)
+  }
+
+  let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
+  let nextAssistant = String(assistantMessage || '').trim()
+
+  if (ambiguousRecipient && !shouldForceReady) {
+    nextStatus = 'ask'
+    nextAssistant =
+      'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
+  } else if (!next.recipientName && !shouldForceReady) {
+    nextStatus = 'ask'
+    if (!nextAssistant || /occasion/i.test(nextAssistant)) {
+      nextAssistant = 'Who should the card be to?'
+    }
+  } else if (!next.senderName && !shouldForceReady) {
+    nextStatus = 'ask'
+    nextAssistant = 'Can you tell me who the card should be from?'
+  } else if (!next.occasion && !shouldForceReady) {
+    nextStatus = 'ask'
+    if (!/occasion|what.?s it for|what is it for/i.test(nextAssistant)) {
+      nextAssistant = 'What’s the occasion for the card?'
+    }
+  } else if (
+    shouldForceReady ||
+    (next.senderName &&
+      next.recipientName &&
+      !interviewRecipientNameLooksAmbiguous(next.recipientName) &&
+      next.occasion &&
+      next.keyDetails)
+  ) {
+    nextStatus = 'ready'
+  }
+
+  if (nextStatus === 'ask' && /occasion/i.test(nextAssistant) && next.occasion) {
+    // Model asked for occasion even though we already have it — replace with a better gap.
+    if (ambiguousRecipient || !next.recipientName) {
+      nextAssistant =
+        'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
+    } else if (!next.senderName) {
+      nextAssistant = 'Can you tell me who the card should be from?'
+    }
+  }
+
+  if (!nextAssistant) {
+    nextAssistant =
+      nextStatus === 'ready'
+        ? 'I filled in the form below. Tweak anything you want, then create your card.'
+        : 'Tell me a bit more so I can fill in the form.'
+  }
+
+  return { details: next, status: nextStatus, assistantMessage: nextAssistant }
+}
+
 const interviewDetailsAreReady = (details) =>
-  Boolean(details.senderName && details.recipientName && details.occasion && details.keyDetails)
+  Boolean(
+    details.senderName &&
+      details.recipientName &&
+      !interviewRecipientNameLooksAmbiguous(details.recipientName) &&
+      details.occasion &&
+      details.keyDetails,
+  )
 
 const getInterviewResponseText = (response) => {
   const direct = String(response?.output_text || '').trim()
@@ -3918,22 +4077,22 @@ const handleCardInterview = async (request, env) => {
     }
 
     const details = normalizeInterviewDetails(parsed.details || {})
-    let status = String(parsed.status || '').toLowerCase() === 'ready' || interviewDetailsAreReady(details) ? 'ready' : 'ask'
-    if (shouldForceReady) {
-      status = 'ready'
-    }
-
-    const assistantMessage =
-      String(parsed.assistantMessage || '').trim() ||
-      (status === 'ready'
-        ? 'I filled in the form below. Tweak anything you want, then create your card.'
-        : 'Tell me a bit more so I can fill in the form.')
+    const refined = refineInterviewResult({
+      details,
+      status: String(parsed.status || '').toLowerCase() === 'ready' || interviewDetailsAreReady(details) ? 'ready' : 'ask',
+      assistantMessage: String(parsed.assistantMessage || '').trim(),
+      transcript,
+      shouldForceReady,
+    })
 
     return jsonResponse(request, env, {
       ok: true,
-      status,
-      assistantMessage,
-      details: status === 'ready' || Object.values(details).some(Boolean) ? details : undefined,
+      status: refined.status,
+      assistantMessage: refined.assistantMessage,
+      details:
+        refined.status === 'ready' || Object.values(refined.details).some(Boolean)
+          ? refined.details
+          : undefined,
     })
   } catch (error) {
     console.error(error)
