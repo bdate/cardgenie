@@ -370,14 +370,18 @@ if (staticPageRedirect) {
 
 const getApiJson = async (response: Response, fallbackMessage: string) => {
   const contentType = response.headers.get('content-type') || ''
+  const bodyText = await response.text()
 
-  if (contentType.includes('application/json')) {
-    return response.json()
+  if (contentType.includes('application/json') || /^\s*[{[]/.test(bodyText)) {
+    try {
+      return bodyText ? JSON.parse(bodyText) : {}
+    } catch {
+      throw new Error(fallbackMessage)
+    }
   }
 
   if (!response.ok) {
-    const body = await response.text()
-    if (isLocalApiDev && /Cannot (GET|POST) \/api\//i.test(body)) {
+    if (isLocalApiDev && /Cannot (GET|POST) \/api\//i.test(bodyText)) {
       throw new Error(
         'Local API server is missing this route. Stop dev, then run npm run dev again (or restart node server/index.js on port 8787).',
       )
@@ -2082,6 +2086,7 @@ function App() {
   const interviewRecognitionRef = useRef<InterviewSpeechRecognition | null>(null)
   const interviewListenDesiredRef = useRef(false)
   const interviewBaseDraftRef = useRef('')
+  const interviewLatestDraftRef = useRef('')
   const isInterviewingRef = useRef(false)
   const showCardInterviewRef = useRef(false)
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
@@ -3177,9 +3182,11 @@ function App() {
       if (finalChunk) {
         const merged = `${interviewBaseDraftRef.current} ${finalChunk}`.replace(/\s+/g, ' ').trim()
         interviewBaseDraftRef.current = merged
+        interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
       } else if (interimChunk) {
         const merged = `${interviewBaseDraftRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim()
+        interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
       }
     }
@@ -3249,6 +3256,7 @@ function App() {
     setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
+    interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
     setInterviewNotice('')
     isInterviewingRef.current = false
@@ -3276,17 +3284,23 @@ function App() {
       stopInterviewListening()
     }
 
-    const message = (interviewBaseDraftRef.current || interviewDraft).trim()
+    // Re-read after mic pause so final/interim speech words are included.
+    const message = (
+      interviewBaseDraftRef.current ||
+      interviewLatestDraftRef.current ||
+      interviewDraft
+    ).trim()
     if (!message) {
       setInterviewNotice('Say or type a bit about the card first, then tap I’m done.')
+      startInterviewListening({ announce: false })
       return
     }
 
     const nextMessages: InterviewMessage[] = [...interviewMessages, { role: 'user', content: message }]
-    const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
     setInterviewMessages(nextMessages)
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
+    interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
     setInterviewNotice('Genie is working on that…')
     isInterviewingRef.current = true
@@ -3298,7 +3312,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: nextMessages,
-          forceReady: userTurns >= 3,
+          // "I'm done" means fill the form now — don't keep asking follow-ups.
+          forceReady: true,
         }),
       })
       const data = await getApiJson(response, 'Unable to continue that conversation.')
@@ -3306,14 +3321,22 @@ function App() {
         throw new Error(data.error || 'Unable to continue that conversation.')
       }
 
+      const details =
+        data.details && typeof data.details === 'object'
+          ? (data.details as Partial<CardDetails>)
+          : null
+      const isReady = data.status === 'ready' || Boolean(details)
+
       const assistantMessage =
         typeof data.assistantMessage === 'string' && data.assistantMessage.trim()
           ? data.assistantMessage.trim()
-          : 'Tell me a bit more so I can fill in the form.'
+          : isReady
+            ? 'I filled in the form below. Tweak anything you want, then create your card.'
+            : 'Tell me a bit more so I can fill in the form.'
       setInterviewMessages((current) => [...current, { role: 'assistant', content: assistantMessage }])
 
-      if (data.status === 'ready' && data.details && typeof data.details === 'object') {
-        applyInterviewDetails(data.details as Partial<CardDetails>)
+      if (isReady && details) {
+        applyInterviewDetails(details)
         setInterviewComplete(true)
         setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
         window.setTimeout(() => {
@@ -3321,13 +3344,15 @@ function App() {
         }, 80)
       } else {
         setInterviewComplete(false)
-        setInterviewNotice('Genie has a quick follow-up in the chat. Tap Answer to reply.')
+        setInterviewNotice('Genie has a quick follow-up in the chat. Type your reply, then tap I’m done.')
+        startInterviewListening({ announce: false })
       }
     } catch (caughtError) {
       setInterviewComplete(false)
       setInterviewNotice(
         caughtError instanceof Error ? caughtError.message : 'Unable to continue that conversation.',
       )
+      startInterviewListening({ announce: false })
     } finally {
       isInterviewingRef.current = false
       setIsInterviewing(false)
@@ -6689,6 +6714,7 @@ function App() {
                   onChange={(event) => {
                     const value = event.target.value
                     interviewBaseDraftRef.current = value
+                    interviewLatestDraftRef.current = value
                     setInterviewDraft(value)
                   }}
                   onKeyDown={(event) => {

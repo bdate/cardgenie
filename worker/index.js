@@ -3706,7 +3706,7 @@ const CARD_INTERVIEW_TONES = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Roman
 const CARD_INTERVIEW_MAX_USER_TURNS = 3
 
 const cardInterviewSystemPrompt = `You help shoppers fill out a greeting-card form for Card Genie.
-Have a short mini-interview: understand their story, ask at most 1-2 clarifying questions total when something important is missing, then fill the form.
+Have a short mini-interview: understand their story, ask at most 1 clarifying question only when something essential is missing, then fill the form.
 
 Return ONLY valid JSON with this shape:
 {
@@ -3723,13 +3723,13 @@ Return ONLY valid JSON with this shape:
 }
 
 Rules:
-- status "ready" when you have enough to create a card: senderName, recipientName, occasion, recipientType, and useful keyDetails.
-- If relation is unclear, make a reasonable guess (friends, couple, family, coworkers) rather than asking forever.
+- status "ready" when you know who the card is for, the occasion, and have useful keyDetails. senderName may be left blank if they did not give a name.
+- Do NOT ask only for the sender's name or whether anyone else should be included — leave senderName empty and still return "ready".
+- If relation is unclear, make a reasonable guess (friends, couple, family, coworkers) rather than asking.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 - keyDetails should be a concise single-paragraph summary of memories/scene ideas for the cover and message. Do not write the finished inside note.
 - assistantMessage is your short chat reply to the shopper (acknowledgment or one question). Never put the greeting-card message body in assistantMessage.
-- Ask only about missing essentials. Prefer one short question.
-- If the shopper already gave a full story, go straight to status "ready".
+- If the shopper already gave a full story (who it's for + what happened), go straight to status "ready".
 - Never invent trademarks, celebrity likenesses, or private facts they did not share.
 - Keep assistantMessage warm, brief, and conversational (1-3 sentences).
 - When status is "ready", say you filled the form and they can edit anything before creating the card.
@@ -3751,13 +3751,7 @@ const normalizeInterviewDetails = (raw = {}) => {
 }
 
 const interviewDetailsAreReady = (details) =>
-  Boolean(
-    details.senderName &&
-      details.recipientName &&
-      details.occasion &&
-      details.recipientType &&
-      details.keyDetails,
-  )
+  Boolean(details.recipientName && details.occasion && details.keyDetails)
 
 const getInterviewResponseText = (response) => {
   const direct = String(response?.output_text || '').trim()
