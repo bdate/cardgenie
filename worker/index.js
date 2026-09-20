@@ -3784,6 +3784,7 @@ Rules:
 - Ask about unclear names BEFORE asking about sender, occasion, or other gaps.
 - If an essential is missing, return status "ask" with exactly one short question about the most important gap.
 - When senderName is missing and recipient/occasion are clear, ask exactly: "Can you tell me who the card should be from?"
+- If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - If all essentials are present and names look like real names, return status "ready" immediately — no optional follow-ups.
 - Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
 - If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.
@@ -3820,6 +3821,7 @@ Conversation style:
 - Infer occasion from phrases like "thank you card", "thanks", "birthday card". Do NOT re-ask occasion when clear.
 - Treat pronouns (him, her, them, he, she, they) as unclear names — ask who they mean. Never store "him"/"her" as recipientName.
 - They often speak into the mic; expect speech-to-text mistakes and confirm suspicious names.
+- If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - You may ask one enriching follow-up for keyDetails even after names/occasion/from are known, if the story feels thin.
 - When essentials are solid and you have enough story, return status "ready".
 - Do not ask endless optional questions. Do not ask about art style.
@@ -3936,16 +3938,75 @@ const normalizeInterviewOccasionLabel = (occasion) => {
   return inferred || raw
 }
 
-const refineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
+const resolveShopperSelfInSenderName = (senderName, shopperFirstName) => {
+  const self = String(shopperFirstName || '').trim()
+  const raw = String(senderName || '').trim()
+  if (!self || !raw) {
+    return raw
+  }
+  return raw
+    .replace(/\b(me|myself)\b/gi, self)
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const senderNameStillHasSelfReference = (senderName) =>
+  /\b(me|myself)\b/i.test(String(senderName || ''))
+
+const inferSenderNameFromTranscript = (transcript, shopperFirstName) => {
+  const text = String(transcript || '')
+  const patterns = [
+    /\b(?:card\s+is\s+)?from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
+    /\b(?:it's|its)\s+from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
+  ]
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match?.[1]) {
+      const candidate = resolveShopperSelfInSenderName(match[1].trim(), shopperFirstName)
+      if (candidate && !senderNameStillHasSelfReference(candidate)) {
+        return candidate.replace(/\s+/g, ' ').trim()
+      }
+    }
+  }
+  // "me and Mindy" / "Mindy and me" without an explicit "from"
+  const andMe = text.match(/\b((?:me|myself)\s+and\s+[A-Za-z][\w'-]+|[A-Za-z][\w'-]+\s+and\s+(?:me|myself))\b/i)
+  if (andMe?.[1]) {
+    return resolveShopperSelfInSenderName(andMe[1], shopperFirstName)
+  }
+  return ''
+}
+
+const refineInterviewResult = ({
+  details,
+  status,
+  assistantMessage,
+  transcript,
+  shouldForceReady,
+  mode,
+  shopperFirstName,
+}) => {
   const next = { ...details }
   const shopperText = String(transcript || '')
   const latestShopperText = latestShopperUtterance(shopperText)
   const isChat = mode === 'chat'
+  const selfName = String(shopperFirstName || '').trim()
 
   if (!next.occasion) {
     next.occasion = inferInterviewOccasionFromText(shopperText)
   }
   next.occasion = normalizeInterviewOccasionLabel(next.occasion)
+
+  next.senderName = resolveShopperSelfInSenderName(next.senderName, selfName)
+  if (!next.senderName || senderNameStillHasSelfReference(next.senderName)) {
+    const inferredSender = inferSenderNameFromTranscript(shopperText, selfName)
+    if (inferredSender) {
+      next.senderName = inferredSender
+    }
+  }
+  if (senderNameStillHasSelfReference(next.senderName)) {
+    // Still unresolved (no account first name) — don't keep "me" as the From value.
+    next.senderName = ''
+  }
 
   const nameAmbiguous = interviewRecipientNameLooksAmbiguous(next.recipientName)
   // Only inspect the latest shopper reply for him/her cues so an earlier
@@ -4130,10 +4191,17 @@ const handleCardInterview = async (request, env) => {
   }
 
   const shouldForceReady = forceReady || userTurns >= forceReadyTurns
+  const shopperFirstName = String(body.shopperFirstName || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 60)
   const systemPrompt = mode === 'chat' ? cardInterviewSystemPromptChat : cardInterviewSystemPromptQuick
   const transcript = messages
     .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
     .join('\n')
+  const shopperNameNote = shopperFirstName
+    ? `\nShopper first name on their account: "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself".`
+    : ''
 
   try {
     const openai = getOpenAI(env)
@@ -4143,7 +4211,7 @@ const handleCardInterview = async (request, env) => {
       input: [
         {
           role: 'system',
-          content: `${systemPrompt}${
+          content: `${systemPrompt}${shopperNameNote}${
             shouldForceReady
               ? '\nThe shopper has answered enough. You MUST return status "ready" with your best-filled details now.'
               : ''
@@ -4181,6 +4249,7 @@ const handleCardInterview = async (request, env) => {
       transcript,
       shouldForceReady,
       mode,
+      shopperFirstName,
     })
 
     return jsonResponse(request, env, {

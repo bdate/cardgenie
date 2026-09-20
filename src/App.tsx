@@ -3476,6 +3476,7 @@ function App() {
         body: JSON.stringify({
           messages: nextMessages,
           mode: interviewMode,
+          shopperFirstName: accountFirstName || undefined,
           // Quick mode finishes after one follow-up; chat mode can ask more.
           forceReady: interviewMode === 'chat' ? userTurns >= 5 : userTurns >= 2,
         }),

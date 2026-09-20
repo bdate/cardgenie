@@ -2926,14 +2926,72 @@ const localNormalizeInterviewOccasion = (occasion) => {
   return localInferInterviewOccasion(raw) || raw
 }
 
-const localRefineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
+const localResolveShopperSelfInSenderName = (senderName, shopperFirstName) => {
+  const self = String(shopperFirstName || '').trim()
+  const raw = String(senderName || '').trim()
+  if (!self || !raw) {
+    return raw
+  }
+  return raw
+    .replace(/\b(me|myself)\b/gi, self)
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const localSenderNameStillHasSelfReference = (senderName) =>
+  /\b(me|myself)\b/i.test(String(senderName || ''))
+
+const localInferSenderNameFromTranscript = (transcript, shopperFirstName) => {
+  const text = String(transcript || '')
+  const patterns = [
+    /\b(?:card\s+is\s+)?from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
+    /\b(?:it's|its)\s+from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
+  ]
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match?.[1]) {
+      const candidate = localResolveShopperSelfInSenderName(match[1].trim(), shopperFirstName)
+      if (candidate && !localSenderNameStillHasSelfReference(candidate)) {
+        return candidate.replace(/\s+/g, ' ').trim()
+      }
+    }
+  }
+  const andMe = text.match(
+    /\b((?:me|myself)\s+and\s+[A-Za-z][\w'-]+|[A-Za-z][\w'-]+\s+and\s+(?:me|myself))\b/i,
+  )
+  if (andMe?.[1]) {
+    return localResolveShopperSelfInSenderName(andMe[1], shopperFirstName)
+  }
+  return ''
+}
+
+const localRefineInterviewResult = ({
+  details,
+  status,
+  assistantMessage,
+  transcript,
+  shouldForceReady,
+  mode,
+  shopperFirstName,
+}) => {
   const next = { ...details }
   const isChat = mode === 'chat'
   const latestShopperText = localLatestShopperUtterance(transcript)
+  const selfName = String(shopperFirstName || '').trim()
   if (!next.occasion) {
     next.occasion = localInferInterviewOccasion(transcript)
   }
   next.occasion = localNormalizeInterviewOccasion(next.occasion)
+  next.senderName = localResolveShopperSelfInSenderName(next.senderName, selfName)
+  if (!next.senderName || localSenderNameStillHasSelfReference(next.senderName)) {
+    const inferredSender = localInferSenderNameFromTranscript(transcript, selfName)
+    if (inferredSender) {
+      next.senderName = inferredSender
+    }
+  }
+  if (localSenderNameStillHasSelfReference(next.senderName)) {
+    next.senderName = ''
+  }
   const nameAmbiguous = localInterviewRecipientLooksAmbiguous(next.recipientName)
   const ambiguousRecipient =
     nameAmbiguous || localTranscriptHasAmbiguousRecipientCue(latestShopperText)
@@ -3026,6 +3084,10 @@ app.post('/api/card-interview', async (req, res) => {
 
   const forceReadyTurns = mode === 'chat' ? 5 : 2
   const shouldForceReady = forceReady || userTurns >= forceReadyTurns
+  const shopperFirstName = String(req.body?.shopperFirstName || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 60)
 
   try {
     const openai = getOpenAI()
@@ -3036,6 +3098,9 @@ app.post('/api/card-interview', async (req, res) => {
       mode === 'chat'
         ? `Talk like a helpful ChatGPT guide: ask one clarifying question at a time. You may ask one enriching follow-up about a memory after names/occasion/from are known if the story is thin. Prefer clarifying unclear names first.`
         : `If all essentials are known with real names, status "ready" immediately — no optional follow-ups.`
+    const shopperNameNote = shopperFirstName
+      ? `Shopper first name on their account: "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself" (example: me and Mindy → ${shopperFirstName} and Mindy).`
+      : ''
     const response = await openai.responses.create({
       model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
       text: { format: { type: 'json_object' } },
@@ -3050,6 +3115,7 @@ Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for 
 Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
 Ask about unclear names before sender or occasion.
 When senderName is missing and recipient/occasion are clear, ask: "Can you tell me who the card should be from?"
+${shopperNameNote}
 ${chatExtra}
 Guess recipientType when unclear. Fill details as far as you can even when asking.
 assistantMessage is a short chat reply, not the card message body.
@@ -3109,6 +3175,7 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       transcript,
       shouldForceReady,
       mode,
+      shopperFirstName,
     })
 
     return res.json({
