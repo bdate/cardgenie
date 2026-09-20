@@ -3282,6 +3282,42 @@ function App() {
     setInterviewNotice('')
   }
 
+  const clearCreateCardInputs = () => {
+    if (isRecipientView) {
+      return
+    }
+
+    stopInterviewListening()
+    showCardInterviewRef.current = false
+    setShowCardInterview(false)
+    setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
+    setInterviewDraft('')
+    interviewBaseDraftRef.current = ''
+    interviewLatestDraftRef.current = ''
+    setInterviewComplete(false)
+    setInterviewNotice('')
+    isInterviewingRef.current = false
+    setIsInterviewing(false)
+
+    setDetails(initialDetails)
+    setReferencePhotos([])
+    setReferencePhotoNotice('')
+    setError('')
+    setHighlightInvalidFields(false)
+    setShowAccountPage(false)
+    setAdminView(null)
+
+    try {
+      window.localStorage.removeItem(formDraftStorageKey)
+    } catch {
+      // Ignore storage failures.
+    }
+
+    window.setTimeout(() => {
+      document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }
+
   const sendCardInterview = async () => {
     if (isInterviewingRef.current) {
       return
@@ -8174,6 +8210,11 @@ function App() {
         <div className="footer-legal">
           <a href="/privacy/">Privacy</a>
           <a href="/terms/">Terms</a>
+          {(isAdmin || isLocalApiDev) && !isRecipientView && (
+            <button type="button" onClick={clearCreateCardInputs}>
+              Clear
+            </button>
+          )}
         </div>
       </footer>
     </main>
