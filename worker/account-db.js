@@ -234,6 +234,31 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
     thankYous = { results: [] }
   }
 
+  let printOrders = { results: [] }
+  try {
+    await ensurePrintOrderTables(env.ACCOUNT_DB)
+    printOrders = await env.ACCOUNT_DB.prepare(
+      `SELECT order_number, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, shopper_email, status, credit_cost
+       FROM print_orders
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+      .bind(userId)
+      .all()
+  } catch {
+    printOrders = { results: [] }
+  }
+
+  const parseStoredAddress = (raw) => {
+    try {
+      const parsed = JSON.parse(raw || '{}')
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+
   return {
     account: mapUser(user),
     creditEvents: (events.results || []).map((row) => ({
@@ -272,6 +297,22 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
       status: row.status,
       recipientName: row.recipient_name || '',
     })),
+    printOrders: (printOrders.results || []).map((row) => {
+      const shipTo = parseStoredAddress(row.ship_to_json)
+      const mailFrom = parseStoredAddress(row.mail_from_json)
+      return {
+        orderNumber: row.order_number,
+        orderCode: String(row.order_number),
+        cardId: row.card_id,
+        createdAt: row.created_at,
+        shipToName: row.ship_to_name || shipTo.name || '',
+        shipTo,
+        mailFrom,
+        shopperEmail: row.shopper_email || '',
+        status: row.status || 'submitted',
+        creditCost: row.credit_cost,
+      }
+    }),
   }
 }
 

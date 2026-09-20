@@ -163,6 +163,20 @@ const formatMailingAddressLines = (address: MailingAddress) =>
     .filter(Boolean)
     .join('\n')
 
+const formatAccountMailingAddress = (address?: Record<string, unknown> | MailingAddress | null) => {
+  if (!address || typeof address !== 'object') {
+    return ''
+  }
+  const name = String(address.name || '').trim()
+  const line1 = String(address.line1 || '').trim()
+  const line2 = String(address.line2 || '').trim()
+  const city = String(address.city || '').trim()
+  const state = String(address.state || '').trim()
+  const zip = String(address.zip || '').trim()
+  const cityLine = [city, state].filter(Boolean).join(', ') + (zip ? ` ${zip}` : '')
+  return [name, line1, line2 || null, cityLine.trim() || null].filter(Boolean).join('\n')
+}
+
 const validateMailingAddress = (address: MailingAddress, label: string) => {
   const name = address.name.trim()
   const line1 = address.line1.trim()
@@ -1944,11 +1958,24 @@ function App() {
       recipientName: string
       status: string
     }>
+    printOrders?: Array<{
+      orderNumber?: number
+      orderCode: string
+      cardId?: string
+      createdAt: string
+      shipToName?: string
+      shipTo?: MailingAddress | Record<string, string>
+      mailFrom?: MailingAddress | Record<string, string>
+      shopperEmail?: string
+      status: string
+      creditCost?: number
+    }>
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
+  const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
   const [activeCoverThumbId, setActiveCoverThumbId] = useState<string | null>(null)
   const [thankYouAvailable, setThankYouAvailable] = useState(false)
   const [thankYouAlreadySent, setThankYouAlreadySent] = useState(false)
@@ -3236,6 +3263,7 @@ function App() {
     setAccountHistoryError('')
     setShowAllCreditEvents(false)
     setShowAllCardActivity(false)
+    setShowAllPrintOrders(false)
     setActiveCoverThumbId(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
@@ -5493,7 +5521,45 @@ function App() {
               </div>
               <div className="account-block">
                 <h3>Printed cards</h3>
-                <p>A mailing address will be saved here when printed cards are offered.</p>
+                {(accountHistory.printOrders || []).length === 0 ? (
+                  <p>No printed cards ordered yet.</p>
+                ) : (
+                  <>
+                    <div className="account-list">
+                      {(showAllPrintOrders
+                        ? accountHistory.printOrders || []
+                        : (accountHistory.printOrders || []).slice(0, accountActivityPreviewLimit)
+                      ).map((order) => {
+                        const shipToLines =
+                          formatAccountMailingAddress(order.shipTo) || order.shipToName || 'Mailing address saved'
+                        const detailParts = [
+                          `Ship to:\n${shipToLines}`,
+                          order.shopperEmail ? `Confirmation: ${order.shopperEmail}` : null,
+                        ].filter(Boolean)
+
+                        return (
+                          <div className="account-row account-print-order-row" key={order.orderCode}>
+                            <span className="account-row-title">Order {order.orderCode}</span>
+                            <span className="account-row-detail">{detailParts.join('\n')}</span>
+                            <span className="account-row-status">{order.status || 'submitted'}</span>
+                            <span className="account-row-date">{formatAccountDate(order.createdAt)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {(accountHistory.printOrders || []).length > accountActivityPreviewLimit && (
+                      <button
+                        className="text-action-link account-more-link"
+                        type="button"
+                        onClick={() => setShowAllPrintOrders((current) => !current)}
+                      >
+                        {showAllPrintOrders
+                          ? 'Show less'
+                          : `Show ${(accountHistory.printOrders || []).length - accountActivityPreviewLimit} more`}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
               {renderFeedbackPrompt('account')}
             </>

@@ -3010,6 +3010,10 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.account-print-order-row .account-row-detail {
+  white-space: pre-line;
+}
+
 .account-row a {
   color: inherit;
   text-decoration: none;
