@@ -3296,8 +3296,12 @@ function App() {
     showCardInterviewRef.current = true
     setShowCardInterview(true)
     setInterviewComplete(false)
-    setInterviewNotice('')
-    startInterviewListening()
+    if (interviewSpeechSupported) {
+      setInterviewNotice('')
+      startInterviewListening()
+    } else {
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+    }
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
@@ -3310,12 +3314,16 @@ function App() {
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
-    setInterviewNotice('')
     isInterviewingRef.current = false
     setIsInterviewing(false)
-    window.setTimeout(() => {
-      startInterviewListening()
-    }, 0)
+    if (interviewSpeechSupported) {
+      setInterviewNotice('')
+      window.setTimeout(() => {
+        startInterviewListening()
+      }, 0)
+    } else {
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+    }
   }
 
   const closeCardInterview = () => {
@@ -3325,7 +3333,7 @@ function App() {
     setInterviewNotice('')
   }
 
-  const clearCreateCardInputs = () => {
+  const startNewCard = () => {
     if (isRecipientView) {
       return
     }
@@ -3350,6 +3358,41 @@ function App() {
     setShowAccountPage(false)
     setAdminView(null)
 
+    setCard(null)
+    setSharedCard(null)
+    setCardGreeting(null)
+    setCardSignature(null)
+    setStep('envelope')
+    setHasViewedFront(false)
+    setHasViewedInside(false)
+    setIsGenerating(false)
+    setShowCompletionNote(false)
+    setActiveGenerationStep(0)
+    setImageRefinement('')
+    setCoverRefinementMode('revise')
+    setCopyRefinement('')
+    setIsRefiningImage(false)
+    setIsRefiningCopy(false)
+    setRefinementNotice('')
+    setShowEditor(false)
+    setEditorHasChanges(false)
+    setHasAcceptedRevision(false)
+    setShowPolishDialog(false)
+    setDeliveryNotice('')
+    setDeliveryLogs([])
+    setHasSentCurrentCard(false)
+    setDeliveryMethod('email')
+    setDeliveryDestinations([''])
+    setShowSenderCopyField(false)
+    setSenderCopyEmail('')
+    setSmsConsentConfirmed(false)
+    setPrintOrderStep('closed')
+    setPrintShipTo(emptyMailingAddress())
+    setPrintMailFrom({ ...defaultPrintMailFrom })
+    setPrintShopperEmail('')
+    setAdminPrintFiles(null)
+    clearStoredGenerationJob()
+
     try {
       window.localStorage.removeItem(formDraftStorageKey)
     } catch {
@@ -3360,6 +3403,8 @@ function App() {
       document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
   }
+
+  const clearCreateCardInputs = startNewCard
 
   const sendCardInterview = async () => {
     if (isInterviewingRef.current) {
@@ -6050,14 +6095,14 @@ function App() {
               <div>
                 <strong>{creditsSummary}</strong>
                 <small>
-                  Creating a card is free.{' '}
+                  Creating a card is free. Click here for{' '}
                   <button
                     className="text-action-link credit-details-toggle"
                     type="button"
                     aria-expanded={showCreditDetails}
                     onClick={() => setShowCreditDetails((current) => !current)}
                   >
-                    Click here for more details.
+                    more details.
                   </button>
                 </small>
               </div>
@@ -6939,7 +6984,7 @@ function App() {
                 <button className="text-action-link" type="button" onClick={openCardInterview}>
                   ask Genie
                 </button>{' '}
-                to fill them in for you.
+                to fill in for you.
               </p>
             </div>
           </div>
@@ -7596,6 +7641,9 @@ function App() {
                       Revise card
                     </button>
                   )}
+                  <button className="secondary-button" type="button" onClick={startNewCard}>
+                    Start a new card
+                  </button>
                 </div>
               )}
               {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
