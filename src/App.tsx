@@ -2155,12 +2155,12 @@ function App() {
   )
   const generationLines = useMemo(
     () => [
-      `Crafting a ${details.occasion || 'card'} cover for ${envelopeLabel}.`,
-      `Writing a ${details.tone.toLowerCase()} note that sounds personal, not canned.`,
-      `Blending the ${details.imageStyle.toLowerCase()} look with the story you shared.`,
-      'Sealing it into a digital envelope.',
+      'Designing the card cover.',
+      `Writing a ${details.tone.toLowerCase()} note.`,
+      'Blending art with your story.',
+      'Sealing the digital envelope.',
     ],
-    [details.imageStyle, details.occasion, details.tone, envelopeLabel],
+    [details.tone],
   )
   const filledDeliveryDestinations = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
   const plannedRecipientCount = Math.max(1, filledDeliveryDestinations.length)
@@ -4229,18 +4229,28 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  /** Break after the first sentence so the last few words are not left alone on the next line. */
+  const formatCreditNeedMessage = (message: string) => {
+    const match = message.trim().match(/^(.+?[.!?])\s+(.+)$/)
+    if (!match) {
+      return message
+    }
+    return `${match[1]}\n${match[2]}`
+  }
+
   const promptNeedCredits = (message: string, where: 'send' | 'refine' = 'refine') => {
-    setCreditNotice(message)
+    const formatted = formatCreditNeedMessage(message)
+    setCreditNotice(formatted)
     if (where === 'send') {
-      setDeliveryNotice(message)
+      setDeliveryNotice(formatted)
     } else {
-      setRefinementNotice(message)
+      setRefinementNotice(formatted)
     }
   }
 
   const renderCreditNeedNotice = (message: string) => (
     <div className="delivery-notice credit-need-notice">
-      <span>{message}</span>
+      <span>{formatCreditNeedMessage(message)}</span>
       <button className="secondary-button" type="button" onClick={openCreditPurchase}>
         Buy more credits
       </button>

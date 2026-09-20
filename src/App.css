@@ -164,6 +164,7 @@
 
 .hero-section .wallet-kicker.is-credit-need {
   color: #b42318;
+  white-space: pre-line;
 }
 
 .credit-wallet strong {
@@ -3035,6 +3036,7 @@ textarea:focus {
 
 .delivery-notice.credit-need-notice > span {
   color: #b42318;
+  white-space: pre-line;
 }
 
 .delivery-notice .text-action-link {
