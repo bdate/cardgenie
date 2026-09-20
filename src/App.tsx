@@ -6739,11 +6739,14 @@ function App() {
 
           {showCardInterview && (
             <div className="card-interview-panel" aria-label="Ask Genie">
-              <div className="card-interview-header">
-                <button className="text-action-link" type="button" onClick={closeCardInterview}>
-                  Close
-                </button>
-              </div>
+              <button
+                className="card-interview-close"
+                type="button"
+                onClick={closeCardInterview}
+                aria-label="Close Ask Genie"
+              >
+                ×
+              </button>
               <div className="card-interview-thread" aria-live="polite" ref={interviewThreadRef}>
                 {interviewMessages.map((entry, index) => (
                   <div
