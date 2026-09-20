@@ -100,6 +100,9 @@ const styleOptions = [
 ]
 const initialCreditBalance = 2
 const creditStorageKey = 'cardGenieCredits'
+const formDraftStorageKey = 'cardGenieFormDraft'
+const formDraftMaxAgeMs = 30 * 24 * 60 * 60 * 1000
+const formDraftVersion = 1 as const
 const sendCreditCostSingle = 3
 const sendCreditCostPerRecipient = 2
 const maxDeliveryRecipients = 10
@@ -505,6 +508,104 @@ const clearCheckoutResumeQueryParam = () => {
     window.history.replaceState({}, '', nextUrl)
   } catch {
     // Ignore history failures.
+  }
+}
+
+type FormDraftState = {
+  version: typeof formDraftVersion
+  savedAt: number
+  details: CardDetails
+  referencePhotos: ReferencePhoto[]
+  deliveryMethod: DeliveryMethod
+  deliveryDestinations: string[]
+  showSenderCopyField: boolean
+  senderCopyEmail: string
+  smsConsentConfirmed: boolean
+  printOrderStep: PrintOrderStep
+  printShipTo: MailingAddress
+  printMailFrom: MailingAddress
+  printShopperEmail: string
+  cardId?: string
+  shareUrl?: string
+  card?: GeneratedCard
+  cardGreeting?: string | null
+  cardSignature?: string | null
+  step?: ExperienceStep
+  hasViewedFront?: boolean
+  hasViewedInside?: boolean
+  hasSentCurrentCard?: boolean
+}
+
+const isCardDetailsShape = (value: unknown): value is CardDetails => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const raw = value as Record<string, unknown>
+  return typeof raw.recipientName === 'string' && typeof raw.senderName === 'string'
+}
+
+const parseFormDraft = (raw: string | null): FormDraftState | null => {
+  if (!raw) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as FormDraftState
+    if (parsed?.version !== formDraftVersion || !isCardDetailsShape(parsed.details)) {
+      return null
+    }
+    if (parsed.savedAt && Date.now() - parsed.savedAt > formDraftMaxAgeMs) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+const readFormDraft = (): FormDraftState | null => {
+  try {
+    const draft = parseFormDraft(window.localStorage.getItem(formDraftStorageKey))
+    if (!draft) {
+      const stale = window.localStorage.getItem(formDraftStorageKey)
+      if (stale) {
+        window.localStorage.removeItem(formDraftStorageKey)
+      }
+    }
+    return draft
+  } catch {
+    return null
+  }
+}
+
+const writeFormDraft = (draft: FormDraftState) => {
+  const base = {
+    ...draft,
+    version: formDraftVersion,
+    savedAt: Date.now(),
+    card: slimCheckoutResumeCard(draft.card),
+  }
+
+  const tryWrite = (payload: string) => {
+    window.localStorage.setItem(formDraftStorageKey, payload)
+  }
+
+  try {
+    tryWrite(JSON.stringify(base))
+    return
+  } catch {
+    // Quota — retry without reference photos.
+  }
+
+  try {
+    tryWrite(
+      JSON.stringify({
+        ...base,
+        referencePhotos: [],
+      }),
+    )
+  } catch {
+    // Ignore storage failures; in-session state still works.
   }
 }
 
@@ -1767,7 +1868,8 @@ const buildPrintInsideImageUrl = async ({
 function App() {
   const sharedCardId = useMemo(() => getSharedCardId(), [])
   const isRecipientView = Boolean(sharedCardId)
-  const [details, setDetails] = useState<CardDetails>(initialDetails)
+  const initialFormDraft = useMemo(() => (isRecipientView ? null : readFormDraft()), [isRecipientView])
+  const [details, setDetails] = useState<CardDetails>(() => initialFormDraft?.details || initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
   const [hasViewedFront, setHasViewedFront] = useState(false)
@@ -1786,8 +1888,8 @@ function App() {
   const [hasAcceptedRevision, setHasAcceptedRevision] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
   const [showPolishDialog, setShowPolishDialog] = useState(false)
-  const [cardGreeting, setCardGreeting] = useState<string | null>(null)
-  const [cardSignature, setCardSignature] = useState<string | null>(null)
+  const [cardGreeting, setCardGreeting] = useState<string | null>(() => initialFormDraft?.cardGreeting ?? null)
+  const [cardSignature, setCardSignature] = useState<string | null>(() => initialFormDraft?.cardSignature ?? null)
   const [credits, setCredits] = useState(() => {
     const stored = window.localStorage.getItem(creditStorageKey)
     if (stored === null) {
@@ -1865,17 +1967,33 @@ function App() {
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('email')
-  const [deliveryDestinations, setDeliveryDestinations] = useState<string[]>([''])
-  const [printOrderStep, setPrintOrderStep] = useState<PrintOrderStep>('closed')
-  const [printShipTo, setPrintShipTo] = useState<MailingAddress>(emptyMailingAddress)
-  const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>({ ...defaultPrintMailFrom })
-  const [printShopperEmail, setPrintShopperEmail] = useState('')
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(
+    () => (initialFormDraft?.deliveryMethod === 'text' ? 'text' : 'email'),
+  )
+  const [deliveryDestinations, setDeliveryDestinations] = useState<string[]>(() =>
+    Array.isArray(initialFormDraft?.deliveryDestinations) && initialFormDraft.deliveryDestinations.length > 0
+      ? initialFormDraft.deliveryDestinations
+      : [''],
+  )
+  const [printOrderStep, setPrintOrderStep] = useState<PrintOrderStep>(() =>
+    isPrintOrderStep(initialFormDraft?.printOrderStep) ? initialFormDraft.printOrderStep : 'closed',
+  )
+  const [printShipTo, setPrintShipTo] = useState<MailingAddress>(() =>
+    normalizeResumeMailingAddress(initialFormDraft?.printShipTo, emptyMailingAddress()),
+  )
+  const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>(() =>
+    normalizeResumeMailingAddress(initialFormDraft?.printMailFrom, { ...defaultPrintMailFrom }),
+  )
+  const [printShopperEmail, setPrintShopperEmail] = useState(() => initialFormDraft?.printShopperEmail || '')
   const [printOrderNotice, setPrintOrderNotice] = useState<ReactNode>('')
   const [isOrderingPrint, setIsOrderingPrint] = useState(false)
-  const [showSenderCopyField, setShowSenderCopyField] = useState(false)
-  const [senderCopyEmail, setSenderCopyEmail] = useState('')
-  const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(false)
+  const [showSenderCopyField, setShowSenderCopyField] = useState(
+    () => Boolean(initialFormDraft?.showSenderCopyField),
+  )
+  const [senderCopyEmail, setSenderCopyEmail] = useState(() => initialFormDraft?.senderCopyEmail || '')
+  const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(
+    () => Boolean(initialFormDraft?.smsConsentConfirmed),
+  )
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
   const [showAccountConfirm, setShowAccountConfirm] = useState(false)
@@ -1889,7 +2007,9 @@ function App() {
   const [isSendingAccountCode, setIsSendingAccountCode] = useState(false)
   const [isVerifyingAccountCode, setIsVerifyingAccountCode] = useState(false)
   const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLog[]>([])
-  const [hasSentCurrentCard, setHasSentCurrentCard] = useState(false)
+  const [hasSentCurrentCard, setHasSentCurrentCard] = useState(
+    () => Boolean(initialFormDraft?.hasSentCurrentCard),
+  )
   const [feedbackDismissed, setFeedbackDismissed] = useState(() => {
     try {
       return window.localStorage.getItem(feedbackDismissStorageKey) === '1'
@@ -1943,7 +2063,22 @@ function App() {
   const [isGrantingCredits, setIsGrantingCredits] = useState(false)
   const [showAdminGrantCredits, setShowAdminGrantCredits] = useState(false)
   const [saveNotice, setSaveNotice] = useState('')
-  const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>([])
+  const [referencePhotos, setReferencePhotos] = useState<ReferencePhoto[]>(() => {
+    const photos = initialFormDraft?.referencePhotos
+    if (!Array.isArray(photos)) {
+      return []
+    }
+    return photos
+      .filter(
+        (photo): photo is ReferencePhoto =>
+          Boolean(photo) &&
+          typeof photo.id === 'string' &&
+          typeof photo.name === 'string' &&
+          typeof photo.dataUrl === 'string' &&
+          photo.dataUrl.startsWith('data:image/'),
+      )
+      .slice(0, maxReferencePhotos)
+  })
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
   const [isAddingPhotos, setIsAddingPhotos] = useState(false)
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
@@ -2113,6 +2248,162 @@ function App() {
 
     void restoreAccount()
   }, [])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      writeFormDraft({
+        version: formDraftVersion,
+        savedAt: Date.now(),
+        details,
+        referencePhotos,
+        deliveryMethod,
+        deliveryDestinations,
+        showSenderCopyField,
+        senderCopyEmail,
+        smsConsentConfirmed,
+        printOrderStep,
+        printShipTo,
+        printMailFrom,
+        printShopperEmail,
+        cardId: sharedCard?.id,
+        shareUrl: sharedCard?.shareUrl,
+        card: slimCheckoutResumeCard(card),
+        cardGreeting,
+        cardSignature,
+        step: hasViewedInside ? 'inside' : hasViewedFront ? 'front' : step,
+        hasViewedFront: hasViewedFront || Boolean(card),
+        hasViewedInside: hasViewedInside || Boolean(card),
+        hasSentCurrentCard,
+      })
+    }, 300)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    isRecipientView,
+    details,
+    referencePhotos,
+    deliveryMethod,
+    deliveryDestinations,
+    showSenderCopyField,
+    senderCopyEmail,
+    smsConsentConfirmed,
+    printOrderStep,
+    printShipTo,
+    printMailFrom,
+    printShopperEmail,
+    sharedCard?.id,
+    sharedCard?.shareUrl,
+    card,
+    cardGreeting,
+    cardSignature,
+    step,
+    hasViewedFront,
+    hasViewedInside,
+    hasSentCurrentCard,
+  ])
+
+  useEffect(() => {
+    if (isRecipientView || card) {
+      return
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('resume') || readCheckoutResume()) {
+      return
+    }
+
+    const draft = initialFormDraft
+    const draftCardId =
+      (isCheckoutResumeCardId(draft?.cardId) && draft?.cardId?.trim()) || ''
+    if (!draftCardId && !draft?.card?.message) {
+      return
+    }
+
+    let cancelled = false
+
+    const restoreDraftCard = async () => {
+      let restoredCard: GeneratedCard | null =
+        draft?.card?.imageUrl && !draft.card.imageUrl.startsWith('data:') ? draft.card : null
+      let restoredShared: SharedCard | null = null
+
+      if (draftCardId) {
+        try {
+          const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(draftCardId)}`))
+          const data = await getApiJson(response, 'Unable to restore your card.')
+          if (response.ok && data?.card?.imageUrl) {
+            const shared = data as SharedCard
+            restoredShared = isLocalApiDev
+              ? { ...shared, shareUrl: localShareUrl(shared.id) }
+              : shared
+            const copy = normalizeCardCopy(
+              shared.card.message,
+              shared.card.closing,
+              shared.details.senderName || draft?.details.senderName || 'Your Name',
+            )
+            restoredCard = {
+              ...shared.card,
+              message: copy.message,
+              closing: copy.closing,
+              messageVariants: draft?.card?.messageVariants,
+              selectedLength: draft?.card?.selectedLength,
+            }
+            if (shared.greeting) {
+              setCardGreeting(shared.greeting)
+            }
+            if (shared.signature) {
+              setCardSignature(shared.signature)
+            }
+          }
+        } catch {
+          // Keep any slim draft card below.
+        }
+      }
+
+      if (cancelled || !restoredCard?.imageUrl) {
+        return
+      }
+
+      setCard(restoredCard)
+      if (restoredShared) {
+        setSharedCard(restoredShared)
+      } else if (draftCardId) {
+        setSharedCard({
+          id: draftCardId,
+          shareUrl: draft?.shareUrl || localShareUrl(draftCardId),
+          details: draft?.details || initialDetails,
+          card: restoredCard,
+          greeting: draft?.cardGreeting || undefined,
+          signature: draft?.cardSignature || undefined,
+        })
+      }
+
+      if (typeof draft?.cardGreeting === 'string') {
+        setCardGreeting(draft.cardGreeting)
+      }
+      if (typeof draft?.cardSignature === 'string') {
+        setCardSignature(draft.cardSignature)
+      }
+      setHasViewedFront(Boolean(draft?.hasViewedFront))
+      setHasViewedInside(Boolean(draft?.hasViewedInside))
+      setHasSentCurrentCard(Boolean(draft?.hasSentCurrentCard))
+      setStep(
+        draft?.hasViewedInside || draft?.step === 'inside'
+          ? 'inside'
+          : draft?.hasViewedFront || draft?.step === 'front'
+            ? 'front'
+            : 'envelope',
+      )
+    }
+
+    void restoreDraftCard()
+    return () => {
+      cancelled = true
+    }
+  }, [isRecipientView, initialFormDraft, card])
 
   useEffect(() => {
     if (isRecipientView) {
