@@ -2792,22 +2792,33 @@ app.post('/api/card-interview', async (req, res) => {
 
   try {
     const openai = getOpenAI()
+    const transcript = messages
+      .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
+      .join('\n')
     const response = await openai.responses.create({
       model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      text: { format: { type: 'json_object' } },
       input: [
         {
           role: 'system',
           content: `You help shoppers fill out a greeting-card form for Card Genie.
 Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
 Ask at most 1-2 clarifying questions. Prefer status "ready" when sender, recipient, occasion, relation, and story details are known.
+assistantMessage is a short chat reply, not the card message body.
 tone must be one of: ${localInterviewTones.join(', ')}.
 ${shouldForceReady ? 'You MUST return status "ready" now with best-effort details.' : ''}`,
         },
-        ...messages.map((entry) => ({ role: entry.role, content: entry.content })),
+        {
+          role: 'user',
+          content: `Conversation so far:\n${transcript}\n\nReturn the next JSON result now.`,
+        },
       ],
     })
 
-    const text = getMessageText(response)
+    let text = getMessageText(response)
+    if (text.startsWith('```')) {
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    }
     let parsed = null
     try {
       parsed = JSON.parse(text)
@@ -2815,7 +2826,19 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       const start = text.indexOf('{')
       const end = text.lastIndexOf('}')
       if (start >= 0 && end > start) {
-        parsed = JSON.parse(text.slice(start, end + 1))
+        const sliced = text.slice(start, end + 1)
+        try {
+          parsed = JSON.parse(sliced)
+        } catch {
+          parsed = JSON.parse(
+            sliced.replace(/[\u0000-\u001f]+/g, (char) => {
+              if (char === '\n') return '\\n'
+              if (char === '\r') return '\\r'
+              if (char === '\t') return '\\t'
+              return ' '
+            }),
+          )
+        }
       }
     }
     if (!parsed || typeof parsed !== 'object') {

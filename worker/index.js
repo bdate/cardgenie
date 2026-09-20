@@ -3711,7 +3711,7 @@ Have a short mini-interview: understand their story, ask at most 1-2 clarifying 
 Return ONLY valid JSON with this shape:
 {
   "assistantMessage": "friendly reply shown to the shopper",
-  "status": "ask" | "ready",
+  "status": "ask" or "ready",
   "details": {
     "recipientName": "",
     "recipientType": "",
@@ -3726,12 +3726,14 @@ Rules:
 - status "ready" when you have enough to create a card: senderName, recipientName, occasion, recipientType, and useful keyDetails.
 - If relation is unclear, make a reasonable guess (friends, couple, family, coworkers) rather than asking forever.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
-- keyDetails should be a concise paragraph of memories/scene ideas for the cover and message (not the finished inside note).
+- keyDetails should be a concise single-paragraph summary of memories/scene ideas for the cover and message. Do not write the finished inside note.
+- assistantMessage is your short chat reply to the shopper (acknowledgment or one question). Never put the greeting-card message body in assistantMessage.
 - Ask only about missing essentials. Prefer one short question.
 - If the shopper already gave a full story, go straight to status "ready".
 - Never invent trademarks, celebrity likenesses, or private facts they did not share.
-- Keep assistantMessage warm, brief, and conversational (2-4 sentences max).
-- When status is "ready", say you filled the form and they can edit anything before creating the card.`
+- Keep assistantMessage warm, brief, and conversational (1-3 sentences).
+- When status is "ready", say you filled the form and they can edit anything before creating the card.
+- Output compact JSON on one logical structure. Escape any newlines inside strings.`
 
 const normalizeInterviewDetails = (raw = {}) => {
   const toneRaw = String(raw.tone || 'Heartfelt').trim()
@@ -3757,26 +3759,68 @@ const interviewDetailsAreReady = (details) =>
       details.keyDetails,
   )
 
+const getInterviewResponseText = (response) => {
+  const direct = String(response?.output_text || '').trim()
+  if (direct) {
+    return direct
+  }
+
+  const chunks = []
+  for (const item of response?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === 'string' && content.text.trim()) {
+        chunks.push(content.text.trim())
+      } else if (typeof content?.output_text === 'string' && content.output_text.trim()) {
+        chunks.push(content.output_text.trim())
+      }
+    }
+  }
+  return chunks.join('\n').trim()
+}
+
 const parseInterviewModelJson = (text) => {
-  const trimmed = String(text || '').trim()
+  let trimmed = String(text || '').trim()
   if (!trimmed) {
     return null
   }
 
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    const start = trimmed.indexOf('{')
-    const end = trimmed.lastIndexOf('}')
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(trimmed.slice(start, end + 1))
-      } catch {
-        return null
-      }
-    }
-    return null
+  if (trimmed.startsWith('```')) {
+    trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   }
+
+  const tryParse = (value) => {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+
+  const direct = tryParse(trimmed)
+  if (direct) {
+    return direct
+  }
+
+  const start = trimmed.indexOf('{')
+  const end = trimmed.lastIndexOf('}')
+  if (start >= 0 && end > start) {
+    const sliced = trimmed.slice(start, end + 1)
+    const parsed = tryParse(sliced)
+    if (parsed) {
+      return parsed
+    }
+
+    // Repair common model mistakes: raw newlines inside JSON strings.
+    const repaired = sliced.replace(/[\u0000-\u001f]+/g, (char) => {
+      if (char === '\n') return '\\n'
+      if (char === '\r') return '\\r'
+      if (char === '\t') return '\\t'
+      return ' '
+    })
+    return tryParse(repaired)
+  }
+
+  return null
 }
 
 const handleCardInterview = async (request, env) => {
@@ -3796,7 +3840,8 @@ const handleCardInterview = async (request, env) => {
     .filter((entry) => entry.role && entry.content)
     .slice(-12)
 
-  const userTurns = messages.filter((entry) => entry.role === 'user').length
+  const userMessages = messages.filter((entry) => entry.role === 'user')
+  const userTurns = userMessages.length
   if (userTurns < 1) {
     return jsonResponse(request, env, { error: 'Tell me about the card you want to create.' }, 400)
   }
@@ -3806,11 +3851,15 @@ const handleCardInterview = async (request, env) => {
   }
 
   const shouldForceReady = forceReady || userTurns >= CARD_INTERVIEW_MAX_USER_TURNS
+  const transcript = messages
+    .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
+    .join('\n')
 
   try {
     const openai = getOpenAI(env)
     const response = await openai.responses.create({
       model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      text: { format: { type: 'json_object' } },
       input: [
         {
           role: 'system',
@@ -3820,16 +3869,22 @@ const handleCardInterview = async (request, env) => {
               : ''
           }`,
         },
-        ...messages.map((entry) => ({
-          role: entry.role,
-          content: entry.content,
-        })),
+        {
+          role: 'user',
+          content: `Conversation so far:\n${transcript}\n\nReturn the next JSON result now.`,
+        },
       ],
     })
 
-    const parsed = parseInterviewModelJson(getMessageText(response))
+    const rawText = getInterviewResponseText(response)
+    const parsed = parseInterviewModelJson(rawText)
     if (!parsed || typeof parsed !== 'object') {
-      return jsonResponse(request, env, { error: 'I had trouble understanding that. Try one more short sentence.' }, 502)
+      return jsonResponse(
+        request,
+        env,
+        { error: 'I had trouble understanding that. Try one more short sentence.' },
+        502,
+      )
     }
 
     const details = normalizeInterviewDetails(parsed.details || {})
