@@ -7336,6 +7336,13 @@ function App() {
                           disabled={isOrderingPrint}
                         />
                       </label>
+                      <p className="print-order-rights-note">
+                        You’re ordering a custom printed greeting card and mailing service, not exclusive rights to the
+                        artwork. Similar designs may be created for others.{' '}
+                        <a href="/terms/" target="_blank" rel="noreferrer">
+                          Terms
+                        </a>
+                      </p>
                       <div className="print-order-actions">
                         <div className="credit-action-block">
                           <button

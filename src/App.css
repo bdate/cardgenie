@@ -2280,6 +2280,18 @@ textarea:focus {
   max-width: 28rem;
 }
 
+.print-order-rights-note {
+  margin: 0;
+  color: var(--gcu-grey);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.print-order-rights-note a {
+  color: var(--gcu-dark-teal);
+  font-weight: 700;
+}
+
 .print-order-actions .primary-button {
   width: min(320px, 100%);
 }
