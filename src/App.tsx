@@ -2030,7 +2030,6 @@ function App() {
   const filledDeliveryDestinations = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
   const plannedRecipientCount = Math.max(1, filledDeliveryDestinations.length)
   const currentSendCreditCost = getSendCreditCost(plannedRecipientCount)
-  const hasEnoughCreditsToSend = credits >= currentSendCreditCost
   const hasEnoughCreditsForCover = credits >= coverRevisionCost
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
