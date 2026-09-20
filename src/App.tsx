@@ -4122,7 +4122,7 @@ function App() {
             </p>
           ) : null}
           <p>
-            A confirmation was emailed to <strong>{shopperEmail.value}</strong>.
+            A confirmation was emailed to: <strong>{shopperEmail.value}</strong>
           </p>
         </div>,
       )
