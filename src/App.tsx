@@ -1969,6 +1969,7 @@ function App() {
       shopperEmail?: string
       status: string
       creditCost?: number
+      coverThumbUrl?: string
     }>
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
@@ -3138,6 +3139,40 @@ function App() {
     return [...created, ...sent, ...thanks].sort((left, right) =>
       String(right.createdAt).localeCompare(String(left.createdAt)),
     )
+  }, [accountHistory])
+
+  const printOrderItems = useMemo(() => {
+    if (!accountHistory?.printOrders?.length) {
+      return []
+    }
+
+    const resolveThumbUrl = (cardId?: string, coverThumbUrl?: string) => {
+      if (!coverThumbUrl) {
+        return ''
+      }
+      if (cardId && apiBaseUrl) {
+        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb`
+      }
+      return coverThumbUrl
+    }
+
+    return accountHistory.printOrders.map((order) => {
+      const shipToLines =
+        formatAccountMailingAddress(order.shipTo) || order.shipToName || 'Mailing address saved'
+      const detailParts = [
+        `Ship to:\n${shipToLines}`,
+        order.shopperEmail ? `Confirmation: ${order.shopperEmail}` : null,
+      ].filter(Boolean)
+
+      return {
+        id: `print-${order.orderCode}`,
+        orderCode: order.orderCode,
+        createdAt: order.createdAt,
+        detail: detailParts.join('\n'),
+        status: order.status || 'submitted',
+        coverThumbUrl: resolveThumbUrl(order.cardId, order.coverThumbUrl),
+      }
+    })
   }, [accountHistory])
 
   const loadAccountHistory = async (token: string) => {
@@ -5521,33 +5556,77 @@ function App() {
               </div>
               <div className="account-block">
                 <h3>Printed cards</h3>
-                {(accountHistory.printOrders || []).length === 0 ? (
+                {printOrderItems.some((item) => item.coverThumbUrl) && (
+                  <p className="account-thumb-hint">Hover or tap a row to preview the cover.</p>
+                )}
+                {printOrderItems.length === 0 ? (
                   <p>No printed cards ordered yet.</p>
                 ) : (
                   <>
                     <div className="account-list">
                       {(showAllPrintOrders
-                        ? accountHistory.printOrders || []
-                        : (accountHistory.printOrders || []).slice(0, accountActivityPreviewLimit)
-                      ).map((order) => {
-                        const shipToLines =
-                          formatAccountMailingAddress(order.shipTo) || order.shipToName || 'Mailing address saved'
-                        const detailParts = [
-                          `Ship to:\n${shipToLines}`,
-                          order.shopperEmail ? `Confirmation: ${order.shopperEmail}` : null,
-                        ].filter(Boolean)
-
-                        return (
-                          <div className="account-row account-print-order-row" key={order.orderCode}>
-                            <span className="account-row-title">Order {order.orderCode}</span>
-                            <span className="account-row-detail">{detailParts.join('\n')}</span>
-                            <span className="account-row-status">{order.status || 'submitted'}</span>
-                            <span className="account-row-date">{formatAccountDate(order.createdAt)}</span>
-                          </div>
-                        )
-                      })}
+                        ? printOrderItems
+                        : printOrderItems.slice(0, accountActivityPreviewLimit)
+                      ).map((order) => (
+                        <div
+                          className={[
+                            'account-row',
+                            'account-print-order-row',
+                            order.coverThumbUrl ? 'has-cover-thumb' : '',
+                            activeCoverThumbId === order.id ? 'is-thumb-open' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          key={order.id}
+                          role={order.coverThumbUrl ? 'button' : undefined}
+                          tabIndex={order.coverThumbUrl ? 0 : undefined}
+                          aria-expanded={order.coverThumbUrl ? activeCoverThumbId === order.id : undefined}
+                          aria-label={
+                            order.coverThumbUrl
+                              ? activeCoverThumbId === order.id
+                                ? `Order ${order.orderCode}. Hide cover preview.`
+                                : `Order ${order.orderCode}. Show cover preview.`
+                              : undefined
+                          }
+                          onClick={() => {
+                            if (!order.coverThumbUrl) {
+                              return
+                            }
+                            setActiveCoverThumbId((current) => (current === order.id ? null : order.id))
+                          }}
+                          onKeyDown={(event) => {
+                            if (!order.coverThumbUrl) {
+                              return
+                            }
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setActiveCoverThumbId((current) => (current === order.id ? null : order.id))
+                            }
+                          }}
+                        >
+                          <span className="account-row-title">Order {order.orderCode}</span>
+                          <span className="account-row-detail">{order.detail}</span>
+                          <span className="account-row-status">{order.status}</span>
+                          <span className="account-row-date">{formatAccountDate(order.createdAt)}</span>
+                          {order.coverThumbUrl ? (
+                            <span className="account-row-thumb" aria-hidden="true">
+                              <img
+                                src={order.coverThumbUrl}
+                                alt=""
+                                loading="lazy"
+                                onError={(event) => {
+                                  const row = event.currentTarget.closest('.account-row')
+                                  row?.classList.remove('has-cover-thumb', 'is-thumb-open')
+                                  event.currentTarget.closest('.account-row-thumb')?.remove()
+                                  setActiveCoverThumbId((current) => (current === order.id ? null : current))
+                                }}
+                              />
+                            </span>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
-                    {(accountHistory.printOrders || []).length > accountActivityPreviewLimit && (
+                    {printOrderItems.length > accountActivityPreviewLimit && (
                       <button
                         className="text-action-link account-more-link"
                         type="button"
@@ -5555,7 +5634,7 @@ function App() {
                       >
                         {showAllPrintOrders
                           ? 'Show less'
-                          : `Show ${(accountHistory.printOrders || []).length - accountActivityPreviewLimit} more`}
+                          : `Show ${printOrderItems.length - accountActivityPreviewLimit} more`}
                       </button>
                     )}
                   </>

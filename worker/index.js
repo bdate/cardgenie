@@ -2693,9 +2693,11 @@ const handleGetAccountHistory = async (request, env) => {
 
   const cardIds = [
     ...new Set(
-      [...(history.cards || []).map((card) => card.id), ...(history.deliveries || []).map((delivery) => delivery.cardId)].filter(
-        Boolean,
-      ),
+      [
+        ...(history.cards || []).map((card) => card.id),
+        ...(history.deliveries || []).map((delivery) => delivery.cardId),
+        ...(history.printOrders || []).map((order) => order.cardId),
+      ].filter(Boolean),
     ),
   ]
 
@@ -2734,6 +2736,7 @@ const handleGetAccountHistory = async (request, env) => {
     ...history,
     cards: withThumbUrls(history.cards, 'id'),
     deliveries: withThumbUrls(history.deliveries, 'cardId'),
+    printOrders: withThumbUrls(history.printOrders, 'cardId'),
   })
 }
 
