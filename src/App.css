@@ -459,12 +459,17 @@
 
 .card-interview-notice {
   margin: 0;
-  color: #2f6b54;
+  color: #315f5b;
   font-size: 0.9rem;
 }
 
 .card-interview-notice.is-listening {
   color: #972044;
+}
+
+.card-interview-notice.is-success {
+  color: #2f6b54;
+  font-weight: 700;
 }
 
 .proof-heading {

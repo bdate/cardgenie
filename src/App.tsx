@@ -2068,6 +2068,7 @@ function App() {
   const [interviewNotice, setInterviewNotice] = useState('')
   const [isInterviewing, setIsInterviewing] = useState(false)
   const [isInterviewListening, setIsInterviewListening] = useState(false)
+  const [interviewComplete, setInterviewComplete] = useState(false)
   const [interviewSpeechSupported] = useState(() => {
     if (typeof window === 'undefined') {
       return false
@@ -3094,7 +3095,56 @@ function App() {
     setIsInterviewListening(false)
   }
 
-  const startInterviewListening = () => {
+  const pauseInterviewListeningForFinalWords = async () => {
+    interviewListenDesiredRef.current = false
+    const recognition = interviewRecognitionRef.current
+    if (!recognition) {
+      setIsInterviewListening(false)
+      return
+    }
+
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        recognition.onresult = null
+        recognition.onerror = null
+        recognition.onend = null
+        interviewRecognitionRef.current = null
+        setIsInterviewListening(false)
+        resolve()
+      }
+
+      const previousOnResult = recognition.onresult
+      recognition.onresult = (event) => {
+        previousOnResult?.(event)
+      }
+      recognition.onerror = () => {
+        finish()
+      }
+      recognition.onend = () => {
+        finish()
+      }
+
+      try {
+        recognition.stop()
+      } catch {
+        finish()
+        return
+      }
+
+      window.setTimeout(() => {
+        if (interviewRecognitionRef.current === recognition) {
+          try {
+            recognition.abort()
+          } catch {
+            // Already stopped.
+          }
+          finish()
+        }
+      }, 700)
+    })
+  }
+
+  const startInterviewListening = (options?: { announce?: boolean }) => {
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
     }
@@ -3168,7 +3218,9 @@ function App() {
     try {
       recognition.start()
       setIsInterviewListening(true)
-      setInterviewNotice('Listening… talk about your card.')
+      if (options?.announce !== false) {
+        setInterviewNotice('Listening… tell Genie about the card, then tap I’m done.')
+      }
     } catch {
       interviewListenDesiredRef.current = false
       setIsInterviewListening(false)
@@ -3184,6 +3236,7 @@ function App() {
     setAdminView(null)
     showCardInterviewRef.current = true
     setShowCardInterview(true)
+    setInterviewComplete(false)
     setInterviewNotice('')
     startInterviewListening()
     window.setTimeout(() => {
@@ -3196,6 +3249,7 @@ function App() {
     setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
+    setInterviewComplete(false)
     setInterviewNotice('')
     isInterviewingRef.current = false
     setIsInterviewing(false)
@@ -3212,22 +3266,32 @@ function App() {
   }
 
   const sendCardInterview = async () => {
-    const message = interviewDraft.trim()
-    if (!message || isInterviewingRef.current) {
+    if (isInterviewingRef.current) {
       return
     }
 
-    stopInterviewListening()
+    if (isInterviewListening || interviewRecognitionRef.current) {
+      await pauseInterviewListeningForFinalWords()
+    } else {
+      stopInterviewListening()
+    }
+
+    const message = (interviewBaseDraftRef.current || interviewDraft).trim()
+    if (!message) {
+      setInterviewNotice('Say or type a bit about the card first, then tap I’m done.')
+      return
+    }
+
     const nextMessages: InterviewMessage[] = [...interviewMessages, { role: 'user', content: message }]
     const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
     setInterviewMessages(nextMessages)
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
-    setInterviewNotice('')
+    setInterviewComplete(false)
+    setInterviewNotice('Genie is working on that…')
     isInterviewingRef.current = true
     setIsInterviewing(true)
 
-    let resumeListening = true
     try {
       const response = await fetch(apiUrl('/api/card-interview'), {
         method: 'POST',
@@ -3250,19 +3314,23 @@ function App() {
 
       if (data.status === 'ready' && data.details && typeof data.details === 'object') {
         applyInterviewDetails(data.details as Partial<CardDetails>)
-        setInterviewNotice('Form filled — review the fields below, then create your card.')
-        resumeListening = false
+        setInterviewComplete(true)
+        setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+        window.setTimeout(() => {
+          document.querySelector('.form-panel .field-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 80)
+      } else {
+        setInterviewComplete(false)
+        setInterviewNotice('Genie has a quick follow-up in the chat. Tap Answer to reply.')
       }
     } catch (caughtError) {
+      setInterviewComplete(false)
       setInterviewNotice(
         caughtError instanceof Error ? caughtError.message : 'Unable to continue that conversation.',
       )
     } finally {
       isInterviewingRef.current = false
       setIsInterviewing(false)
-      if (resumeListening && showCardInterviewRef.current) {
-        startInterviewListening()
-      }
     }
   }
 
@@ -6633,7 +6701,7 @@ function App() {
                 />
               </label>
               <div className="card-interview-actions">
-                {interviewSpeechSupported && (
+                {interviewSpeechSupported && !interviewComplete && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -6642,30 +6710,41 @@ function App() {
                     onClick={() => {
                       if (isInterviewListening) {
                         stopInterviewListening()
-                        setInterviewNotice('')
+                        setInterviewNotice('Mic paused. Tap I’m done when your reply looks right.')
                       } else {
-                        startInterviewListening()
+                        startInterviewListening({ announce: true })
                       }
                     }}
                   >
-                    {isInterviewListening ? 'Listening…' : 'Use mic'}
+                    {isInterviewListening ? 'Listening…' : 'Answer'}
                   </button>
                 )}
-                <button
-                  className="primary-button"
-                  type="button"
-                  disabled={isInterviewing || !interviewDraft.trim()}
-                  aria-busy={isInterviewing}
-                  onClick={() => void sendCardInterview()}
-                >
-                  {isInterviewing ? 'Genie is thinking…' : 'Send'}
-                </button>
+                {!interviewComplete && (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={isInterviewing || (!interviewDraft.trim() && !isInterviewListening)}
+                    aria-busy={isInterviewing}
+                    onClick={() => void sendCardInterview()}
+                  >
+                    {isInterviewing ? 'Genie is thinking…' : 'I’m done'}
+                  </button>
+                )}
+                {interviewComplete && (
+                  <button className="secondary-button" type="button" onClick={closeCardInterview}>
+                    Hide Ask Genie
+                  </button>
+                )}
                 <button className="text-action-link" type="button" onClick={resetCardInterview}>
                   Start over
                 </button>
               </div>
               {interviewNotice && (
-                <p className={`card-interview-notice${isInterviewListening ? ' is-listening' : ''}`}>
+                <p
+                  className={`card-interview-notice${
+                    interviewComplete ? ' is-success' : isInterviewListening ? ' is-listening' : ''
+                  }`}
+                >
                   {interviewNotice}
                 </p>
               )}
