@@ -4932,8 +4932,21 @@ function App() {
     }
 
     const blankAddress = isMailingAddressBlank(accountProfileMailing)
+    const nameOnly =
+      !blankAddress &&
+      Boolean(accountProfileMailing.name.trim()) &&
+      !accountProfileMailing.line1.trim() &&
+      !accountProfileMailing.line2.trim() &&
+      !accountProfileMailing.city.trim() &&
+      !accountProfileMailing.state.trim() &&
+      !accountProfileMailing.zip.trim()
     let mailingPayload: MailingAddress | null = null
-    if (!blankAddress) {
+    if (nameOnly) {
+      mailingPayload = {
+        ...emptyMailingAddress(),
+        name: accountProfileMailing.name.trim(),
+      }
+    } else if (!blankAddress) {
       const validatedAddress = validateMailingAddress(accountProfileMailing, 'mailing')
       if (!validatedAddress.ok) {
         setAccountProfileNotice(validatedAddress.message)

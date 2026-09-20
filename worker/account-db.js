@@ -51,6 +51,193 @@ const ensureUserProfileColumns = async (db) => {
   }
 }
 
+const DEFAULT_PROFILE_MAIL_FROM = {
+  name: 'Card Genie',
+  line1: '154 East Prospect Ave',
+  line2: '',
+  city: 'Danville',
+  state: 'CA',
+  zip: '94526',
+  country: 'US',
+}
+
+const normalizeAddressComparePart = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+const isDefaultProfileMailFrom = (address) => {
+  if (!address || typeof address !== 'object') {
+    return true
+  }
+  return (
+    normalizeAddressComparePart(address.name) === normalizeAddressComparePart(DEFAULT_PROFILE_MAIL_FROM.name) &&
+    normalizeAddressComparePart(address.line1) === normalizeAddressComparePart(DEFAULT_PROFILE_MAIL_FROM.line1) &&
+    normalizeAddressComparePart(address.line2) === normalizeAddressComparePart(DEFAULT_PROFILE_MAIL_FROM.line2) &&
+    normalizeAddressComparePart(address.city) === normalizeAddressComparePart(DEFAULT_PROFILE_MAIL_FROM.city) &&
+    normalizeAddressComparePart(address.state) === normalizeAddressComparePart(DEFAULT_PROFILE_MAIL_FROM.state) &&
+    String(address.zip || '').trim().replace(/\s+/g, '') === DEFAULT_PROFILE_MAIL_FROM.zip
+  )
+}
+
+const isCompleteMailingAddress = (address) =>
+  Boolean(
+    address &&
+      String(address.name || '').trim() &&
+      String(address.line1 || '').trim() &&
+      String(address.city || '').trim() &&
+      String(address.state || '').trim() &&
+      String(address.zip || '').trim(),
+  )
+
+/** Fill missing profile email / mailing address from past sender-copies and print orders. */
+const backfillAccountProfileFromActivity = async (env, userId) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
+  const user = await getUserById(env.ACCOUNT_DB, userId)
+  if (!user) {
+    return null
+  }
+
+  let nextEmail = String(user.email || '').trim().toLowerCase()
+  let nextMailing = parseMailingAddressJson(user.mailing_address_json)
+  let emailUpdatedAt = user.email_updated_at || null
+  let changed = false
+  const now = isoNow()
+
+  if (!nextEmail) {
+    try {
+      const senderCopy = await env.ACCOUNT_DB.prepare(
+        `SELECT destination
+         FROM deliveries
+         WHERE user_id = ? AND is_sender_copy = 1 AND method = 'email' AND destination LIKE '%@%'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+        .bind(userId)
+        .first()
+      const fromCopy = String(senderCopy?.destination || '')
+        .trim()
+        .toLowerCase()
+      if (fromCopy.includes('@')) {
+        nextEmail = fromCopy
+        emailUpdatedAt = now
+        changed = true
+      }
+    } catch {
+      // Table may be unavailable.
+    }
+  }
+
+  if (!nextEmail) {
+    try {
+      await ensurePrintOrderTables(env.ACCOUNT_DB)
+      const printEmail = await env.ACCOUNT_DB.prepare(
+        `SELECT shopper_email
+         FROM print_orders
+         WHERE user_id = ? AND shopper_email IS NOT NULL AND TRIM(shopper_email) != ''
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+        .bind(userId)
+        .first()
+      const fromPrint = String(printEmail?.shopper_email || '')
+        .trim()
+        .toLowerCase()
+      if (fromPrint.includes('@')) {
+        nextEmail = fromPrint
+        emailUpdatedAt = now
+        changed = true
+      }
+    } catch {
+      // Print tables may be unavailable.
+    }
+  }
+
+  if (!isCompleteMailingAddress(nextMailing)) {
+    try {
+      await ensurePrintOrderTables(env.ACCOUNT_DB)
+      const printAddresses = await env.ACCOUNT_DB.prepare(
+        `SELECT mail_from_json
+         FROM print_orders
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT 20`,
+      )
+        .bind(userId)
+        .all()
+
+      for (const row of printAddresses.results || []) {
+        const candidate = parseMailingAddressJson(row.mail_from_json)
+        if (candidate && isCompleteMailingAddress(candidate) && !isDefaultProfileMailFrom(candidate)) {
+          nextMailing = candidate
+          changed = true
+          break
+        }
+      }
+    } catch {
+      // Print tables may be unavailable.
+    }
+  }
+
+  // If we still only have a blank mailing address, seed the name from the latest card signature.
+  if (!nextMailing || !String(nextMailing.name || '').trim()) {
+    try {
+      const card = await env.ACCOUNT_DB.prepare(
+        `SELECT sender_name
+         FROM cards
+         WHERE user_id = ? AND sender_name IS NOT NULL AND TRIM(sender_name) != ''
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+        .bind(userId)
+        .first()
+      const senderName = String(card?.sender_name || '').trim()
+      if (senderName) {
+        nextMailing = {
+          ...(nextMailing || {
+            name: '',
+            line1: '',
+            line2: '',
+            city: '',
+            state: '',
+            zip: '',
+            country: 'US',
+          }),
+          name: senderName,
+        }
+        changed = true
+      }
+    } catch {
+      // Cards table may be unavailable.
+    }
+  }
+
+  if (!changed) {
+    return mapUser(user)
+  }
+
+  const mailingJson = nextMailing ? JSON.stringify(nextMailing) : null
+  await env.ACCOUNT_DB.prepare(
+    `UPDATE users
+     SET email = ?,
+         email_updated_at = ?,
+         mailing_address_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(nextEmail || null, emailUpdatedAt, mailingJson, now, userId)
+    .run()
+
+  return mapUser({
+    ...user,
+    email: nextEmail,
+    email_updated_at: emailUpdatedAt,
+    mailing_address_json: mailingJson,
+    updated_at: now,
+  })
+}
+
 const mapUser = (row) => {
   if (!row) {
     return null
@@ -224,12 +411,16 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
   await ensureUserProfileColumns(env.ACCOUNT_DB)
   await ensureAccountUser(env, { userId, phoneE164 })
   const byPhone = phoneE164 ? await getUserByPhone(env.ACCOUNT_DB, phoneE164) : null
-  const user = byPhone || (await getUserById(env.ACCOUNT_DB, userId))
+  let user = byPhone || (await getUserById(env.ACCOUNT_DB, userId))
   if (!user) {
     return null
   }
 
   userId = user.id
+  const hydrated = await backfillAccountProfileFromActivity(env, userId)
+  if (hydrated?.id) {
+    user = await getUserById(env.ACCOUNT_DB, userId)
+  }
 
   const [events, cards, deliveries] = await Promise.all([
     env.ACCOUNT_DB.prepare(
@@ -451,6 +642,10 @@ export const getAccountForSession = async (env, userId) => {
   }
 
   await ensureUserProfileColumns(env.ACCOUNT_DB)
+  const hydrated = await backfillAccountProfileFromActivity(env, userId)
+  if (hydrated) {
+    return hydrated
+  }
   return mapUser(await getUserById(env.ACCOUNT_DB, userId))
 }
 
@@ -1230,14 +1425,34 @@ export const updateAccountProfile = async (env, { userId, email, mailingAddress 
       const parsed = parseMailingAddressJson(mailingAddress)
       if (!parsed) {
         mailingJson = null
-      } else if (!parsed.name || !parsed.line1 || !parsed.city || !parsed.state || !parsed.zip) {
-        throw new Error('Enter a complete mailing address, or clear all address fields.')
-      } else if (!/^[A-Z]{2}$/.test(parsed.state)) {
-        throw new Error('Enter a valid two-letter state.')
-      } else if (!/^\d{5}(-\d{4})?$/.test(parsed.zip)) {
-        throw new Error('Enter a valid ZIP code.')
-      } else {
+      } else if (isCompleteMailingAddress(parsed)) {
+        if (!/^[A-Z]{2}$/.test(parsed.state)) {
+          throw new Error('Enter a valid two-letter state.')
+        }
+        if (!/^\d{5}(-\d{4})?$/.test(parsed.zip)) {
+          throw new Error('Enter a valid ZIP code.')
+        }
         mailingJson = JSON.stringify(parsed)
+      } else if (
+        String(parsed.name || '').trim() &&
+        !String(parsed.line1 || '').trim() &&
+        !String(parsed.line2 || '').trim() &&
+        !String(parsed.city || '').trim() &&
+        !String(parsed.state || '').trim() &&
+        !String(parsed.zip || '').trim()
+      ) {
+        // Allow saving just a display name before a full mailing address is known.
+        mailingJson = JSON.stringify({
+          name: String(parsed.name).trim(),
+          line1: '',
+          line2: '',
+          city: '',
+          state: '',
+          zip: '',
+          country: 'US',
+        })
+      } else {
+        throw new Error('Enter a complete mailing address, or clear all address fields.')
       }
     }
   }
