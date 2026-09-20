@@ -99,8 +99,6 @@ type InterviewMode = 'quick' | 'chat'
 const greetingForInterviewMode = (mode: InterviewMode) =>
   mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
 
-const interviewGreeting = interviewQuickGreeting
-
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
     SpeechRecognition?: new () => InterviewSpeechRecognition
