@@ -6732,7 +6732,7 @@ function App() {
                 <button className="text-action-link" type="button" onClick={openCardInterview}>
                   ask Genie
                 </button>{' '}
-                to interview you and fill them in.
+                to fill them in for you.
               </p>
             </div>
           </div>
