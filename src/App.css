@@ -20,6 +20,13 @@
   border-radius: 22px;
 }
 
+.brand-split {
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
 .brand-lockup-link {
   gap: 0;
   padding: 0;
@@ -36,12 +43,45 @@
   object-fit: contain;
 }
 
+.brand-mark-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 22px;
+}
+
+.brand-mark-button:hover,
+.brand-mark-button:focus-visible {
+  opacity: 0.9;
+}
+
+.brand-mark-button:focus-visible {
+  outline: 2px solid var(--gcu-dark-teal);
+  outline-offset: 4px;
+}
+
 .brand-mark {
   display: block;
   width: 72px;
   height: 72px;
   flex-shrink: 0;
   border-radius: 22px;
+  object-fit: cover;
+}
+
+.brand-wordmark-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
+}
+
+.brand-wordmark-link:focus-visible {
+  outline: 2px solid var(--gcu-dark-teal);
+  outline-offset: 4px;
 }
 
 .brand-wordmark {
@@ -57,6 +97,11 @@
 .brand:hover,
 .brand:focus-visible {
   opacity: 0.88;
+}
+
+.brand-split:hover,
+.brand-split:focus-visible {
+  opacity: 1;
 }
 
 .brand:focus-visible {
@@ -319,6 +364,97 @@
   margin: 3px 0 0;
   color: var(--gcu-grey);
   font-size: 0.92rem;
+}
+
+.card-interview-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(63, 155, 145, 0.22);
+  border-radius: 20px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(63, 155, 145, 0.12), transparent 42%),
+    rgba(255, 255, 255, 0.72);
+}
+
+.card-interview-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.card-interview-header p {
+  margin: 4px 0 0;
+  color: var(--gcu-grey);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.card-interview-thread {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.card-interview-bubble {
+  display: grid;
+  gap: 4px;
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 16px;
+}
+
+.card-interview-bubble.is-assistant {
+  justify-self: start;
+  background: rgba(63, 155, 145, 0.12);
+}
+
+.card-interview-bubble.is-user {
+  justify-self: end;
+  background: rgba(245, 158, 51, 0.14);
+}
+
+.card-interview-role {
+  color: var(--gcu-dark-teal);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.card-interview-bubble.is-user .card-interview-role {
+  color: #b86a12;
+}
+
+.card-interview-bubble p {
+  margin: 0;
+  color: var(--gcu-ink);
+  font-size: 0.94rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.card-interview-compose {
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.card-interview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-interview-notice {
+  margin: 0;
+  color: #2f6b54;
+  font-size: 0.9rem;
 }
 
 .proof-heading {

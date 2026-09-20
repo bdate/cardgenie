@@ -63,6 +63,14 @@ type ReferencePhoto = {
   dataUrl: string
 }
 
+type InterviewMessage = {
+  role: 'assistant' | 'user'
+  content: string
+}
+
+const interviewGreeting =
+  'Tell me about the card you want to create — who it’s for, who it’s from, and what happened. I’ll ask a quick question or two if I need anything, then fill in the form for you.'
+
 const initialDetails: CardDetails = {
   recipientName: '',
   recipientType: '',
@@ -2023,6 +2031,13 @@ function App() {
   const [isPreparingAdminPrintFiles, setIsPreparingAdminPrintFiles] = useState(false)
   const [adminPrintNotice, setAdminPrintNotice] = useState('')
   const [error, setError] = useState('')
+  const [showCardInterview, setShowCardInterview] = useState(false)
+  const [interviewMessages, setInterviewMessages] = useState<InterviewMessage[]>([
+    { role: 'assistant', content: interviewGreeting },
+  ])
+  const [interviewDraft, setInterviewDraft] = useState('')
+  const [interviewNotice, setInterviewNotice] = useState('')
+  const [isInterviewing, setIsInterviewing] = useState(false)
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -2994,6 +3009,95 @@ function App() {
       ...current,
       [field]: value,
     }))
+  }
+
+  const applyInterviewDetails = (next: Partial<CardDetails>) => {
+    setDetails((current) => ({
+      ...current,
+      senderName: next.senderName?.trim() || current.senderName,
+      recipientName: next.recipientName?.trim() || current.recipientName,
+      recipientType: next.recipientType?.trim() || current.recipientType,
+      occasion: next.occasion?.trim() || current.occasion,
+      tone:
+        next.tone && toneOptions.includes(next.tone)
+          ? next.tone
+          : current.tone,
+      keyDetails: next.keyDetails?.trim() || current.keyDetails,
+    }))
+    setHighlightInvalidFields(false)
+    setError('')
+  }
+
+  const openCardInterview = () => {
+    if (isRecipientView) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView(null)
+    setShowCardInterview(true)
+    setInterviewNotice('')
+    window.setTimeout(() => {
+      document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      ;(document.querySelector('.card-interview-input') as HTMLTextAreaElement | null)?.focus()
+    }, 60)
+  }
+
+  const resetCardInterview = () => {
+    setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
+    setInterviewDraft('')
+    setInterviewNotice('')
+    setIsInterviewing(false)
+  }
+
+  const closeCardInterview = () => {
+    setShowCardInterview(false)
+    setInterviewNotice('')
+  }
+
+  const sendCardInterview = async () => {
+    const message = interviewDraft.trim()
+    if (!message || isInterviewing) {
+      return
+    }
+
+    const nextMessages: InterviewMessage[] = [...interviewMessages, { role: 'user', content: message }]
+    const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
+    setInterviewMessages(nextMessages)
+    setInterviewDraft('')
+    setInterviewNotice('')
+    setIsInterviewing(true)
+
+    try {
+      const response = await fetch(apiUrl('/api/card-interview'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: nextMessages,
+          forceReady: userTurns >= 3,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to continue that conversation.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to continue that conversation.')
+      }
+
+      const assistantMessage =
+        typeof data.assistantMessage === 'string' && data.assistantMessage.trim()
+          ? data.assistantMessage.trim()
+          : 'Tell me a bit more so I can fill in the form.'
+      setInterviewMessages((current) => [...current, { role: 'assistant', content: assistantMessage }])
+
+      if (data.status === 'ready' && data.details && typeof data.details === 'object') {
+        applyInterviewDetails(data.details as Partial<CardDetails>)
+        setInterviewNotice('Form filled — review the fields below, then create your card.')
+      }
+    } catch (caughtError) {
+      setInterviewNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to continue that conversation.',
+      )
+    } finally {
+      setIsInterviewing(false)
+    }
   }
 
   const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
@@ -5430,16 +5534,39 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero-section">
-        <a className="brand brand-lockup-link" href="/" aria-label="Card Genie home">
-          <img
-            className="brand-lockup"
-            src={`${import.meta.env.BASE_URL}logo-lockup.png`}
-            srcSet={`${import.meta.env.BASE_URL}logo-lockup.png 1x, ${import.meta.env.BASE_URL}logo-lockup@2x.png 2x`}
-            width={320}
-            height={75}
-            alt="Card Genie"
-          />
-        </a>
+        {isRecipientView ? (
+          <a className="brand brand-split" href="/" aria-label="Card Genie home">
+            <img
+              className="brand-mark"
+              src={`${import.meta.env.BASE_URL}logo-mark.png`}
+              width={72}
+              height={72}
+              alt=""
+            />
+            <span className="brand-wordmark">Card Genie</span>
+          </a>
+        ) : (
+          <div className="brand brand-split">
+            <button
+              className="brand-mark-button"
+              type="button"
+              onClick={openCardInterview}
+              aria-label="Ask Genie to help fill the card form"
+              title="Ask Genie"
+            >
+              <img
+                className="brand-mark"
+                src={`${import.meta.env.BASE_URL}logo-mark.png`}
+                width={72}
+                height={72}
+                alt=""
+              />
+            </button>
+            <a className="brand-wordmark-link" href="/" aria-label="Card Genie home">
+              <span className="brand-wordmark">Card Genie</span>
+            </a>
+          </div>
+        )}
         <a
           className="brand-powered"
           href="https://www.greetingcarduniverse.com"
@@ -6276,9 +6403,72 @@ function App() {
           <div className="panel-heading">
             <div>
               <h2>Tell us about the card</h2>
-              <p>Your details will help create both the image and message.</p>
+              <p>
+                Fill in the fields, or{' '}
+                <button className="text-action-link" type="button" onClick={openCardInterview}>
+                  ask Genie
+                </button>{' '}
+                to interview you and fill them in.
+              </p>
             </div>
           </div>
+
+          {showCardInterview && (
+            <div className="card-interview-panel" aria-label="Ask Genie">
+              <div className="card-interview-header">
+                <div>
+                  <span className="delivery-kicker">Ask Genie</span>
+                  <p>Describe the card in your own words. I’ll ask a couple of questions if needed, then fill the form.</p>
+                </div>
+                <button className="text-action-link" type="button" onClick={closeCardInterview}>
+                  Close
+                </button>
+              </div>
+              <div className="card-interview-thread" aria-live="polite">
+                {interviewMessages.map((entry, index) => (
+                  <div
+                    className={`card-interview-bubble is-${entry.role}`}
+                    key={`${entry.role}-${index}-${entry.content.slice(0, 12)}`}
+                  >
+                    <span className="card-interview-role">{entry.role === 'assistant' ? 'Genie' : 'You'}</span>
+                    <p>{entry.content}</p>
+                  </div>
+                ))}
+              </div>
+              <label className="card-interview-compose">
+                Your reply
+                <textarea
+                  className="card-interview-input"
+                  rows={4}
+                  value={interviewDraft}
+                  disabled={isInterviewing}
+                  onChange={(event) => setInterviewDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void sendCardInterview()
+                    }
+                  }}
+                  placeholder="Example: A thank-you to Tim & Anita from me and Mindy for dinner and jazz in San Francisco."
+                />
+              </label>
+              <div className="card-interview-actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={isInterviewing || !interviewDraft.trim()}
+                  aria-busy={isInterviewing}
+                  onClick={() => void sendCardInterview()}
+                >
+                  {isInterviewing ? 'Genie is thinking…' : 'Send'}
+                </button>
+                <button className="text-action-link" type="button" onClick={resetCardInterview}>
+                  Start over
+                </button>
+              </div>
+              {interviewNotice && <p className="card-interview-notice">{interviewNotice}</p>}
+            </div>
+          )}
 
           <div className="field-grid">
             <label>

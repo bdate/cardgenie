@@ -3702,6 +3702,165 @@ const handleRefineCopy = async (request, env) => {
   }
 }
 
+const CARD_INTERVIEW_TONES = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
+const CARD_INTERVIEW_MAX_USER_TURNS = 3
+
+const cardInterviewSystemPrompt = `You help shoppers fill out a greeting-card form for Card Genie.
+Have a short mini-interview: understand their story, ask at most 1-2 clarifying questions total when something important is missing, then fill the form.
+
+Return ONLY valid JSON with this shape:
+{
+  "assistantMessage": "friendly reply shown to the shopper",
+  "status": "ask" | "ready",
+  "details": {
+    "recipientName": "",
+    "recipientType": "",
+    "senderName": "",
+    "occasion": "",
+    "tone": "Heartfelt",
+    "keyDetails": ""
+  }
+}
+
+Rules:
+- status "ready" when you have enough to create a card: senderName, recipientName, occasion, recipientType, and useful keyDetails.
+- If relation is unclear, make a reasonable guess (friends, couple, family, coworkers) rather than asking forever.
+- tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
+- keyDetails should be a concise paragraph of memories/scene ideas for the cover and message (not the finished inside note).
+- Ask only about missing essentials. Prefer one short question.
+- If the shopper already gave a full story, go straight to status "ready".
+- Never invent trademarks, celebrity likenesses, or private facts they did not share.
+- Keep assistantMessage warm, brief, and conversational (2-4 sentences max).
+- When status is "ready", say you filled the form and they can edit anything before creating the card.`
+
+const normalizeInterviewDetails = (raw = {}) => {
+  const toneRaw = String(raw.tone || 'Heartfelt').trim()
+  const tone =
+    CARD_INTERVIEW_TONES.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt'
+
+  return {
+    recipientName: String(raw.recipientName || '').trim(),
+    recipientType: String(raw.recipientType || '').trim(),
+    senderName: String(raw.senderName || '').trim(),
+    occasion: String(raw.occasion || '').trim(),
+    tone,
+    keyDetails: String(raw.keyDetails || '').trim(),
+  }
+}
+
+const interviewDetailsAreReady = (details) =>
+  Boolean(
+    details.senderName &&
+      details.recipientName &&
+      details.occasion &&
+      details.recipientType &&
+      details.keyDetails,
+  )
+
+const parseInterviewModelJson = (text) => {
+  const trimmed = String(text || '').trim()
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1))
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+}
+
+const handleCardInterview = async (request, env) => {
+  const missingKeyResponse = requireOpenAIKey(request, env)
+  if (missingKeyResponse) {
+    return missingKeyResponse
+  }
+
+  const body = (await readJson(request)) || {}
+  const rawMessages = Array.isArray(body.messages) ? body.messages : []
+  const forceReady = Boolean(body.forceReady)
+  const messages = rawMessages
+    .map((entry) => ({
+      role: entry?.role === 'assistant' ? 'assistant' : entry?.role === 'user' ? 'user' : '',
+      content: String(entry?.content || '').trim(),
+    }))
+    .filter((entry) => entry.role && entry.content)
+    .slice(-12)
+
+  const userTurns = messages.filter((entry) => entry.role === 'user').length
+  if (userTurns < 1) {
+    return jsonResponse(request, env, { error: 'Tell me about the card you want to create.' }, 400)
+  }
+
+  if (userTurns > CARD_INTERVIEW_MAX_USER_TURNS + 2) {
+    return jsonResponse(request, env, { error: 'Let’s finish this in the form below.' }, 400)
+  }
+
+  const shouldForceReady = forceReady || userTurns >= CARD_INTERVIEW_MAX_USER_TURNS
+
+  try {
+    const openai = getOpenAI(env)
+    const response = await openai.responses.create({
+      model: env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      input: [
+        {
+          role: 'system',
+          content: `${cardInterviewSystemPrompt}${
+            shouldForceReady
+              ? '\nThe shopper has answered enough. You MUST return status "ready" with your best-filled details now.'
+              : ''
+          }`,
+        },
+        ...messages.map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+        })),
+      ],
+    })
+
+    const parsed = parseInterviewModelJson(getMessageText(response))
+    if (!parsed || typeof parsed !== 'object') {
+      return jsonResponse(request, env, { error: 'I had trouble understanding that. Try one more short sentence.' }, 502)
+    }
+
+    const details = normalizeInterviewDetails(parsed.details || {})
+    let status = String(parsed.status || '').toLowerCase() === 'ready' || interviewDetailsAreReady(details) ? 'ready' : 'ask'
+    if (shouldForceReady) {
+      status = 'ready'
+    }
+
+    const assistantMessage =
+      String(parsed.assistantMessage || '').trim() ||
+      (status === 'ready'
+        ? 'I filled in the form below. Tweak anything you want, then create your card.'
+        : 'Tell me a bit more so I can fill in the form.')
+
+    return jsonResponse(request, env, {
+      ok: true,
+      status,
+      assistantMessage,
+      details: status === 'ready' || Object.values(details).some(Boolean) ? details : undefined,
+    })
+  } catch (error) {
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: publicGenerationError(error, 'Unable to continue that conversation. Please try again.') },
+      isSafetyRejection(error) ? 400 : 500,
+    )
+  }
+}
+
 const handleRequest = async (request, env, ctx) => {
   const url = new URL(request.url)
 
@@ -3835,6 +3994,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/refine-copy') {
     return handleRefineCopy(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/card-interview') {
+    return handleCardInterview(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)

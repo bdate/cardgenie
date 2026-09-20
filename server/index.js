@@ -2765,6 +2765,98 @@ app.post('/api/refine-copy', async (req, res) => {
   }
 })
 
+const localInterviewTones = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
+
+app.post('/api/card-interview', async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({
+      error: 'Missing OPENAI_API_KEY. Add it to a local .env file and restart the dev server.',
+    })
+  }
+
+  const rawMessages = Array.isArray(req.body?.messages) ? req.body.messages : []
+  const forceReady = Boolean(req.body?.forceReady)
+  const messages = rawMessages
+    .map((entry) => ({
+      role: entry?.role === 'assistant' ? 'assistant' : entry?.role === 'user' ? 'user' : '',
+      content: String(entry?.content || '').trim(),
+    }))
+    .filter((entry) => entry.role && entry.content)
+    .slice(-12)
+  const userTurns = messages.filter((entry) => entry.role === 'user').length
+  if (userTurns < 1) {
+    return res.status(400).json({ error: 'Tell me about the card you want to create.' })
+  }
+
+  const shouldForceReady = forceReady || userTurns >= 3
+
+  try {
+    const openai = getOpenAI()
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+      input: [
+        {
+          role: 'system',
+          content: `You help shoppers fill out a greeting-card form for Card Genie.
+Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
+Ask at most 1-2 clarifying questions. Prefer status "ready" when sender, recipient, occasion, relation, and story details are known.
+tone must be one of: ${localInterviewTones.join(', ')}.
+${shouldForceReady ? 'You MUST return status "ready" now with best-effort details.' : ''}`,
+        },
+        ...messages.map((entry) => ({ role: entry.role, content: entry.content })),
+      ],
+    })
+
+    const text = getMessageText(response)
+    let parsed = null
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      const start = text.indexOf('{')
+      const end = text.lastIndexOf('}')
+      if (start >= 0 && end > start) {
+        parsed = JSON.parse(text.slice(start, end + 1))
+      }
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return res.status(502).json({ error: 'I had trouble understanding that. Try one more short sentence.' })
+    }
+
+    const toneRaw = String(parsed.details?.tone || 'Heartfelt').trim()
+    const details = {
+      recipientName: String(parsed.details?.recipientName || '').trim(),
+      recipientType: String(parsed.details?.recipientType || '').trim(),
+      senderName: String(parsed.details?.senderName || '').trim(),
+      occasion: String(parsed.details?.occasion || '').trim(),
+      tone: localInterviewTones.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt',
+      keyDetails: String(parsed.details?.keyDetails || '').trim(),
+    }
+    let status = String(parsed.status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
+    if (
+      shouldForceReady ||
+      (details.senderName && details.recipientName && details.occasion && details.recipientType && details.keyDetails)
+    ) {
+      status = 'ready'
+    }
+
+    return res.json({
+      ok: true,
+      status,
+      assistantMessage:
+        String(parsed.assistantMessage || '').trim() ||
+        (status === 'ready'
+          ? 'I filled in the form below. Tweak anything you want, then create your card.'
+          : 'Tell me a bit more so I can fill in the form.'),
+      details,
+    })
+  } catch (error) {
+    console.error(error)
+    return res.status(isSafetyRejection(error) ? 400 : 500).json({
+      error: publicGenerationError(error, 'Unable to continue that conversation. Please try again.'),
+    })
+  }
+})
+
 app.listen(port, () => {
   console.log(`AI Card Buddy API listening on http://localhost:${port}`)
   if (localDevAuthEnabled) {
