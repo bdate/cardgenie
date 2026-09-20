@@ -2220,6 +2220,7 @@ function App() {
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
+  const draftCardRestoreAttemptedRef = useRef(false)
   const previewPanelRef = useRef<HTMLElement | null>(null)
   const createFormRef = useRef<HTMLFormElement | null>(null)
   const restoreSentAfterFailedGenerateRef = useRef(false)
@@ -2497,16 +2498,19 @@ function App() {
   ])
 
   useEffect(() => {
-    if (isRecipientView || card) {
+    if (isRecipientView || card || draftCardRestoreAttemptedRef.current) {
       return
     }
+
+    draftCardRestoreAttemptedRef.current = true
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('resume') || readCheckoutResume()) {
       return
     }
 
-    const draft = initialFormDraft
+    // Read live storage — not the mount snapshot — so "Start a new card" can clear it.
+    const draft = readFormDraft()
     const draftCardId =
       (isCheckoutResumeCardId(draft?.cardId) && draft?.cardId?.trim()) || ''
     if (!draftCardId && !draft?.card?.message) {
@@ -2593,7 +2597,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [isRecipientView, initialFormDraft, card])
+  }, [isRecipientView, card])
 
   useEffect(() => {
     if (isRecipientView) {
@@ -3392,6 +3396,8 @@ function App() {
     setPrintShopperEmail('')
     setAdminPrintFiles(null)
     clearStoredGenerationJob()
+    draftCardRestoreAttemptedRef.current = true
+    clearCheckoutResume()
 
     try {
       window.localStorage.removeItem(formDraftStorageKey)
