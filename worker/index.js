@@ -3913,19 +3913,46 @@ const transcriptHasAmbiguousRecipientCue = (text) =>
   /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
   /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
 
+const latestShopperUtterance = (transcript) => {
+  const lines = String(transcript || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]
+    if (/^Shopper:\s*/i.test(line)) {
+      return line.replace(/^Shopper:\s*/i, '').trim()
+    }
+  }
+  return String(transcript || '')
+}
+
+const normalizeInterviewOccasionLabel = (occasion) => {
+  const raw = String(occasion || '').trim()
+  if (!raw) {
+    return ''
+  }
+  const inferred = inferInterviewOccasionFromText(raw)
+  return inferred || raw
+}
+
 const refineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
   const next = { ...details }
   const shopperText = String(transcript || '')
+  const latestShopperText = latestShopperUtterance(shopperText)
   const isChat = mode === 'chat'
 
   if (!next.occasion) {
     next.occasion = inferInterviewOccasionFromText(shopperText)
   }
+  next.occasion = normalizeInterviewOccasionLabel(next.occasion)
 
+  const nameAmbiguous = interviewRecipientNameLooksAmbiguous(next.recipientName)
+  // Only inspect the latest shopper reply for him/her cues so an earlier
+  // "him and Anita" does not keep forcing name questions after clarification.
   const ambiguousRecipient =
-    interviewRecipientNameLooksAmbiguous(next.recipientName) ||
-    transcriptHasAmbiguousRecipientCue(shopperText)
-  if (interviewRecipientNameLooksAmbiguous(next.recipientName)) {
+    nameAmbiguous || transcriptHasAmbiguousRecipientCue(latestShopperText)
+  if (nameAmbiguous) {
     next.recipientName = scrubAmbiguousRecipientName(next.recipientName)
   }
 
@@ -3984,6 +4011,13 @@ const refineInterviewResult = ({ details, status, assistantMessage, transcript, 
       nextStatus === 'ready'
         ? 'I filled in the form below. Tweak anything you want, then create your card.'
         : 'Tell me a bit more so I can fill in the form.'
+  }
+
+  if (
+    nextStatus === 'ready' &&
+    /names right|who is the card for|who should the card be|what.?s the occasion/i.test(nextAssistant)
+  ) {
+    nextAssistant = 'I filled in the form below. Tweak anything you want, then create your card.'
   }
 
   return { details: next, status: nextStatus, assistantMessage: nextAssistant }

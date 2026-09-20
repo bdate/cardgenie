@@ -2904,16 +2904,40 @@ const localTranscriptHasAmbiguousRecipientCue = (text) =>
   /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
   /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
 
+const localLatestShopperUtterance = (transcript) => {
+  const lines = String(transcript || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]
+    if (/^Shopper:\s*/i.test(line)) {
+      return line.replace(/^Shopper:\s*/i, '').trim()
+    }
+  }
+  return String(transcript || '')
+}
+
+const localNormalizeInterviewOccasion = (occasion) => {
+  const raw = String(occasion || '').trim()
+  if (!raw) {
+    return ''
+  }
+  return localInferInterviewOccasion(raw) || raw
+}
+
 const localRefineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
   const next = { ...details }
   const isChat = mode === 'chat'
+  const latestShopperText = localLatestShopperUtterance(transcript)
   if (!next.occasion) {
     next.occasion = localInferInterviewOccasion(transcript)
   }
+  next.occasion = localNormalizeInterviewOccasion(next.occasion)
+  const nameAmbiguous = localInterviewRecipientLooksAmbiguous(next.recipientName)
   const ambiguousRecipient =
-    localInterviewRecipientLooksAmbiguous(next.recipientName) ||
-    localTranscriptHasAmbiguousRecipientCue(transcript)
-  if (localInterviewRecipientLooksAmbiguous(next.recipientName)) {
+    nameAmbiguous || localTranscriptHasAmbiguousRecipientCue(latestShopperText)
+  if (nameAmbiguous) {
     next.recipientName = localScrubAmbiguousRecipientName(next.recipientName)
   }
 
