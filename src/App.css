@@ -367,21 +367,41 @@
 }
 
 .card-interview-panel {
+  position: relative;
   display: grid;
   gap: 12px;
   border: 1px solid rgba(63, 155, 145, 0.22);
   border-radius: 20px;
   padding: 14px;
+  padding-top: 18px;
   background:
     radial-gradient(circle at top left, rgba(63, 155, 145, 0.12), transparent 42%),
     rgba(255, 255, 255, 0.72);
 }
 
-.card-interview-header {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  justify-content: flex-end;
+.card-interview-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gcu-dark-teal);
+  font-size: 1.55rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.card-interview-close:hover,
+.card-interview-close:focus-visible {
+  background: rgba(63, 155, 145, 0.14);
 }
 
 .card-interview-thread {
