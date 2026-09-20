@@ -1453,6 +1453,33 @@ const formatMailingAddressBlock = (address) =>
     .filter(Boolean)
     .join('\n')
 
+const DEFAULT_PRINT_MAIL_FROM = {
+  name: 'Card Genie',
+  line1: '154 East Prospect Ave',
+  line2: '',
+  city: 'Danville',
+  state: 'CA',
+  zip: '94526',
+  country: 'US',
+}
+
+const normalizeAddressKeyPart = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+const isDefaultPrintMailFrom = (mailFrom) => {
+  if (!mailFrom || typeof mailFrom !== 'object') {
+    return true
+  }
+
+  return (
+    normalizeAddressKeyPart(mailFrom.name) === normalizeAddressKeyPart(DEFAULT_PRINT_MAIL_FROM.name) &&
+    normalizeAddressKeyPart(mailFrom.line1) === normalizeAddressKeyPart(DEFAULT_PRINT_MAIL_FROM.line1) &&
+    normalizeAddressKeyPart(mailFrom.line2) === normalizeAddressKeyPart(DEFAULT_PRINT_MAIL_FROM.line2) &&
+    normalizeAddressKeyPart(mailFrom.city) === normalizeAddressKeyPart(DEFAULT_PRINT_MAIL_FROM.city) &&
+    normalizeAddressKeyPart(mailFrom.state) === normalizeAddressKeyPart(DEFAULT_PRINT_MAIL_FROM.state) &&
+    String(mailFrom.zip || '').trim().replace(/\s+/g, '') === DEFAULT_PRINT_MAIL_FROM.zip
+  )
+}
+
 const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipTo, details, shopperEmail }) => {
   const occasion = String(details?.occasion || '').trim() || 'greeting card'
   const recipient = String(details?.recipientName || shipTo.name || 'recipient').trim()
@@ -1502,8 +1529,10 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
   return { subject, text, html }
 }
 
-const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
+const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
   const shipToBlock = formatMailingAddressBlock(shipTo)
+  const includeReturnAddress = mailFrom && !isDefaultPrintMailFrom(mailFrom)
+  const returnAddressBlock = includeReturnAddress ? formatMailingAddressBlock(mailFrom) : ''
   const subject = `Your Card Genie printed card order - ${orderCode}`
   const deliveryCopy =
     "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
@@ -1514,11 +1543,16 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
     '',
     'Shipping to:',
     shipToBlock,
+    includeReturnAddress ? '' : null,
+    includeReturnAddress ? 'Return address:' : null,
+    includeReturnAddress ? returnAddressBlock : null,
     '',
     deliveryCopy,
     '',
     'Previews of your card cover and inside are included in this email.',
-  ].join('\n')
+  ]
+    .filter((line) => line !== null)
+    .join('\n')
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
@@ -1526,6 +1560,12 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo }) => {
       <p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
       <p style="margin: 0 0 6px;"><strong>Shipping to</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${shipToBlock}</pre>
+      ${
+        includeReturnAddress
+          ? `<p style="margin: 0 0 6px;"><strong>Return address</strong></p>
+      <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${returnAddressBlock}</pre>`
+          : ''
+      }
       <p style="margin: 0 0 16px;">${deliveryCopy}</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
         <tr>
@@ -3334,6 +3374,7 @@ const handleOrderPrintCard = async (request, env) => {
       const confirmationCopy = buildPrintOrderConfirmationCopy({
         orderCode,
         shipTo,
+        mailFrom,
       })
       await sendEmailDelivery({
         env,
