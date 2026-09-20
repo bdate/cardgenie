@@ -3736,7 +3736,10 @@ const handleRefineCopy = async (request, env) => {
 }
 
 const CARD_INTERVIEW_TONES = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
-const CARD_INTERVIEW_MAX_USER_TURNS = 3
+const CARD_INTERVIEW_MAX_USER_TURNS_QUICK = 3
+const CARD_INTERVIEW_MAX_USER_TURNS_CHAT = 6
+const CARD_INTERVIEW_FORCE_READY_TURNS_QUICK = 2
+const CARD_INTERVIEW_FORCE_READY_TURNS_CHAT = 5
 const AMBIGUOUS_RECIPIENT_TOKENS = new Set([
   'him',
   'her',
@@ -3756,7 +3759,7 @@ const AMBIGUOUS_RECIPIENT_TOKENS = new Set([
   'person',
 ])
 
-const cardInterviewSystemPrompt = `You help shoppers fill out a greeting-card form for Card Genie.
+const cardInterviewSystemPromptQuick = `You help shoppers fill out a greeting-card form for Card Genie.
 They often speak into the mic, so the text may include speech-to-text mistakes. You either ask one short follow-up for the most important gap, or fill the form.
 
 Return ONLY valid JSON with this shape:
@@ -3792,6 +3795,43 @@ Rules:
 - When status is "ready", say you filled the form and they can edit before creating the card.
 - Fill details as far as you can even when status is "ask".
 - Output compact JSON. Escape any newlines inside strings.`
+
+const cardInterviewSystemPromptChat = `You are Genie, a warm conversational guide helping shoppers create a greeting card for Card Genie.
+Talk like a helpful ChatGPT assistant: curious, clear, and natural. You still fill the form, but you may ask a few clarifying questions first.
+
+Return ONLY valid JSON with this shape:
+{
+  "assistantMessage": "friendly reply shown to the shopper",
+  "status": "ask" or "ready",
+  "details": {
+    "recipientName": "",
+    "recipientType": "",
+    "senderName": "",
+    "occasion": "",
+    "tone": "Heartfelt",
+    "keyDetails": ""
+  }
+}
+
+Essentials for status "ready": senderName, a clear recipientName, occasion, and useful keyDetails.
+Conversation style:
+- Ask exactly one short question at a time.
+- Prefer clarifying unclear names, then occasion if unknown, then who it's from, then one optional detail about a memory or what made the moment special.
+- Infer occasion from phrases like "thank you card", "thanks", "birthday card". Do NOT re-ask occasion when clear.
+- Treat pronouns (him, her, them, he, she, they) as unclear names — ask who they mean. Never store "him"/"her" as recipientName.
+- They often speak into the mic; expect speech-to-text mistakes and confirm suspicious names.
+- You may ask one enriching follow-up for keyDetails even after names/occasion/from are known, if the story feels thin.
+- When essentials are solid and you have enough story, return status "ready".
+- Do not ask endless optional questions. Do not ask about art style.
+- Guess recipientType when unclear rather than asking.
+- tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
+- keyDetails is a concise paragraph of memories/scene ideas, not the finished inside note.
+- assistantMessage is the chat reply only (1-3 sentences). Never put the card message body there.
+- Fill details as far as you can even when status is "ask".
+- When status is "ready", say you filled the form and they can edit before creating the card.
+- Output compact JSON. Escape any newlines inside strings.`
+
+const cardInterviewSystemPrompt = cardInterviewSystemPromptQuick
 
 const normalizeInterviewDetails = (raw = {}) => {
   const toneRaw = String(raw.tone || 'Heartfelt').trim()
@@ -3873,9 +3913,10 @@ const transcriptHasAmbiguousRecipientCue = (text) =>
   /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
   /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
 
-const refineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady }) => {
+const refineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
   const next = { ...details }
   const shopperText = String(transcript || '')
+  const isChat = mode === 'chat'
 
   if (!next.occasion) {
     next.occasion = inferInterviewOccasionFromText(shopperText)
@@ -3890,6 +3931,7 @@ const refineInterviewResult = ({ details, status, assistantMessage, transcript, 
 
   let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
   let nextAssistant = String(assistantMessage || '').trim()
+  const essentialsReady = interviewDetailsAreReady(next)
 
   if (ambiguousRecipient && !shouldForceReady) {
     nextStatus = 'ask'
@@ -3908,14 +3950,20 @@ const refineInterviewResult = ({ details, status, assistantMessage, transcript, 
     if (!/occasion|what.?s it for|what is it for/i.test(nextAssistant)) {
       nextAssistant = 'What’s the occasion for the card?'
     }
-  } else if (
-    shouldForceReady ||
-    (next.senderName &&
-      next.recipientName &&
-      !interviewRecipientNameLooksAmbiguous(next.recipientName) &&
-      next.occasion &&
-      next.keyDetails)
-  ) {
+  } else if (shouldForceReady) {
+    nextStatus = 'ready'
+  } else if (isChat) {
+    // Chat mode: respect the model's ask/ready when essentials exist so it can enrich a bit.
+    if (nextStatus === 'ready' && essentialsReady) {
+      nextStatus = 'ready'
+    } else if (nextStatus === 'ask') {
+      nextStatus = 'ask'
+    } else if (essentialsReady) {
+      nextStatus = 'ready'
+    } else {
+      nextStatus = 'ask'
+    }
+  } else if (essentialsReady) {
     nextStatus = 'ready'
   }
 
@@ -3926,6 +3974,8 @@ const refineInterviewResult = ({ details, status, assistantMessage, transcript, 
         'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
     } else if (!next.senderName) {
       nextAssistant = 'Can you tell me who the card should be from?'
+    } else if (isChat && !next.keyDetails) {
+      nextAssistant = 'What made that moment special — anything I should mention inside the card?'
     }
   }
 
@@ -4021,6 +4071,7 @@ const handleCardInterview = async (request, env) => {
   const body = (await readJson(request)) || {}
   const rawMessages = Array.isArray(body.messages) ? body.messages : []
   const forceReady = Boolean(body.forceReady)
+  const mode = String(body.mode || '').toLowerCase() === 'chat' ? 'chat' : 'quick'
   const messages = rawMessages
     .map((entry) => ({
       role: entry?.role === 'assistant' ? 'assistant' : entry?.role === 'user' ? 'user' : '',
@@ -4035,11 +4086,17 @@ const handleCardInterview = async (request, env) => {
     return jsonResponse(request, env, { error: 'Tell me about the card you want to create.' }, 400)
   }
 
-  if (userTurns > CARD_INTERVIEW_MAX_USER_TURNS + 2) {
+  const maxUserTurns =
+    mode === 'chat' ? CARD_INTERVIEW_MAX_USER_TURNS_CHAT : CARD_INTERVIEW_MAX_USER_TURNS_QUICK
+  const forceReadyTurns =
+    mode === 'chat' ? CARD_INTERVIEW_FORCE_READY_TURNS_CHAT : CARD_INTERVIEW_FORCE_READY_TURNS_QUICK
+
+  if (userTurns > maxUserTurns + 2) {
     return jsonResponse(request, env, { error: 'Let’s finish this in the form below.' }, 400)
   }
 
-  const shouldForceReady = forceReady || userTurns >= 2
+  const shouldForceReady = forceReady || userTurns >= forceReadyTurns
+  const systemPrompt = mode === 'chat' ? cardInterviewSystemPromptChat : cardInterviewSystemPromptQuick
   const transcript = messages
     .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
     .join('\n')
@@ -4052,7 +4109,7 @@ const handleCardInterview = async (request, env) => {
       input: [
         {
           role: 'system',
-          content: `${cardInterviewSystemPrompt}${
+          content: `${systemPrompt}${
             shouldForceReady
               ? '\nThe shopper has answered enough. You MUST return status "ready" with your best-filled details now.'
               : ''
@@ -4077,12 +4134,19 @@ const handleCardInterview = async (request, env) => {
     }
 
     const details = normalizeInterviewDetails(parsed.details || {})
+    const modelStatus = String(parsed.status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
     const refined = refineInterviewResult({
       details,
-      status: String(parsed.status || '').toLowerCase() === 'ready' || interviewDetailsAreReady(details) ? 'ready' : 'ask',
+      status:
+        mode === 'chat'
+          ? modelStatus
+          : modelStatus === 'ready' || interviewDetailsAreReady(details)
+            ? 'ready'
+            : 'ask',
       assistantMessage: String(parsed.assistantMessage || '').trim(),
       transcript,
       shouldForceReady,
+      mode,
     })
 
     return jsonResponse(request, env, {

@@ -2904,8 +2904,9 @@ const localTranscriptHasAmbiguousRecipientCue = (text) =>
   /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
   /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
 
-const localRefineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady }) => {
+const localRefineInterviewResult = ({ details, status, assistantMessage, transcript, shouldForceReady, mode }) => {
   const next = { ...details }
+  const isChat = mode === 'chat'
   if (!next.occasion) {
     next.occasion = localInferInterviewOccasion(transcript)
   }
@@ -2918,6 +2919,13 @@ const localRefineInterviewResult = ({ details, status, assistantMessage, transcr
 
   let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
   let nextAssistant = String(assistantMessage || '').trim()
+  const essentialsReady = Boolean(
+    next.senderName &&
+      next.recipientName &&
+      !localInterviewRecipientLooksAmbiguous(next.recipientName) &&
+      next.occasion &&
+      next.keyDetails,
+  )
 
   if (ambiguousRecipient && !shouldForceReady) {
     nextStatus = 'ask'
@@ -2933,14 +2941,19 @@ const localRefineInterviewResult = ({ details, status, assistantMessage, transcr
     nextAssistant = 'Can you tell me who the card should be from?'
   } else if (!next.occasion && !shouldForceReady) {
     nextStatus = 'ask'
-  } else if (
-    shouldForceReady ||
-    (next.senderName &&
-      next.recipientName &&
-      !localInterviewRecipientLooksAmbiguous(next.recipientName) &&
-      next.occasion &&
-      next.keyDetails)
-  ) {
+  } else if (shouldForceReady) {
+    nextStatus = 'ready'
+  } else if (isChat) {
+    if (nextStatus === 'ready' && essentialsReady) {
+      nextStatus = 'ready'
+    } else if (nextStatus === 'ask') {
+      nextStatus = 'ask'
+    } else if (essentialsReady) {
+      nextStatus = 'ready'
+    } else {
+      nextStatus = 'ask'
+    }
+  } else if (essentialsReady) {
     nextStatus = 'ready'
   }
 
@@ -2950,6 +2963,8 @@ const localRefineInterviewResult = ({ details, status, assistantMessage, transcr
         'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
     } else if (!next.senderName) {
       nextAssistant = 'Can you tell me who the card should be from?'
+    } else if (isChat && !next.keyDetails) {
+      nextAssistant = 'What made that moment special — anything I should mention inside the card?'
     }
   }
 
@@ -2972,6 +2987,7 @@ app.post('/api/card-interview', async (req, res) => {
 
   const rawMessages = Array.isArray(req.body?.messages) ? req.body.messages : []
   const forceReady = Boolean(req.body?.forceReady)
+  const mode = String(req.body?.mode || '').toLowerCase() === 'chat' ? 'chat' : 'quick'
   const messages = rawMessages
     .map((entry) => ({
       role: entry?.role === 'assistant' ? 'assistant' : entry?.role === 'user' ? 'user' : '',
@@ -2984,13 +3000,18 @@ app.post('/api/card-interview', async (req, res) => {
     return res.status(400).json({ error: 'Tell me about the card you want to create.' })
   }
 
-  const shouldForceReady = forceReady || userTurns >= 2
+  const forceReadyTurns = mode === 'chat' ? 5 : 2
+  const shouldForceReady = forceReady || userTurns >= forceReadyTurns
 
   try {
     const openai = getOpenAI()
     const transcript = messages
       .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
       .join('\n')
+    const chatExtra =
+      mode === 'chat'
+        ? `Talk like a helpful ChatGPT guide: ask one clarifying question at a time. You may ask one enriching follow-up about a memory after names/occasion/from are known if the story is thin. Prefer clarifying unclear names first.`
+        : `If all essentials are known with real names, status "ready" immediately — no optional follow-ups.`
     const response = await openai.responses.create({
       model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
       text: { format: { type: 'json_object' } },
@@ -3005,7 +3026,7 @@ Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for 
 Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
 Ask about unclear names before sender or occasion.
 When senderName is missing and recipient/occasion are clear, ask: "Can you tell me who the card should be from?"
-If all essentials are known with real names, status "ready" immediately — no optional follow-ups.
+${chatExtra}
 Guess recipientType when unclear. Fill details as far as you can even when asking.
 assistantMessage is a short chat reply, not the card message body.
 tone must be one of: ${localInterviewTones.join(', ')}.
@@ -3063,6 +3084,7 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       assistantMessage: String(parsed.assistantMessage || '').trim(),
       transcript,
       shouldForceReady,
+      mode,
     })
 
     return res.json({

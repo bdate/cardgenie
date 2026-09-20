@@ -88,8 +88,18 @@ type InterviewSpeechRecognitionEvent = {
   }>
 }
 
-const interviewGreeting =
+const interviewQuickGreeting =
   'Tell me about the card you want to create — who it’s for, who it’s from, what its for and other details. I’ll fill out the form for you.'
+
+const interviewChatGreeting =
+  'Hi! I’ll help you create a card. Who is it for?'
+
+type InterviewMode = 'quick' | 'chat'
+
+const greetingForInterviewMode = (mode: InterviewMode) =>
+  mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
+
+const interviewGreeting = interviewQuickGreeting
 
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
@@ -2073,8 +2083,9 @@ function App() {
   const [adminPrintNotice, setAdminPrintNotice] = useState('')
   const [error, setError] = useState('')
   const [showCardInterview, setShowCardInterview] = useState(false)
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>('quick')
   const [interviewMessages, setInterviewMessages] = useState<InterviewMessage[]>([
-    { role: 'assistant', content: interviewGreeting },
+    { role: 'assistant', content: interviewQuickGreeting },
   ])
   const [interviewDraft, setInterviewDraft] = useState('')
   const [interviewNotice, setInterviewNotice] = useState('')
@@ -3291,7 +3302,7 @@ function App() {
     }
   }
 
-  const openCardInterview = () => {
+  const openCardInterview = (mode: InterviewMode = 'quick') => {
     if (isRecipientView) {
       return
     }
@@ -3299,10 +3310,19 @@ function App() {
     setAdminView(null)
     showCardInterviewRef.current = true
     setShowCardInterview(true)
+    setInterviewMode(mode)
+    setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(mode) }])
+    setInterviewDraft('')
+    interviewBaseDraftRef.current = ''
+    interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
     if (interviewSpeechSupported) {
-      setInterviewNotice('')
-      startInterviewListening()
+      setInterviewNotice(
+        mode === 'chat'
+          ? 'Listening… answer Genie’s question, then tap I’m done.'
+          : '',
+      )
+      startInterviewListening({ announce: mode !== 'chat' })
     } else {
       setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
     }
@@ -3313,7 +3333,7 @@ function App() {
 
   const resetCardInterview = () => {
     stopInterviewListening()
-    setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
+    setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(interviewMode) }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
@@ -3321,9 +3341,13 @@ function App() {
     isInterviewingRef.current = false
     setIsInterviewing(false)
     if (interviewSpeechSupported) {
-      setInterviewNotice('')
+      setInterviewNotice(
+        interviewMode === 'chat'
+          ? 'Listening… answer Genie’s question, then tap I’m done.'
+          : '',
+      )
       window.setTimeout(() => {
-        startInterviewListening()
+        startInterviewListening({ announce: interviewMode !== 'chat' })
       }, 0)
     } else {
       setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
@@ -3345,7 +3369,7 @@ function App() {
     stopInterviewListening()
     showCardInterviewRef.current = false
     setShowCardInterview(false)
-    setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
+    setInterviewMessages([{ role: 'assistant', content: interviewQuickGreeting }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
@@ -3353,6 +3377,7 @@ function App() {
     setInterviewNotice('')
     isInterviewingRef.current = false
     setIsInterviewing(false)
+    setInterviewMode('quick')
 
     setDetails(initialDetails)
     setReferencePhotos([])
@@ -3446,13 +3471,15 @@ function App() {
     setIsInterviewing(true)
 
     try {
+      const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
       const response = await fetch(apiUrl('/api/card-interview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: nextMessages,
-          // After one follow-up answer, finish with best effort so we don't loop forever.
-          forceReady: nextMessages.filter((entry) => entry.role === 'user').length >= 2,
+          mode: interviewMode,
+          // Quick mode finishes after one follow-up; chat mode can ask more.
+          forceReady: interviewMode === 'chat' ? userTurns >= 5 : userTurns >= 2,
         }),
       })
       const data = await getApiJson(response, 'Unable to continue that conversation.')
@@ -3487,9 +3514,13 @@ function App() {
       } else {
         setInterviewComplete(false)
         setInterviewNotice(
-          details
-            ? 'I filled in what I know below — answer the follow-up, then tap I’m done again.'
-            : 'Genie has a quick follow-up — answer it, then tap I’m done again.',
+          interviewMode === 'chat'
+            ? details
+              ? 'I updated the form below — keep chatting, then tap I’m done when you’ve answered.'
+              : 'Genie has a follow-up — answer it, then tap I’m done again.'
+            : details
+              ? 'I filled in what I know below — answer the follow-up, then tap I’m done again.'
+              : 'Genie has a quick follow-up — answer it, then tap I’m done again.',
         )
         startInterviewListening({ announce: false })
       }
@@ -6055,9 +6086,9 @@ function App() {
             <button
               className="brand-mark-button"
               type="button"
-              onClick={openCardInterview}
-              aria-label="Ask Genie to help fill the card form"
-              title="Ask Genie"
+              onClick={() => openCardInterview('chat')}
+              aria-label="Chat with Genie about your card"
+              title="Chat with Genie"
             >
               <img
                 className="brand-mark"
@@ -6987,7 +7018,7 @@ function App() {
               <h2>Tell us about the card</h2>
               <p>
                 Fill in the fields, or{' '}
-                <button className="text-action-link" type="button" onClick={openCardInterview}>
+                <button className="text-action-link" type="button" onClick={() => openCardInterview('quick')}>
                   ask Genie
                 </button>{' '}
                 to fill in for you.
@@ -6996,12 +7027,15 @@ function App() {
           </div>
 
           {showCardInterview && (
-            <div className="card-interview-panel" aria-label="Ask Genie">
+            <div
+              className="card-interview-panel"
+              aria-label={interviewMode === 'chat' ? 'Chat with Genie' : 'Ask Genie'}
+            >
               <button
                 className="card-interview-close"
                 type="button"
                 onClick={closeCardInterview}
-                aria-label="Close Ask Genie"
+                aria-label={interviewMode === 'chat' ? 'Close chat with Genie' : 'Close Ask Genie'}
               >
                 ×
               </button>
@@ -7012,7 +7046,11 @@ function App() {
                     key={`${entry.role}-${index}-${entry.content.slice(0, 12)}`}
                   >
                     <span className="card-interview-role">
-                      {entry.role === 'assistant' ? 'Ask Genie' : 'You'}
+                      {entry.role === 'assistant'
+                        ? interviewMode === 'chat'
+                          ? 'Genie'
+                          : 'Ask Genie'
+                        : 'You'}
                     </span>
                     <p>{entry.content}</p>
                   </div>
