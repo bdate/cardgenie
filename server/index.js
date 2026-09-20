@@ -1975,6 +1975,8 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
   const subject = `Your Card Genie printed card order - ${orderCode}`
   const deliveryCopy =
     "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
+  const deliveryNote =
+    'There is no tracking available on your order. It is mailed out in a regular envelope with a postage stamp.'
   const text = [
     "We've received your Card Genie print order. Thank you!",
     '',
@@ -1987,6 +1989,9 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
     includeReturnAddress ? returnAddressBlock : null,
     '',
     deliveryCopy,
+    '',
+    'Delivery Note:',
+    deliveryNote,
     '',
     'Previews of your card cover and inside are included in this email.',
   ]
@@ -2005,7 +2010,9 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${returnAddressBlock}</pre>`
           : ''
       }
-      <p style="margin: 0 0 16px;">${deliveryCopy}</p>
+      <p style="margin: 0 0 12px;">${deliveryCopy}</p>
+      <p style="margin: 0 0 4px;"><strong>Delivery Note:</strong></p>
+      <p style="margin: 0 0 16px;">${deliveryNote}</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
         <tr>
           <td style="padding: 0 12px 0 0; vertical-align: top;">
