@@ -89,7 +89,7 @@ type InterviewSpeechRecognitionEvent = {
 }
 
 const interviewGreeting =
-  'Tell me about the card you want to create — who it’s for, who it’s from, and what happened. I’ll ask a quick question or two if I need anything, then fill in the form for you.'
+  'Tell me about the card you want to create — who it’s for, who it’s from, what its for and other details. I’ll fill out the form for you.'
 
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
@@ -6704,14 +6704,6 @@ function App() {
           {showCardInterview && (
             <div className="card-interview-panel" aria-label="Ask Genie">
               <div className="card-interview-header">
-                <div>
-                  <span className="delivery-kicker">Ask Genie</span>
-                  <p>
-                    Describe the card in your own words
-                    {interviewSpeechSupported ? ' — the mic turns on so you can talk' : ''}
-                    . I’ll ask a couple of questions if needed, then fill the form.
-                  </p>
-                </div>
                 <button className="text-action-link" type="button" onClick={closeCardInterview}>
                   Close
                 </button>
@@ -6722,7 +6714,9 @@ function App() {
                     className={`card-interview-bubble is-${entry.role}`}
                     key={`${entry.role}-${index}-${entry.content.slice(0, 12)}`}
                   >
-                    <span className="card-interview-role">{entry.role === 'assistant' ? 'Genie' : 'You'}</span>
+                    <span className="card-interview-role">
+                      {entry.role === 'assistant' ? 'Ask Genie' : 'You'}
+                    </span>
                     <p>{entry.content}</p>
                   </div>
                 ))}
