@@ -2804,7 +2804,8 @@ app.post('/api/card-interview', async (req, res) => {
           content: `You help shoppers fill out a greeting-card form for Card Genie.
 Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
 Essentials for "ready": senderName, recipientName, occasion, keyDetails.
-If an essential is missing, status "ask" with one short question (prefer asking for the sender name when that is missing).
+If an essential is missing, status "ask" with one short question.
+When senderName is missing, ask exactly: "Can you tell me who the card should be from?" Do not ask for "your name", and do not add "so I can fill out the form".
 If all essentials are known, status "ready" immediately — no optional follow-ups (do not ask who else to include, tone, or relation).
 Guess recipientType when unclear. Fill details as far as you can even when asking.
 assistantMessage is a short chat reply, not the card message body.

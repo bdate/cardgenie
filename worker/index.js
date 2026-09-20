@@ -3724,7 +3724,8 @@ Return ONLY valid JSON with this shape:
 
 Essentials for status "ready": senderName, recipientName, occasion, and useful keyDetails.
 Rules:
-- If an essential is missing, return status "ask" with exactly one short question in assistantMessage about the most important gap (prefer asking for the sender name if that is missing).
+- If an essential is missing, return status "ask" with exactly one short question in assistantMessage about the most important gap.
+- When senderName is missing, ask exactly: "Can you tell me who the card should be from?" Do not ask for "your name", and do not add phrases like "so I can fill out the form".
 - If all essentials are present, return status "ready" immediately — do not ask optional or polite follow-ups.
 - Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
 - If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.

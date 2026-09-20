@@ -6746,7 +6746,7 @@ function App() {
                       void sendCardInterview()
                     }
                   }}
-                  placeholder="Example: A thank-you to Tim & Anita from me and Mindy for dinner and jazz in San Francisco."
+                  placeholder="Example: A birthday card to Jamie from Alex and Sam for their surprise party last weekend."
                 />
               </label>
               <div className="card-interview-actions">
