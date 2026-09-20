@@ -11,6 +11,46 @@ const shortError = (error) => {
   return message.replace(/\s+/g, ' ').slice(0, 120)
 }
 
+const parseMailingAddressJson = (raw) => {
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    const name = String(parsed.name || '').trim()
+    const line1 = String(parsed.line1 || '').trim()
+    const line2 = String(parsed.line2 || '').trim()
+    const city = String(parsed.city || '').trim()
+    const state = String(parsed.state || '').trim().toUpperCase()
+    const zip = String(parsed.zip || '').trim().replace(/\s+/g, '')
+    if (!name && !line1 && !city && !state && !zip) {
+      return null
+    }
+    return {
+      name,
+      line1,
+      line2,
+      city,
+      state,
+      zip,
+      country: 'US',
+    }
+  } catch {
+    return null
+  }
+}
+
+const ensureUserProfileColumns = async (db) => {
+  if (!db) {
+    return
+  }
+  try {
+    await db.prepare(`ALTER TABLE users ADD COLUMN mailing_address_json TEXT`).run()
+  } catch {
+    // Column already exists.
+  }
+}
+
 const mapUser = (row) => {
   if (!row) {
     return null
@@ -20,6 +60,7 @@ const mapUser = (row) => {
     id: row.id,
     phoneE164: row.phone_e164,
     email: row.email || '',
+    mailingAddress: parseMailingAddressJson(row.mailing_address_json),
     creditBalance: row.credit_balance ?? 0,
     creditsGranted: row.credits_granted ?? 0,
     creditsPurchased: row.credits_purchased ?? 0,
@@ -180,6 +221,7 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
     return null
   }
 
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
   await ensureAccountUser(env, { userId, phoneE164 })
   const byPhone = phoneE164 ? await getUserByPhone(env.ACCOUNT_DB, phoneE164) : null
   const user = byPhone || (await getUserById(env.ACCOUNT_DB, userId))
@@ -408,6 +450,7 @@ export const getAccountForSession = async (env, userId) => {
     return null
   }
 
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
   return mapUser(await getUserById(env.ACCOUNT_DB, userId))
 }
 
@@ -1137,6 +1180,7 @@ export const saveAccountEmail = async (env, { userId, email }) => {
   }
 
   const now = isoNow()
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
   await env.ACCOUNT_DB.prepare(
     `UPDATE users
      SET email = ?,
@@ -1148,6 +1192,86 @@ export const saveAccountEmail = async (env, { userId, email }) => {
     .run()
 
   return normalized
+}
+
+export const updateAccountProfile = async (env, { userId, email, mailingAddress }) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
+  const existing = await getUserById(env.ACCOUNT_DB, userId)
+  if (!existing) {
+    return null
+  }
+
+  const now = isoNow()
+  let nextEmail = existing.email || ''
+  let emailUpdatedAt = existing.email_updated_at || null
+  if (typeof email === 'string') {
+    const trimmed = email.trim().toLowerCase()
+    if (trimmed) {
+      if (!trimmed.includes('@')) {
+        throw new Error('Enter a valid email address.')
+      }
+      nextEmail = trimmed
+      emailUpdatedAt = now
+    } else {
+      nextEmail = ''
+      emailUpdatedAt = null
+    }
+  }
+
+  let mailingJson = existing.mailing_address_json || null
+  if (mailingAddress !== undefined) {
+    if (mailingAddress === null) {
+      mailingJson = null
+    } else {
+      const parsed = parseMailingAddressJson(mailingAddress)
+      if (!parsed) {
+        mailingJson = null
+      } else if (!parsed.name || !parsed.line1 || !parsed.city || !parsed.state || !parsed.zip) {
+        throw new Error('Enter a complete mailing address, or clear all address fields.')
+      } else if (!/^[A-Z]{2}$/.test(parsed.state)) {
+        throw new Error('Enter a valid two-letter state.')
+      } else if (!/^\d{5}(-\d{4})?$/.test(parsed.zip)) {
+        throw new Error('Enter a valid ZIP code.')
+      } else {
+        mailingJson = JSON.stringify(parsed)
+      }
+    }
+  }
+
+  await env.ACCOUNT_DB.prepare(
+    `UPDATE users
+     SET email = ?,
+         email_updated_at = ?,
+         mailing_address_json = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(nextEmail || null, emailUpdatedAt, mailingJson, now, userId)
+    .run()
+
+  return mapUser({
+    ...existing,
+    email: nextEmail,
+    email_updated_at: emailUpdatedAt,
+    mailing_address_json: mailingJson,
+    updated_at: now,
+  })
+}
+
+export const saveAccountMailingAddress = async (env, { userId, mailingAddress }) => {
+  if (!env.ACCOUNT_DB || !userId || !mailingAddress) {
+    return null
+  }
+
+  try {
+    return await updateAccountProfile(env, { userId, mailingAddress })
+  } catch {
+    return null
+  }
 }
 
 /** Allocate the next sequential print order number (1001+) and store the order. */

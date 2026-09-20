@@ -19,6 +19,8 @@ import {
   recordThankYou,
   createPrintOrder,
   saveAccountEmail,
+  saveAccountMailingAddress,
+  updateAccountProfile,
   updateTestimonialStatus,
   upsertUserOnLogin,
 } from './account-db.js'
@@ -2864,8 +2866,55 @@ const handleGetAccount = async (request, env) => {
     ok: true,
     phoneE164: session.phoneE164,
     email: account?.email || '',
+    mailingAddress: account?.mailingAddress || null,
     creditBalance: account?.creditBalance ?? null,
   })
+}
+
+const handleUpdateAccountProfile = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number before updating your account.' }, 401)
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  try {
+    const body = (await readJson(request)) || {}
+    const email = typeof body.email === 'string' ? body.email : undefined
+    const mailingAddress =
+      body.mailingAddress === null
+        ? null
+        : body.mailingAddress && typeof body.mailingAddress === 'object'
+          ? body.mailingAddress
+          : undefined
+
+    const account = await updateAccountProfile(env, {
+      userId: session.userId,
+      email,
+      mailingAddress,
+    })
+
+    if (!account) {
+      return jsonResponse(request, env, { error: 'Unable to update your account.' }, 500)
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      email: account.email || '',
+      mailingAddress: account.mailingAddress || null,
+      account,
+    })
+  } catch (error) {
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to update your account.' },
+      400,
+    )
+  }
 }
 
 const isAdminRequest = async (request, env) => {
@@ -3342,6 +3391,9 @@ const handleOrderPrintCard = async (request, env) => {
       creditCost: PRINT_CARD_CREDIT_COST,
     })
     await saveAccountEmail(env, { userId: session.userId, email: shopperEmail })
+    if (!isDefaultPrintMailFrom(mailFrom)) {
+      await saveAccountMailingAddress(env, { userId: session.userId, mailingAddress: mailFrom })
+    }
     const orderCode = savedOrder?.orderCode || String(savedOrder?.orderNumber || '')
     if (!orderCode) {
       return jsonResponse(request, env, { error: 'Unable to allocate a print order number.' }, 500)
@@ -3707,6 +3759,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/account') {
     return handleGetAccount(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/profile') {
+    return handleUpdateAccountProfile(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/account/history') {

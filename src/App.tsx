@@ -153,6 +153,31 @@ const emptyMailingAddress = (): MailingAddress => ({
   country: 'US',
 })
 
+const isMailingAddressBlank = (address?: MailingAddress | null) => {
+  if (!address) {
+    return true
+  }
+  return ![address.name, address.line1, address.line2, address.city, address.state, address.zip]
+    .map((part) => String(part || '').trim())
+    .some(Boolean)
+}
+
+const normalizeAddressCompareKey = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+
+const isDefaultPrintMailFromAddress = (address?: MailingAddress | null) => {
+  if (!address || isMailingAddressBlank(address)) {
+    return true
+  }
+  return (
+    normalizeAddressCompareKey(address.name) === normalizeAddressCompareKey(defaultPrintMailFrom.name) &&
+    normalizeAddressCompareKey(address.line1) === normalizeAddressCompareKey(defaultPrintMailFrom.line1) &&
+    normalizeAddressCompareKey(address.line2) === normalizeAddressCompareKey(defaultPrintMailFrom.line2) &&
+    normalizeAddressCompareKey(address.city) === normalizeAddressCompareKey(defaultPrintMailFrom.city) &&
+    normalizeAddressCompareKey(address.state) === normalizeAddressCompareKey(defaultPrintMailFrom.state) &&
+    String(address.zip || '').trim().replace(/\s+/g, '') === defaultPrintMailFrom.zip
+  )
+}
+
 const formatMailingAddressLines = (address: MailingAddress) =>
   [
     address.name,
@@ -1924,6 +1949,8 @@ function App() {
       creditsPurchased?: number
       creditsSpent?: number
       createdAt?: string
+      email?: string
+      mailingAddress?: MailingAddress | null
     } | null
     creditEvents?: Array<{
       createdAt: string
@@ -1977,6 +2004,10 @@ function App() {
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
+  const [accountProfileEmail, setAccountProfileEmail] = useState('')
+  const [accountProfileMailing, setAccountProfileMailing] = useState<MailingAddress>(() => emptyMailingAddress())
+  const [accountProfileNotice, setAccountProfileNotice] = useState('')
+  const [isSavingAccountProfile, setIsSavingAccountProfile] = useState(false)
   const [activeCoverThumbId, setActiveCoverThumbId] = useState<string | null>(null)
   const [thankYouAvailable, setThankYouAvailable] = useState(false)
   const [thankYouAlreadySent, setThankYouAlreadySent] = useState(false)
@@ -2031,6 +2062,7 @@ function App() {
     token: string
     phoneE164: string
     copyEmail?: string
+    mailingAddress?: MailingAddress | null
   } | null>(null)
   const [isSendingAccountCode, setIsSendingAccountCode] = useState(false)
   const [isVerifyingAccountCode, setIsVerifyingAccountCode] = useState(false)
@@ -2253,17 +2285,37 @@ function App() {
 
         const data = await getApiJson(response, 'Unable to load the saved account.')
         const copyEmail = String(data.email || parsed.copyEmail || '')
+        const mailingAddress = normalizeResumeMailingAddress(
+          data.mailingAddress,
+          emptyMailingAddress(),
+        )
+        const hasMailing = !isMailingAddressBlank(mailingAddress)
         const session = {
           token: parsed.token,
           phoneE164: String(data.phoneE164 || parsed.phoneE164),
           copyEmail,
+          mailingAddress: hasMailing ? mailingAddress : null,
         }
         setAccountSession(session)
-        window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+        window.localStorage.setItem(
+          accountSessionStorageKey,
+          JSON.stringify({
+            token: session.token,
+            phoneE164: session.phoneE164,
+            copyEmail: session.copyEmail,
+          }),
+        )
         if (copyEmail) {
           setSenderCopyEmail(copyEmail)
           setPrintShopperEmail(copyEmail)
         }
+        if (hasMailing) {
+          setPrintMailFrom((current) =>
+            isDefaultPrintMailFromAddress(current) ? mailingAddress : current,
+          )
+        }
+        setAccountProfileEmail(copyEmail)
+        setAccountProfileMailing(hasMailing ? mailingAddress : emptyMailingAddress())
         if (parseCreditBalance(data.creditBalance) !== null) {
           const accountCredits = parseCreditBalance(data.creditBalance) as number
           setCredits(accountCredits)
@@ -3191,6 +3243,44 @@ function App() {
       if (serverBalance !== null) {
         rememberCredits(serverBalance)
       }
+      const profileEmail = String(data.account?.email || '')
+      const profileMailing = normalizeResumeMailingAddress(
+        data.account?.mailingAddress,
+        emptyMailingAddress(),
+      )
+      const hasMailing = !isMailingAddressBlank(profileMailing)
+      setAccountProfileEmail(profileEmail)
+      setAccountProfileMailing(hasMailing ? profileMailing : emptyMailingAddress())
+      setAccountProfileNotice('')
+      setAccountSession((current) => {
+        if (!current || current.token !== token) {
+          return current
+        }
+        const next = {
+          ...current,
+          phoneE164: String(data.phoneE164 || current.phoneE164),
+          copyEmail: profileEmail || current.copyEmail || '',
+          mailingAddress: hasMailing ? profileMailing : null,
+        }
+        window.localStorage.setItem(
+          accountSessionStorageKey,
+          JSON.stringify({
+            token: next.token,
+            phoneE164: next.phoneE164,
+            copyEmail: next.copyEmail,
+          }),
+        )
+        return next
+      })
+      if (profileEmail) {
+        setSenderCopyEmail((current) => current || profileEmail)
+        setPrintShopperEmail((current) => current || profileEmail)
+      }
+      if (hasMailing) {
+        setPrintMailFrom((current) =>
+          isDefaultPrintMailFromAddress(current) ? profileMailing : current,
+        )
+      }
     } catch (caughtError) {
       setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to load your account.')
     } finally {
@@ -3950,26 +4040,46 @@ function App() {
   }
 
   const updatePrintAddressField = (
-    which: 'ship-to' | 'mail-from',
+    which: 'ship-to' | 'mail-from' | 'account',
     field: keyof MailingAddress,
     value: string,
   ) => {
-    const setter = which === 'ship-to' ? setPrintShipTo : setPrintMailFrom
+    const setter =
+      which === 'ship-to'
+        ? setPrintShipTo
+        : which === 'mail-from'
+          ? setPrintMailFrom
+          : setAccountProfileMailing
     setter((current) => ({
       ...current,
       [field]: field === 'state' ? value.toUpperCase() : field === 'country' ? 'US' : value,
     }))
-    setPrintOrderNotice('')
+    if (which === 'account') {
+      setAccountProfileNotice('')
+    } else {
+      setPrintOrderNotice('')
+    }
   }
 
   const resolveKnownShopperEmail = () =>
     formatEmailAddress(accountSession?.copyEmail || senderCopyEmail || printShopperEmail || '')
+
+  const resolveSavedMailingAddress = (): MailingAddress | null => {
+    const fromSession = accountSession?.mailingAddress
+    if (fromSession && !isMailingAddressBlank(fromSession)) {
+      return fromSession
+    }
+    const fromHistory = accountHistory?.account?.mailingAddress
+    const normalized = normalizeResumeMailingAddress(fromHistory, emptyMailingAddress())
+    return isMailingAddressBlank(normalized) ? null : normalized
+  }
 
   const openPrintOrder = () => {
     const knownEmail = resolveKnownShopperEmail()
     if (knownEmail) {
       setPrintShopperEmail(knownEmail)
     }
+    applySavedMailingAddressToPrint(resolveSavedMailingAddress())
     setPrintOrderStep('ship-to')
     setPrintOrderNotice('')
     window.setTimeout(() => {
@@ -4169,8 +4279,39 @@ function App() {
         token: accountSession.token,
         phoneE164: accountSession.phoneE164,
         copyEmail: shopperEmail.value,
+        mailingAddress: !isDefaultPrintMailFromAddress(mailFrom.value)
+          ? mailFrom.value
+          : accountSession.mailingAddress || null,
       })
       setPrintShopperEmail(shopperEmail.value)
+      if (!isDefaultPrintMailFromAddress(mailFrom.value)) {
+        setAccountProfileMailing(mailFrom.value)
+        setAccountHistory((current) =>
+          current
+            ? {
+                ...current,
+                account: {
+                  ...(current.account || {}),
+                  email: shopperEmail.value,
+                  mailingAddress: mailFrom.value,
+                },
+              }
+            : current,
+        )
+      } else if (shopperEmail.value) {
+        setAccountProfileEmail(shopperEmail.value)
+        setAccountHistory((current) =>
+          current
+            ? {
+                ...current,
+                account: {
+                  ...(current.account || {}),
+                  email: shopperEmail.value,
+                },
+              }
+            : current,
+        )
+      }
       setPrintOrderNotice(
         <div className="print-order-success-notice">
           <p>
@@ -4200,7 +4341,7 @@ function App() {
   }
 
   const renderMailingAddressFields = (
-    which: 'ship-to' | 'mail-from',
+    which: 'ship-to' | 'mail-from' | 'account',
     address: MailingAddress,
     nameLabel: string,
   ) => (
@@ -4747,11 +4888,115 @@ function App() {
     ])
   }
 
-  const saveAccountSession = (session: { token: string; phoneE164: string; copyEmail?: string }) => {
+  const saveAccountSession = (session: {
+    token: string
+    phoneE164: string
+    copyEmail?: string
+    mailingAddress?: MailingAddress | null
+  }) => {
     setAccountSession(session)
-    window.localStorage.setItem(accountSessionStorageKey, JSON.stringify(session))
+    window.localStorage.setItem(
+      accountSessionStorageKey,
+      JSON.stringify({
+        token: session.token,
+        phoneE164: session.phoneE164,
+        copyEmail: session.copyEmail,
+      }),
+    )
     if (session.copyEmail) {
       setSenderCopyEmail((current) => current || session.copyEmail || '')
+      setPrintShopperEmail((current) => current || session.copyEmail || '')
+    }
+  }
+
+  const applySavedMailingAddressToPrint = (address?: MailingAddress | null) => {
+    if (!address || isMailingAddressBlank(address)) {
+      return
+    }
+    setPrintMailFrom((current) => (isDefaultPrintMailFromAddress(current) ? address : current))
+  }
+
+  const saveAccountProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!accountSession?.token) {
+      return
+    }
+
+    const emailTrimmed = accountProfileEmail.trim()
+    if (emailTrimmed) {
+      const validatedEmail = validateEmailAddress(emailTrimmed)
+      if (!validatedEmail.ok) {
+        setAccountProfileNotice(validatedEmail.message)
+        return
+      }
+    }
+
+    const blankAddress = isMailingAddressBlank(accountProfileMailing)
+    let mailingPayload: MailingAddress | null = null
+    if (!blankAddress) {
+      const validatedAddress = validateMailingAddress(accountProfileMailing, 'mailing')
+      if (!validatedAddress.ok) {
+        setAccountProfileNotice(validatedAddress.message)
+        return
+      }
+      mailingPayload = validatedAddress.value
+    }
+
+    setIsSavingAccountProfile(true)
+    setAccountProfileNotice('')
+    try {
+      const response = await fetch(apiUrl('/api/account/profile'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accountSession.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: emailTrimmed,
+          mailingAddress: mailingPayload,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to save your details.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save your details.')
+      }
+
+      const savedEmail = String(data.email || emailTrimmed || '')
+      const savedMailing = normalizeResumeMailingAddress(
+        data.mailingAddress,
+        mailingPayload || emptyMailingAddress(),
+      )
+      const hasMailing = !isMailingAddressBlank(savedMailing)
+      setAccountProfileEmail(savedEmail)
+      setAccountProfileMailing(hasMailing ? savedMailing : emptyMailingAddress())
+      setAccountHistory((current) =>
+        current
+          ? {
+              ...current,
+              account: {
+                ...(current.account || {}),
+                email: savedEmail,
+                mailingAddress: hasMailing ? savedMailing : null,
+              },
+            }
+          : current,
+      )
+      saveAccountSession({
+        token: accountSession.token,
+        phoneE164: accountSession.phoneE164,
+        copyEmail: savedEmail,
+        mailingAddress: hasMailing ? savedMailing : null,
+      })
+      if (hasMailing) {
+        applySavedMailingAddressToPrint(savedMailing)
+      }
+      setAccountProfileNotice('Saved.')
+    } catch (caughtError) {
+      setAccountProfileNotice(
+        caughtError instanceof Error ? caughtError.message : 'Unable to save your details.',
+      )
+    } finally {
+      setIsSavingAccountProfile(false)
     }
   }
 
@@ -5416,6 +5661,60 @@ function App() {
                   </form>
                 </div>
               )}
+              <div className="account-block account-profile-block">
+                <h3>Your details</h3>
+                <p className="field-help">
+                  Saved here for order confirmations and as the default return address on printed cards. Email is also
+                  filled in the first time you use Send me a copy.
+                </p>
+                <form className="account-profile-form" onSubmit={(event) => void saveAccountProfile(event)}>
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      value={accountProfileEmail}
+                      onChange={(event) => {
+                        setAccountProfileEmail(event.target.value)
+                        setAccountProfileNotice('')
+                      }}
+                      onBlur={() => {
+                        const trimmed = accountProfileEmail.trim()
+                        if (!trimmed) {
+                          return
+                        }
+                        const validated = validateEmailAddress(trimmed)
+                        if (validated.ok) {
+                          setAccountProfileEmail(validated.value)
+                        }
+                      }}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  {renderMailingAddressFields('account', accountProfileMailing, 'Name')}
+                  <div className="account-profile-actions">
+                    <button
+                      className="secondary-button"
+                      type="submit"
+                      disabled={isSavingAccountProfile}
+                    >
+                      {isSavingAccountProfile ? 'Saving…' : 'Save details'}
+                    </button>
+                    {accountProfileNotice && (
+                      <p
+                        className={
+                          accountProfileNotice === 'Saved.'
+                            ? 'account-profile-notice is-success'
+                            : 'account-profile-notice'
+                        }
+                      >
+                        {accountProfileNotice}
+                      </p>
+                    )}
+                  </div>
+                </form>
+              </div>
               <div className="account-summary">
                 <div>
                   <span>Credits now</span>
