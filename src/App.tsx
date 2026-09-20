@@ -68,8 +68,37 @@ type InterviewMessage = {
   content: string
 }
 
+type InterviewSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start: () => void
+  stop: () => void
+  abort: () => void
+  onresult: ((event: InterviewSpeechRecognitionEvent) => void) | null
+  onerror: ((event: { error?: string }) => void) | null
+  onend: (() => void) | null
+}
+
+type InterviewSpeechRecognitionEvent = {
+  resultIndex: number
+  results: ArrayLike<{
+    isFinal: boolean
+    0: { transcript: string }
+  }>
+}
+
 const interviewGreeting =
   'Tell me about the card you want to create — who it’s for, who it’s from, and what happened. I’ll ask a quick question or two if I need anything, then fill in the form for you.'
+
+const getInterviewSpeechRecognition = () => {
+  const speechWindow = window as Window & {
+    SpeechRecognition?: new () => InterviewSpeechRecognition
+    webkitSpeechRecognition?: new () => InterviewSpeechRecognition
+  }
+  const SpeechRecognitionCtor = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
+  return SpeechRecognitionCtor ? new SpeechRecognitionCtor() : null
+}
 
 const initialDetails: CardDetails = {
   recipientName: '',
@@ -2038,6 +2067,22 @@ function App() {
   const [interviewDraft, setInterviewDraft] = useState('')
   const [interviewNotice, setInterviewNotice] = useState('')
   const [isInterviewing, setIsInterviewing] = useState(false)
+  const [isInterviewListening, setIsInterviewListening] = useState(false)
+  const [interviewSpeechSupported] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+    const speechWindow = window as Window & {
+      SpeechRecognition?: unknown
+      webkitSpeechRecognition?: unknown
+    }
+    return Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition)
+  })
+  const interviewRecognitionRef = useRef<InterviewSpeechRecognition | null>(null)
+  const interviewListenDesiredRef = useRef(false)
+  const interviewBaseDraftRef = useRef('')
+  const isInterviewingRef = useRef(false)
+  const showCardInterviewRef = useRef(false)
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -3028,45 +3073,161 @@ function App() {
     setError('')
   }
 
+  const stopInterviewListening = () => {
+    interviewListenDesiredRef.current = false
+    const recognition = interviewRecognitionRef.current
+    interviewRecognitionRef.current = null
+    if (recognition) {
+      recognition.onresult = null
+      recognition.onerror = null
+      recognition.onend = null
+      try {
+        recognition.stop()
+      } catch {
+        try {
+          recognition.abort()
+        } catch {
+          // Ignore browsers that throw when recognition is already stopped.
+        }
+      }
+    }
+    setIsInterviewListening(false)
+  }
+
+  const startInterviewListening = () => {
+    if (!interviewSpeechSupported || isInterviewingRef.current) {
+      return
+    }
+
+    stopInterviewListening()
+    const recognition = getInterviewSpeechRecognition()
+    if (!recognition) {
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+      return
+    }
+
+    interviewListenDesiredRef.current = true
+    interviewBaseDraftRef.current = interviewDraft.trim()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+    recognition.onresult = (event) => {
+      let finalChunk = ''
+      let interimChunk = ''
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index]
+        const transcript = String(result?.[0]?.transcript || '')
+        if (result.isFinal) {
+          finalChunk += transcript
+        } else {
+          interimChunk += transcript
+        }
+      }
+
+      if (finalChunk) {
+        const merged = `${interviewBaseDraftRef.current} ${finalChunk}`.replace(/\s+/g, ' ').trim()
+        interviewBaseDraftRef.current = merged
+        setInterviewDraft(merged)
+      } else if (interimChunk) {
+        const merged = `${interviewBaseDraftRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim()
+        setInterviewDraft(merged)
+      }
+    }
+    recognition.onerror = (event) => {
+      const code = String(event?.error || '')
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        interviewListenDesiredRef.current = false
+        setIsInterviewListening(false)
+        setInterviewNotice('Microphone permission is needed to talk to Genie. You can still type your reply.')
+        return
+      }
+      if (code === 'aborted' || code === 'no-speech') {
+        return
+      }
+      setInterviewNotice('Couldn’t hear that clearly — try again or type your reply.')
+    }
+    recognition.onend = () => {
+      setIsInterviewListening(false)
+      if (!interviewListenDesiredRef.current || isInterviewingRef.current) {
+        return
+      }
+      window.setTimeout(() => {
+        if (!interviewListenDesiredRef.current || isInterviewingRef.current) {
+          return
+        }
+        try {
+          recognition.start()
+          setIsInterviewListening(true)
+        } catch {
+          interviewListenDesiredRef.current = false
+        }
+      }, 180)
+    }
+
+    interviewRecognitionRef.current = recognition
+    try {
+      recognition.start()
+      setIsInterviewListening(true)
+      setInterviewNotice('Listening… talk about your card.')
+    } catch {
+      interviewListenDesiredRef.current = false
+      setIsInterviewListening(false)
+      setInterviewNotice('Couldn’t start the microphone — type your reply instead.')
+    }
+  }
+
   const openCardInterview = () => {
     if (isRecipientView) {
       return
     }
     setShowAccountPage(false)
     setAdminView(null)
+    showCardInterviewRef.current = true
     setShowCardInterview(true)
     setInterviewNotice('')
+    startInterviewListening()
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      ;(document.querySelector('.card-interview-input') as HTMLTextAreaElement | null)?.focus()
     }, 60)
   }
 
   const resetCardInterview = () => {
+    stopInterviewListening()
     setInterviewMessages([{ role: 'assistant', content: interviewGreeting }])
     setInterviewDraft('')
+    interviewBaseDraftRef.current = ''
     setInterviewNotice('')
+    isInterviewingRef.current = false
     setIsInterviewing(false)
+    window.setTimeout(() => {
+      startInterviewListening()
+    }, 0)
   }
 
   const closeCardInterview = () => {
+    stopInterviewListening()
+    showCardInterviewRef.current = false
     setShowCardInterview(false)
     setInterviewNotice('')
   }
 
   const sendCardInterview = async () => {
     const message = interviewDraft.trim()
-    if (!message || isInterviewing) {
+    if (!message || isInterviewingRef.current) {
       return
     }
 
+    stopInterviewListening()
     const nextMessages: InterviewMessage[] = [...interviewMessages, { role: 'user', content: message }]
     const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
     setInterviewMessages(nextMessages)
     setInterviewDraft('')
+    interviewBaseDraftRef.current = ''
     setInterviewNotice('')
+    isInterviewingRef.current = true
     setIsInterviewing(true)
 
+    let resumeListening = true
     try {
       const response = await fetch(apiUrl('/api/card-interview'), {
         method: 'POST',
@@ -3090,15 +3251,26 @@ function App() {
       if (data.status === 'ready' && data.details && typeof data.details === 'object') {
         applyInterviewDetails(data.details as Partial<CardDetails>)
         setInterviewNotice('Form filled — review the fields below, then create your card.')
+        resumeListening = false
       }
     } catch (caughtError) {
       setInterviewNotice(
         caughtError instanceof Error ? caughtError.message : 'Unable to continue that conversation.',
       )
     } finally {
+      isInterviewingRef.current = false
       setIsInterviewing(false)
+      if (resumeListening && showCardInterviewRef.current) {
+        startInterviewListening()
+      }
     }
   }
+
+  useEffect(() => {
+    return () => {
+      stopInterviewListening()
+    }
+  }, [])
 
   const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
 
@@ -6418,7 +6590,11 @@ function App() {
               <div className="card-interview-header">
                 <div>
                   <span className="delivery-kicker">Ask Genie</span>
-                  <p>Describe the card in your own words. I’ll ask a couple of questions if needed, then fill the form.</p>
+                  <p>
+                    Describe the card in your own words
+                    {interviewSpeechSupported ? ' — the mic turns on so you can talk' : ''}
+                    . I’ll ask a couple of questions if needed, then fill the form.
+                  </p>
                 </div>
                 <button className="text-action-link" type="button" onClick={closeCardInterview}>
                   Close
@@ -6442,7 +6618,11 @@ function App() {
                   rows={4}
                   value={interviewDraft}
                   disabled={isInterviewing}
-                  onChange={(event) => setInterviewDraft(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    interviewBaseDraftRef.current = value
+                    setInterviewDraft(value)
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault()
@@ -6453,6 +6633,24 @@ function App() {
                 />
               </label>
               <div className="card-interview-actions">
+                {interviewSpeechSupported && (
+                  <button
+                    className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
+                    type="button"
+                    disabled={isInterviewing}
+                    aria-pressed={isInterviewListening}
+                    onClick={() => {
+                      if (isInterviewListening) {
+                        stopInterviewListening()
+                        setInterviewNotice('')
+                      } else {
+                        startInterviewListening()
+                      }
+                    }}
+                  >
+                    {isInterviewListening ? 'Listening…' : 'Use mic'}
+                  </button>
+                )}
                 <button
                   className="primary-button"
                   type="button"
@@ -6466,7 +6664,11 @@ function App() {
                   Start over
                 </button>
               </div>
-              {interviewNotice && <p className="card-interview-notice">{interviewNotice}</p>}
+              {interviewNotice && (
+                <p className={`card-interview-notice${isInterviewListening ? ' is-listening' : ''}`}>
+                  {interviewNotice}
+                </p>
+              )}
             </div>
           )}
 
