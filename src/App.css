@@ -65,6 +65,10 @@
   outline-offset: 4px;
 }
 
+.brand-mark-button.is-starting .brand-mark {
+  animation: lampStartPulse 900ms ease-in-out infinite;
+}
+
 .brand-mark {
   display: block;
   width: 72px;
@@ -72,6 +76,52 @@
   flex-shrink: 0;
   border-radius: 22px;
   object-fit: cover;
+}
+
+.action-feedback-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px auto 0;
+  max-width: min(420px, 94vw);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(63, 155, 145, 0.12);
+  border: 1px solid rgba(63, 155, 145, 0.28);
+  color: var(--gcu-dark-teal);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(49, 95, 91, 0.08);
+}
+
+.action-feedback-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(63, 155, 145, 0.28);
+  border-top-color: var(--gcu-dark-teal);
+  border-radius: 50%;
+  animation: actionFeedbackSpin 700ms linear infinite;
+}
+
+@keyframes actionFeedbackSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lampStartPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(245, 158, 51, 0));
+  }
+
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 10px rgba(245, 158, 51, 0.45));
+  }
 }
 
 .brand-wordmark-link {
@@ -862,6 +912,12 @@ textarea:focus {
 .primary-button[aria-busy="true"] {
   cursor: wait;
   opacity: 1;
+  animation: actionTextFlash 900ms ease-in-out infinite;
+}
+
+.secondary-button[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.92;
   animation: actionTextFlash 900ms ease-in-out infinite;
 }
 

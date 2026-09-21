@@ -2314,6 +2314,11 @@ function App() {
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
   const [isAddingPhotos, setIsAddingPhotos] = useState(false)
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
+  const [actionFeedback, setActionFeedback] = useState('')
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState(false)
+  const [isSavingImage, setIsSavingImage] = useState(false)
+  const [startingInterviewMode, setStartingInterviewMode] = useState<InterviewMode | null>(null)
+  const actionFeedbackClearRef = useRef<number | null>(null)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
   const generationPollIdRef = useRef(0)
   const draftCardRestoreAttemptedRef = useRef(false)
@@ -2323,6 +2328,28 @@ function App() {
   const followGenerationJobRef = useRef<(jobId: string, signatureName: string) => Promise<void>>(
     async () => undefined,
   )
+
+  const clearActionFeedback = () => {
+    if (actionFeedbackClearRef.current !== null) {
+      window.clearTimeout(actionFeedbackClearRef.current)
+      actionFeedbackClearRef.current = null
+    }
+    setActionFeedback('')
+  }
+
+  const showActionFeedback = (message: string, autoClearMs?: number) => {
+    setActionFeedback(message)
+    if (actionFeedbackClearRef.current !== null) {
+      window.clearTimeout(actionFeedbackClearRef.current)
+      actionFeedbackClearRef.current = null
+    }
+    if (typeof autoClearMs === 'number' && autoClearMs > 0) {
+      actionFeedbackClearRef.current = window.setTimeout(() => {
+        setActionFeedback('')
+        actionFeedbackClearRef.current = null
+      }, autoClearMs)
+    }
+  }
 
   const recipientLabel = useMemo(
     () => details.recipientName.trim() || details.recipientType.trim() || 'Someone special',
@@ -3489,6 +3516,9 @@ function App() {
     if (isRecipientView) {
       return
     }
+    setStartingInterviewMode(mode)
+    showActionFeedback(mode === 'chat' ? 'Starting Lamp Genie…' : 'Opening Ask Genie…', 2000)
+    window.setTimeout(() => setStartingInterviewMode(null), 1600)
     setShowAccountPage(false)
     setAdminView(null)
     showCardInterviewRef.current = true
@@ -3775,6 +3805,9 @@ function App() {
     return () => {
       stopInterviewListening()
       stopGenieSpeech()
+      if (actionFeedbackClearRef.current !== null) {
+        window.clearTimeout(actionFeedbackClearRef.current)
+      }
     }
   }, [])
 
@@ -3807,6 +3840,7 @@ function App() {
     setReferencePhotoNotice(limitNotice)
     const startedAt = Date.now()
     setIsAddingPhotos(true)
+    showActionFeedback(acceptedFiles.length > 1 ? 'Adding photos…' : 'Adding photo…')
 
     try {
       const preparedPhotos = await Promise.all(
@@ -3844,6 +3878,7 @@ function App() {
         await sleep(remainingVisibleMs)
       }
       setIsAddingPhotos(false)
+      clearActionFeedback()
     }
   }
 
@@ -4189,10 +4224,16 @@ function App() {
 
     if (!accountSession?.token) {
       setAccountHistory(null)
+      showActionFeedback('Opening account…', 1200)
       return
     }
 
-    await loadAccountHistory(accountSession.token)
+    showActionFeedback('Loading your account…')
+    try {
+      await loadAccountHistory(accountSession.token)
+    } finally {
+      clearActionFeedback()
+    }
   }
 
   const openAdminAnalytics = async () => {
@@ -4342,6 +4383,8 @@ function App() {
     }
 
     setShowCreditMenu(false)
+    setIsOpeningCheckout(true)
+    showActionFeedback('Opening secure checkout…')
     setCreditNotice('Opening secure checkout…')
     setDeliveryNotice('')
     setRefinementNotice('')
@@ -4364,6 +4407,8 @@ function App() {
             setCreditNotice(
               'Could not save your card before checkout. Please try again so it is not lost when you return.',
             )
+            setIsOpeningCheckout(false)
+            clearActionFeedback()
             return
           }
         }
@@ -4415,11 +4460,15 @@ function App() {
       const data = await getApiJson(response, 'Unable to start checkout.')
       if (!response.ok || !data.url) {
         setCreditNotice(String(data.error || 'Unable to start checkout.'))
+        setIsOpeningCheckout(false)
+        clearActionFeedback()
         return
       }
       window.location.assign(String(data.url))
     } catch (caughtError) {
       setCreditNotice(caughtError instanceof Error ? caughtError.message : 'Unable to start checkout.')
+      setIsOpeningCheckout(false)
+      clearActionFeedback()
     }
   }
 
@@ -4467,6 +4516,7 @@ function App() {
     setCreditNotice('Creating a card is free. Sending uses 3 credits.')
     window.setTimeout(() => setShowCompletionNote(false), 6000)
     clearStoredGenerationJob()
+    clearActionFeedback()
   }
 
   const followGenerationJob = async (jobId: string, signatureName: string) => {
@@ -4512,6 +4562,7 @@ function App() {
     } finally {
       if (isCurrent()) {
         setIsGenerating(false)
+        clearActionFeedback()
       }
     }
   }
@@ -4540,6 +4591,7 @@ function App() {
 
     restoreSentAfterFailedGenerateRef.current = hasSentCurrentCard
     setIsGenerating(true)
+    showActionFeedback('Creating your card…')
     setShowCompletionNote(false)
     setActiveGenerationStep(0)
     setShowEditor(false)
@@ -4607,6 +4659,7 @@ function App() {
     } finally {
       if (!startedBackgroundJob) {
         setIsGenerating(false)
+        clearActionFeedback()
       }
     }
   }
@@ -4733,6 +4786,8 @@ function App() {
 
     setSaveNotice('')
     setAdminPrintNotice('')
+    setIsSavingImage(true)
+    showActionFeedback(`Preparing ${label.toLowerCase()}…`)
 
     const resolveShareFile = async () => {
       try {
@@ -4756,36 +4811,41 @@ function App() {
       }
     }
 
-    if (prefersPhotoSave) {
-      try {
-        const imageFile = await resolveShareFile()
+    try {
+      if (prefersPhotoSave) {
+        try {
+          const imageFile = await resolveShareFile()
 
-        if (
-          typeof navigator.share === 'function' &&
-          typeof navigator.canShare === 'function' &&
-          navigator.canShare({ files: [imageFile] })
-        ) {
-          await navigator.share({
-            files: [imageFile],
-            title: `Card Genie ${label}`,
-            text: `Save this ${label.toLowerCase()} from Card Genie.`,
-          })
-          setSaveNotice('Choose Save Image or Save to Photos from your phone share sheet.')
-          return
+          if (
+            typeof navigator.share === 'function' &&
+            typeof navigator.canShare === 'function' &&
+            navigator.canShare({ files: [imageFile] })
+          ) {
+            await navigator.share({
+              files: [imageFile],
+              title: `Card Genie ${label}`,
+              text: `Save this ${label.toLowerCase()} from Card Genie.`,
+            })
+            setSaveNotice('Choose Save Image or Save to Photos from your phone share sheet.')
+            return
+          }
+        } catch (caughtError) {
+          if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+            return
+          }
         }
-      } catch (caughtError) {
-        if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
-          return
-        }
+
+        downloadImageFallback(imageUrl, fileName)
+        setSaveNotice('If your phone downloads the image, open it and use the share menu to save it to Photos.')
+        return
       }
 
       downloadImageFallback(imageUrl, fileName)
-      setSaveNotice('If your phone downloads the image, open it and use the share menu to save it to Photos.')
-      return
+      setSaveNotice('The image was saved to your downloads folder.')
+    } finally {
+      setIsSavingImage(false)
+      clearActionFeedback()
     }
-
-    downloadImageFallback(imageUrl, fileName)
-    setSaveNotice('The image was saved to your downloads folder.')
   }
 
   const prepareAdminPrintFiles = async () => {
@@ -5035,6 +5095,7 @@ function App() {
     }
 
     setIsOrderingPrint(true)
+    showActionFeedback('Preparing your printed card…')
 
     try {
       const shared = await saveCurrentCard()
@@ -5132,6 +5193,7 @@ function App() {
       setPrintOrderNotice(getFriendlyErrorMessage(caughtError, 'Unable to place the print order.'))
     } finally {
       setIsOrderingPrint(false)
+      clearActionFeedback()
     }
   }
 
@@ -5470,6 +5532,9 @@ function App() {
     }
 
     setIsRefiningImage(true)
+    showActionFeedback(
+      coverRefinementMode === 'revise' ? 'Updating cover…' : 'Creating a new cover…',
+    )
 
     try {
       let reviseCardId = sharedCard?.id
@@ -5561,6 +5626,7 @@ function App() {
       setCreditNotice('Your credits are still in your account.')
     } finally {
       setIsRefiningImage(false)
+      clearActionFeedback()
     }
   }
 
@@ -5580,6 +5646,7 @@ function App() {
     }
 
     setIsRefiningCopy(true)
+    showActionFeedback('Rewriting inside…')
 
     try {
       const response = await fetch(apiUrl('/api/refine-copy'), {
@@ -5636,6 +5703,7 @@ function App() {
       setCreditNotice('Your credits are still in your account.')
     } finally {
       setIsRefiningCopy(false)
+      clearActionFeedback()
     }
   }
 
@@ -5904,6 +5972,7 @@ function App() {
     }
 
     setIsSendingAccountCode(true)
+    showActionFeedback('Sending sign-in code…')
     setDeliveryNotice('')
     setAccountHistoryError('')
 
@@ -5934,6 +6003,7 @@ function App() {
       }
     } finally {
       setIsSendingAccountCode(false)
+      clearActionFeedback()
     }
   }
 
@@ -5959,6 +6029,7 @@ function App() {
       }
 
       setIsVerifyingAccountCode(true)
+      showActionFeedback('Confirming your number…')
       setDeliveryNotice('')
       setAccountHistoryError('')
 
@@ -6028,6 +6099,7 @@ function App() {
       }
     } finally {
       setIsVerifyingAccountCode(false)
+      clearActionFeedback()
     }
   }
 
@@ -6191,6 +6263,9 @@ function App() {
     }
 
     setIsDelivering(true)
+    showActionFeedback(
+      plannedRecipientCount > 1 ? 'Sending your cards…' : 'Sending your card…',
+    )
     let loggedDeliveryFailure = false
 
     try {
@@ -6323,6 +6398,7 @@ function App() {
       }
     } finally {
       setIsDelivering(false)
+      clearActionFeedback()
     }
   }
 
@@ -6343,11 +6419,12 @@ function App() {
         ) : (
           <div className="brand brand-split">
             <button
-              className="brand-mark-button"
+              className={`brand-mark-button${startingInterviewMode === 'chat' ? ' is-starting' : ''}`}
               type="button"
               onClick={() => openCardInterview('chat')}
               aria-label="Chat with Genie about your card"
               title="Chat with Genie"
+              aria-busy={startingInterviewMode === 'chat'}
             >
               <img
                 className="brand-mark"
@@ -6370,6 +6447,12 @@ function App() {
         >
           Powered by GreetingCardUniverse.com
         </a>
+        {actionFeedback ? (
+          <div className="action-feedback-toast" role="status" aria-live="polite">
+            <span className="action-feedback-spinner" aria-hidden="true" />
+            <span>{actionFeedback}</span>
+          </div>
+        ) : null}
         {isRecipientView && (
           <h1 className={`recipient-headline ${recipientHeadlineSize}`.trim()}>
             You received a card from {senderLabel}
@@ -6404,16 +6487,24 @@ function App() {
               </div>
               <div className="credit-buy">
                 <div className="credit-buy-actions">
-                  <button className="secondary-button" type="button" onClick={() => void openAccountPage()}>
-                    {accountButtonLabel}
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={isLoadingAccountHistory}
+                    aria-busy={isLoadingAccountHistory}
+                    onClick={() => void openAccountPage()}
+                  >
+                    {isLoadingAccountHistory ? 'Loading account...' : accountButtonLabel}
                   </button>
                   <button
                     className="secondary-button"
                     type="button"
                     aria-expanded={showCreditMenu}
+                    disabled={isOpeningCheckout}
+                    aria-busy={isOpeningCheckout}
                     onClick={() => setShowCreditMenu((current) => !current)}
                   >
-                    Buy more credits
+                    {isOpeningCheckout ? 'Opening secure checkout...' : 'Buy more credits'}
                   </button>
                 </div>
                 {showCreditMenu && (
@@ -7598,7 +7689,7 @@ function App() {
                   htmlFor="reference-photos"
                   aria-busy={isAddingPhotos}
                 >
-                  {isAddingPhotos ? 'Adding photo...' : 'Add a photo'}
+                  {isAddingPhotos ? 'Adding photos...' : 'Add a photo'}
                 </label>
                 {isAddingPhotos && (
                   <span className="photo-add-timer" role="status" aria-live="polite">
@@ -7927,16 +8018,20 @@ function App() {
                   <div className="recipient-save-links" aria-label="Save card images">
                     <button
                       type="button"
+                      disabled={isSavingImage}
+                      aria-busy={isSavingImage}
                       onClick={() => void saveImageToDevice(card.imageUrl, coverDownloadName, 'Cover image')}
                     >
-                      {coverSaveLabel}
+                      {isSavingImage ? 'Preparing…' : coverSaveLabel}
                     </button>
                     <span aria-hidden="true">|</span>
                     <button
                       type="button"
+                      disabled={isSavingImage}
+                      aria-busy={isSavingImage}
                       onClick={() => void saveImageToDevice(insideDownloadUrl, insideDownloadName, 'Inside image')}
                     >
-                      {insideSaveLabel}
+                      {isSavingImage ? 'Preparing…' : insideSaveLabel}
                     </button>
                   </div>
                   {saveNotice && <p className="recipient-save-note">{saveNotice}</p>}
