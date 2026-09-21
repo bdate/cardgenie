@@ -918,7 +918,7 @@ textarea:focus {
 .secondary-button[aria-busy="true"] {
   cursor: wait;
   opacity: 0.92;
-  animation: actionTextFlash 900ms ease-in-out infinite;
+  animation: secondaryBusyFlash 900ms ease-in-out infinite;
 }
 
 .secondary-button:disabled {
@@ -935,6 +935,17 @@ textarea:focus {
 
   50% {
     color: rgba(255, 255, 255, 0.42);
+  }
+}
+
+@keyframes secondaryBusyFlash {
+  0%,
+  100% {
+    color: var(--gcu-dark-teal);
+  }
+
+  50% {
+    color: rgba(63, 155, 145, 0.42);
   }
 }
 

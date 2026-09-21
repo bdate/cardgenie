@@ -3812,6 +3812,26 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // Browser back from Stripe often restores this page from bfcache with checkout still "busy".
+    const resetCheckoutOpeningState = () => {
+      setIsOpeningCheckout(false)
+      if (actionFeedbackClearRef.current !== null) {
+        window.clearTimeout(actionFeedbackClearRef.current)
+        actionFeedbackClearRef.current = null
+      }
+      setActionFeedback((current) =>
+        /^Opening secure checkout/i.test(current.trim()) ? '' : current,
+      )
+      setCreditNotice((notice) =>
+        /^Opening secure checkout/i.test(String(notice).trim()) ? '' : notice,
+      )
+    }
+
+    window.addEventListener('pageshow', resetCheckoutOpeningState)
+    return () => window.removeEventListener('pageshow', resetCheckoutOpeningState)
+  }, [])
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       scrollInterviewThreadToBottom()
     })
@@ -4385,7 +4405,6 @@ function App() {
     setShowCreditMenu(false)
     setIsOpeningCheckout(true)
     showActionFeedback('Opening secure checkout…')
-    setCreditNotice('Opening secure checkout…')
     setDeliveryNotice('')
     setRefinementNotice('')
 
