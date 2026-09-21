@@ -111,6 +111,23 @@ const getInterviewSpeechRecognition = () => {
   return SpeechRecognitionCtor ? new SpeechRecognitionCtor() : null
 }
 
+/** Ask for mic access immediately (while the tap gesture is still fresh), then release the stream. */
+const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsupported'> => {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    return 'unsupported'
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    for (const track of stream.getTracks()) {
+      track.stop()
+    }
+    return 'granted'
+  } catch {
+    return 'denied'
+  }
+}
+
 const initialDetails: CardDetails = {
   recipientName: '',
   recipientType: '',
@@ -3531,24 +3548,50 @@ function App() {
     setInterviewComplete(false)
     stopGenieSpeech()
     window.speechSynthesis?.getVoices()
-    if (mode === 'chat' && interviewSpeechSupported) {
-      interviewVoiceLoopRef.current = true
-      setInterviewVoiceLoop(true)
-      void runGenieVoiceTurn(greetingForInterviewMode('chat'), true)
-    } else {
-      interviewVoiceLoopRef.current = false
-      setInterviewVoiceLoop(false)
-      setIsInterviewSpeaking(false)
-      if (interviewSpeechSupported) {
-        setInterviewNotice('')
-        startInterviewListening()
-      } else {
-        setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
-      }
-    }
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
+
+    if (!interviewSpeechSupported) {
+      interviewVoiceLoopRef.current = false
+      setInterviewVoiceLoop(false)
+      setIsInterviewSpeaking(false)
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+      return
+    }
+
+    // Mic permission must come from this tap — before Genie speaks — or iOS asks after the greeting.
+    setInterviewNotice('Allow the microphone so Genie can hear you…')
+    void (async () => {
+      const micAccess = await ensureMicrophoneAccess()
+      if (!showCardInterviewRef.current) {
+        return
+      }
+
+      if (micAccess === 'denied') {
+        interviewVoiceLoopRef.current = false
+        setInterviewVoiceLoop(false)
+        setIsInterviewSpeaking(false)
+        setIsInterviewListening(false)
+        setInterviewNotice(
+          'Microphone permission is needed to talk to Genie. You can still type your reply.',
+        )
+        return
+      }
+
+      if (mode === 'chat') {
+        interviewVoiceLoopRef.current = true
+        setInterviewVoiceLoop(true)
+        void runGenieVoiceTurn(greetingForInterviewMode('chat'), true)
+        return
+      }
+
+      interviewVoiceLoopRef.current = false
+      setInterviewVoiceLoop(false)
+      setIsInterviewSpeaking(false)
+      setInterviewNotice('')
+      startInterviewListening()
+    })()
   }
 
   const resetCardInterview = () => {
@@ -3561,19 +3604,35 @@ function App() {
     setInterviewComplete(false)
     isInterviewingRef.current = false
     setIsInterviewing(false)
-    if (interviewVoiceLoopRef.current && interviewSpeechSupported) {
-      void runGenieVoiceTurn(greetingForInterviewMode(interviewMode), true)
+    if (!interviewSpeechSupported) {
+      setIsInterviewSpeaking(false)
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
       return
     }
-    setIsInterviewSpeaking(false)
-    if (interviewSpeechSupported) {
+
+    setInterviewNotice('Allow the microphone so Genie can hear you…')
+    void (async () => {
+      const micAccess = await ensureMicrophoneAccess()
+      if (!showCardInterviewRef.current) {
+        return
+      }
+      if (micAccess === 'denied') {
+        interviewVoiceLoopRef.current = false
+        setInterviewVoiceLoop(false)
+        setIsInterviewSpeaking(false)
+        setInterviewNotice(
+          'Microphone permission is needed to talk to Genie. You can still type your reply.',
+        )
+        return
+      }
+      if (interviewVoiceLoopRef.current) {
+        void runGenieVoiceTurn(greetingForInterviewMode(interviewMode), true)
+        return
+      }
+      setIsInterviewSpeaking(false)
       setInterviewNotice('')
-      window.setTimeout(() => {
-        startInterviewListening()
-      }, 0)
-    } else {
-      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
-    }
+      startInterviewListening()
+    })()
   }
 
   const closeCardInterview = () => {
@@ -7448,9 +7507,13 @@ function App() {
                     }
                   }}
                   placeholder={
-                    interviewVoiceLoop
+                    isInterviewListening
                       ? 'Genie is listening. Pause when you finish a thought — or type here.'
-                      : "Example: I'd like to send a birthday card to Jamie from Alex and Sam for their surprise party last weekend. We had a great time, specially enjoyed the swimming and BBQing in the backyard."
+                      : isInterviewSpeaking
+                        ? 'Genie is speaking…'
+                        : interviewVoiceLoop
+                          ? 'Your turn is next — or type here while you wait.'
+                          : "Example: I'd like to send a birthday card to Jamie from Alex and Sam for their surprise party last weekend. We had a great time, specially enjoyed the swimming and BBQing in the backyard."
                   }
                 />
               </label>
@@ -7466,9 +7529,19 @@ function App() {
                         stopInterviewListening()
                         setInterviewNotice('Mic paused. Tap Talk when you’re ready again.')
                       } else {
-                        interviewVoiceLoopRef.current = true
-                        setInterviewVoiceLoop(true)
-                        startInterviewListening({ announce: true })
+                        void (async () => {
+                          setInterviewNotice('Allow the microphone so Genie can hear you…')
+                          const micAccess = await ensureMicrophoneAccess()
+                          if (micAccess === 'denied') {
+                            setInterviewNotice(
+                              'Microphone permission is needed to talk to Genie. You can still type your reply.',
+                            )
+                            return
+                          }
+                          interviewVoiceLoopRef.current = true
+                          setInterviewVoiceLoop(true)
+                          startInterviewListening({ announce: true })
+                        })()
                       }
                     }}
                   >
@@ -7486,7 +7559,17 @@ function App() {
                         stopInterviewListening()
                         setInterviewNotice('Mic paused. Tap I’m done when your reply looks right.')
                       } else {
-                        startInterviewListening({ announce: true })
+                        void (async () => {
+                          setInterviewNotice('Allow the microphone so Genie can hear you…')
+                          const micAccess = await ensureMicrophoneAccess()
+                          if (micAccess === 'denied') {
+                            setInterviewNotice(
+                              'Microphone permission is needed to talk to Genie. You can still type your reply.',
+                            )
+                            return
+                          }
+                          startInterviewListening({ announce: true })
+                        })()
                       }
                     }}
                   >
