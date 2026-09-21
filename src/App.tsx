@@ -168,6 +168,9 @@ const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
 const formDraftMaxAgeMs = 30 * 24 * 60 * 60 * 1000
 const formDraftVersion = 1 as const
+const interviewSessionStorageKey = 'cardGenieInterviewSession'
+const interviewSessionMaxAgeMs = 24 * 60 * 60 * 1000
+const interviewSessionVersion = 1 as const
 const sendCreditCostSingle = 3
 const sendCreditCostPerRecipient = 2
 const maxDeliveryRecipients = 10
@@ -901,6 +904,110 @@ const writeFormDraft = (draft: FormDraftState) => {
     )
   } catch {
     // Ignore storage failures; in-session state still works.
+  }
+}
+
+type InterviewSessionState = {
+  version: typeof interviewSessionVersion
+  savedAt: number
+  showCardInterview: boolean
+  interviewMode: InterviewMode
+  interviewMessages: InterviewMessage[]
+  interviewDraft: string
+  interviewVoiceLoop: boolean
+  interviewComplete: boolean
+}
+
+const isInterviewMessageShape = (value: unknown): value is InterviewMessage => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const raw = value as Record<string, unknown>
+  return (
+    (raw.role === 'assistant' || raw.role === 'user') &&
+    typeof raw.content === 'string' &&
+    raw.content.trim().length > 0
+  )
+}
+
+const parseInterviewSession = (raw: string | null): InterviewSessionState | null => {
+  if (!raw) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(raw) as InterviewSessionState
+    if (parsed?.version !== interviewSessionVersion || !parsed.showCardInterview) {
+      return null
+    }
+    if (parsed.savedAt && Date.now() - parsed.savedAt > interviewSessionMaxAgeMs) {
+      return null
+    }
+    if (parsed.interviewMode !== 'chat' && parsed.interviewMode !== 'quick') {
+      return null
+    }
+    if (!Array.isArray(parsed.interviewMessages) || !parsed.interviewMessages.every(isInterviewMessageShape)) {
+      return null
+    }
+    return {
+      version: interviewSessionVersion,
+      savedAt: parsed.savedAt || Date.now(),
+      showCardInterview: true,
+      interviewMode: parsed.interviewMode,
+      interviewMessages: parsed.interviewMessages.slice(-24),
+      interviewDraft: String(parsed.interviewDraft || '').slice(0, 8000),
+      interviewVoiceLoop: Boolean(parsed.interviewVoiceLoop),
+      interviewComplete: Boolean(parsed.interviewComplete),
+    }
+  } catch {
+    return null
+  }
+}
+
+const readInterviewSession = (): InterviewSessionState | null => {
+  try {
+    const session = parseInterviewSession(window.localStorage.getItem(interviewSessionStorageKey))
+    if (!session) {
+      window.localStorage.removeItem(interviewSessionStorageKey)
+    }
+    return session
+  } catch {
+    return null
+  }
+}
+
+const writeInterviewSession = (session: Omit<InterviewSessionState, 'version' | 'savedAt'>) => {
+  if (!session.showCardInterview) {
+    try {
+      window.localStorage.removeItem(interviewSessionStorageKey)
+    } catch {
+      // Ignore storage failures.
+    }
+    return
+  }
+
+  const payload: InterviewSessionState = {
+    version: interviewSessionVersion,
+    savedAt: Date.now(),
+    showCardInterview: true,
+    interviewMode: session.interviewMode,
+    interviewMessages: session.interviewMessages.slice(-24),
+    interviewDraft: String(session.interviewDraft || '').slice(0, 8000),
+    interviewVoiceLoop: Boolean(session.interviewVoiceLoop),
+    interviewComplete: Boolean(session.interviewComplete),
+  }
+
+  try {
+    window.localStorage.setItem(interviewSessionStorageKey, JSON.stringify(payload))
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+const clearInterviewSession = () => {
+  try {
+    window.localStorage.removeItem(interviewSessionStorageKey)
+  } catch {
+    // Ignore storage failures.
   }
 }
 
@@ -2506,7 +2613,13 @@ function App() {
   const showCoverWatermark = !isRecipientView && Boolean(card) && !hasSentCurrentCard
   const coverPreviewClass = (baseClass = '') =>
     [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
-  const keepScreenAwake = isGenerating || isRefiningImage || isRefiningCopy || isDelivering
+  const keepScreenAwake =
+    isGenerating ||
+    isRefiningImage ||
+    isRefiningCopy ||
+    isDelivering ||
+    (showCardInterview &&
+      (isInterviewListening || isInterviewSpeaking || isInterviewing || interviewVoiceLoop))
 
   useEffect(() => {
     const restoreAccount = async () => {
@@ -2658,6 +2771,116 @@ function App() {
     hasViewedInside,
     hasSentCurrentCard,
   ])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      writeInterviewSession({
+        showCardInterview,
+        interviewMode,
+        interviewMessages,
+        interviewDraft,
+        interviewVoiceLoop,
+        interviewComplete,
+      })
+    }, 200)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    isRecipientView,
+    showCardInterview,
+    interviewMode,
+    interviewMessages,
+    interviewDraft,
+    interviewVoiceLoop,
+    interviewComplete,
+  ])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const flushInterviewSession = () => {
+      if (!showCardInterviewRef.current) {
+        clearInterviewSession()
+        return
+      }
+      writeInterviewSession({
+        showCardInterview: true,
+        interviewMode,
+        interviewMessages,
+        interviewDraft: interviewLatestDraftRef.current || interviewDraft,
+        interviewVoiceLoop: interviewVoiceLoopRef.current,
+        interviewComplete,
+      })
+    }
+
+    const resumeAfterLock = () => {
+      if (document.visibilityState !== 'visible') {
+        flushInterviewSession()
+        return
+      }
+      if (!showCardInterviewRef.current || !interviewVoiceLoopRef.current) {
+        return
+      }
+      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
+        return
+      }
+      const savedDraft = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '').trim()
+      setInterviewNotice(
+        savedDraft
+          ? 'Welcome back — your notes are still here. Listening again…'
+          : 'Welcome back — listening again. Pause when you’re finished.',
+      )
+      startInterviewListening({ announce: false })
+    }
+
+    document.addEventListener('visibilitychange', resumeAfterLock)
+    window.addEventListener('pagehide', flushInterviewSession)
+
+    return () => {
+      document.removeEventListener('visibilitychange', resumeAfterLock)
+      window.removeEventListener('pagehide', flushInterviewSession)
+    }
+  }, [
+    isRecipientView,
+    interviewMode,
+    interviewMessages,
+    interviewDraft,
+    interviewComplete,
+    interviewSpeechSupported,
+  ])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+
+    const session = readInterviewSession()
+    if (!session) {
+      return
+    }
+
+    showCardInterviewRef.current = true
+    setShowCardInterview(true)
+    setInterviewMode(session.interviewMode)
+    setInterviewMessages(session.interviewMessages)
+    setInterviewDraft(session.interviewDraft)
+    interviewBaseDraftRef.current = session.interviewDraft
+    interviewLatestDraftRef.current = session.interviewDraft
+    interviewVoiceLoopRef.current = session.interviewVoiceLoop
+    setInterviewVoiceLoop(session.interviewVoiceLoop)
+    setInterviewComplete(session.interviewComplete)
+    setInterviewNotice(
+      session.interviewDraft.trim() || session.interviewMessages.some((entry) => entry.role === 'user')
+        ? 'Welcome back — your notes are still here. Tap Talk to continue.'
+        : 'Welcome back — tap Talk when you’re ready.',
+    )
+  }, [isRecipientView])
 
   useEffect(() => {
     if (isRecipientView || card || draftCardRestoreAttemptedRef.current) {
@@ -3675,6 +3898,7 @@ function App() {
     showCardInterviewRef.current = false
     setShowCardInterview(false)
     setInterviewNotice('')
+    clearInterviewSession()
   }
 
   const startNewCard = () => {
@@ -3750,6 +3974,7 @@ function App() {
     } catch {
       // Ignore storage failures.
     }
+    clearInterviewSession()
 
     window.setTimeout(() => {
       document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
