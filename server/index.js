@@ -3042,6 +3042,54 @@ const localNormalizeInterviewImageStyle = (raw) => {
   }
   return localInferInterviewImageStyle(value)
 }
+
+const localInferInterviewTone = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (!value) {
+    return ''
+  }
+  if (/\b(romantic|lovey|affectionate|love\s*note)\b/.test(value)) {
+    return 'Romantic'
+  }
+  if (/\b(business|professional|corporate)\b/.test(value)) {
+    return 'Business'
+  }
+  if (/\b(encourag(?:e|ing|ement)|supportive|uplift(?:ing)?|motivational)\b/.test(value)) {
+    return 'Encouraging'
+  }
+  if (/\b(elegant|classy|sophisticated|refined)\b/.test(value)) {
+    return 'Elegant'
+  }
+  if (/\b(funny|humor(?:ous)?|hilarious|jokes?|witty|comedic|comedy)\b/.test(value)) {
+    return 'Funny'
+  }
+  if (/\b(playful|light[\s-]?hearted)\b/.test(value)) {
+    return 'Playful'
+  }
+  if (/\b(heartfelt|sincere|from\s+the\s+heart|sentimental)\b/.test(value)) {
+    return 'Heartfelt'
+  }
+  if (
+    /\b(?:tone|make\s+it|keep\s+it|something|more)\s+(?:a\s+bit\s+|more\s+)?(?:fun|light)\b|\bfun\s+tone\b/.test(
+      value,
+    )
+  ) {
+    return 'Playful'
+  }
+  return ''
+}
+
+const localNormalizeInterviewTone = (raw) => {
+  const value = String(raw || '').trim()
+  if (!value) {
+    return ''
+  }
+  const exact = localInterviewTones.find((tone) => tone.toLowerCase() === value.toLowerCase())
+  if (exact) {
+    return exact
+  }
+  return localInferInterviewTone(value)
+}
 const localAmbiguousRecipientTokens = new Set([
   'him',
   'her',
@@ -3364,6 +3412,8 @@ const localRefineInterviewResult = ({
   if (!next.imageStyle) {
     next.imageStyle = localInferInterviewImageStyle(shopperText || transcript)
   }
+  const inferredTone = localInferInterviewTone(shopperText || transcript)
+  next.tone = localNormalizeInterviewTone(next.tone) || inferredTone || next.tone || 'Heartfelt'
   next.senderName = localResolveShopperSelfInSenderName(next.senderName, selfName)
   if (localSenderNameLooksInvalid(next.senderName)) {
     next.senderName = ''
@@ -3495,6 +3545,7 @@ Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for 
 Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
 Ask about unclear names before other gaps.
 If they mention an image/art style (example: "comic version"), set imageStyle to the closest exact option from: ${localInterviewImageStyles.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style only in keyDetails. Never ask for style.
+If they mention tone (example: "funny", "playful", "romantic", "heartfelt"), set tone to the exact matching option from: ${localInterviewTones.join(', ')}. Do not leave tone only in keyDetails. Never ask for tone.
 ${shopperNameNote}
 ${chatExtra}
 Guess recipientType when unclear. Fill details as far as you can even when asking.
@@ -3545,7 +3596,10 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       recipientType: String(parsed.details?.recipientType || '').trim(),
       senderName: String(parsed.details?.senderName || '').trim(),
       occasion: String(parsed.details?.occasion || '').trim(),
-      tone: localInterviewTones.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt',
+      tone:
+        localNormalizeInterviewTone(parsed.details?.tone) ||
+        localInterviewTones.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) ||
+        'Heartfelt',
       imageStyle: localNormalizeInterviewImageStyle(parsed.details?.imageStyle),
       keyDetails: String(parsed.details?.keyDetails || '').trim(),
     }

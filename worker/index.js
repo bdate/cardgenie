@@ -3960,6 +3960,7 @@ Rules:
 - If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
 - If the shopper mentions an image/art style (example: "comic version", "watercolor", "photorealistic"), set imageStyle to the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style preferences only inside keyDetails. Never ask for style.
+- If the shopper mentions tone (example: "funny", "playful", "romantic", "heartfelt", "elegant", "encouraging", "business/professional"), set tone to the exact matching option from: ${CARD_INTERVIEW_TONES.join(', ')}. Do not leave tone preferences only inside keyDetails. Never ask for tone.
 - If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 - keyDetails should be a concise single-paragraph summary of memories/scene ideas. Do not write the finished inside note.
@@ -3999,6 +4000,7 @@ Conversation style:
 - If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - Do not ask about art style, tone, or relation. Guess recipientType when unclear.
 - If the shopper mentions an image/art style (example: "comic version", "watercolor"), set imageStyle to the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style preferences only inside keyDetails.
+- If the shopper mentions tone (example: "funny", "playful", "romantic", "heartfelt", "elegant", "encouraging", "business/professional"), set tone to the exact matching option from: ${CARD_INTERVIEW_TONES.join(', ')}. Do not leave tone preferences only inside keyDetails.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 - keyDetails is a concise paragraph of memories/scene ideas, not the finished inside note.
 - assistantMessage is the chat reply only (1-3 sentences). Never put the card message body there.
@@ -4083,10 +4085,60 @@ const normalizeInterviewImageStyle = (raw) => {
   return inferInterviewImageStyleFromText(value)
 }
 
+const inferInterviewToneFromText = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (!value) {
+    return ''
+  }
+  if (/\b(romantic|lovey|affectionate|love\s*note)\b/.test(value)) {
+    return 'Romantic'
+  }
+  if (/\b(business|professional|corporate)\b/.test(value)) {
+    return 'Business'
+  }
+  if (/\b(encourag(?:e|ing|ement)|supportive|uplift(?:ing)?|motivational)\b/.test(value)) {
+    return 'Encouraging'
+  }
+  if (/\b(elegant|classy|sophisticated|refined)\b/.test(value)) {
+    return 'Elegant'
+  }
+  if (/\b(funny|humor(?:ous)?|hilarious|jokes?|witty|comedic|comedy)\b/.test(value)) {
+    return 'Funny'
+  }
+  if (/\b(playful|light[\s-]?hearted)\b/.test(value)) {
+    return 'Playful'
+  }
+  if (/\b(heartfelt|sincere|from\s+the\s+heart|sentimental)\b/.test(value)) {
+    return 'Heartfelt'
+  }
+  if (
+    /\b(?:tone|make\s+it|keep\s+it|something|more)\s+(?:a\s+bit\s+|more\s+)?(?:fun|light)\b|\bfun\s+tone\b/.test(
+      value,
+    )
+  ) {
+    return 'Playful'
+  }
+  return ''
+}
+
+const normalizeInterviewTone = (raw) => {
+  const value = String(raw || '').trim()
+  if (!value) {
+    return ''
+  }
+  const exact = CARD_INTERVIEW_TONES.find((tone) => tone.toLowerCase() === value.toLowerCase())
+  if (exact) {
+    return exact
+  }
+  return inferInterviewToneFromText(value)
+}
+
 const normalizeInterviewDetails = (raw = {}) => {
-  const toneRaw = String(raw.tone || 'Heartfelt').trim()
+  const toneRaw = String(raw.tone || '').trim()
   const tone =
-    CARD_INTERVIEW_TONES.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt'
+    normalizeInterviewTone(toneRaw) ||
+    CARD_INTERVIEW_TONES.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) ||
+    'Heartfelt'
   const imageStyle = normalizeInterviewImageStyle(raw.imageStyle)
 
   return {
@@ -4423,6 +4475,9 @@ const refineInterviewResult = ({
   if (!next.imageStyle) {
     next.imageStyle = inferInterviewImageStyleFromText(shopperText || fullTranscript)
   }
+
+  const inferredTone = inferInterviewToneFromText(shopperText || fullTranscript)
+  next.tone = normalizeInterviewTone(next.tone) || inferredTone || next.tone || 'Heartfelt'
 
   next.senderName = resolveShopperSelfInSenderName(next.senderName, selfName)
   if (senderNameLooksInvalid(next.senderName)) {
