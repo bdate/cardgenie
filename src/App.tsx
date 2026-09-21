@@ -340,12 +340,12 @@ const lampGenieVoiceStorageKey = 'cardGenieLampVoice'
 
 /** OpenAI gpt-4o-mini-tts voices Lamp Genie can use. */
 const lampGenieVoiceOptions = [
-  { id: 'coral', label: 'Coral', blurb: 'Warm & friendly (default)' },
+  { id: 'echo', label: 'Echo', blurb: 'Smooth mid-tone (default)' },
+  { id: 'coral', label: 'Coral', blurb: 'Warm & friendly' },
   { id: 'nova', label: 'Nova', blurb: 'Bright & clear' },
   { id: 'shimmer', label: 'Shimmer', blurb: 'Soft & expressive' },
   { id: 'sage', label: 'Sage', blurb: 'Calm & steady' },
   { id: 'alloy', label: 'Alloy', blurb: 'Neutral & even' },
-  { id: 'echo', label: 'Echo', blurb: 'Smooth mid-tone' },
   { id: 'fable', label: 'Fable', blurb: 'Storyteller feel' },
   { id: 'onyx', label: 'Onyx', blurb: 'Deeper & grounded' },
   { id: 'ash', label: 'Ash', blurb: 'Soft-spoken' },
@@ -355,12 +355,14 @@ const lampGenieVoiceOptions = [
 
 type LampGenieVoiceId = (typeof lampGenieVoiceOptions)[number]['id']
 
+const defaultLampGenieVoice: LampGenieVoiceId = 'echo'
+
 const isLampGenieVoiceId = (value: unknown): value is LampGenieVoiceId =>
   typeof value === 'string' && lampGenieVoiceOptions.some((entry) => entry.id === value)
 
 const readStoredLampGenieVoice = (): LampGenieVoiceId => {
   if (typeof window === 'undefined') {
-    return 'coral'
+    return defaultLampGenieVoice
   }
   try {
     const stored = window.localStorage.getItem(lampGenieVoiceStorageKey)
@@ -370,7 +372,7 @@ const readStoredLampGenieVoice = (): LampGenieVoiceId => {
   } catch {
     // Ignore storage failures.
   }
-  return 'coral'
+  return defaultLampGenieVoice
 }
 
 const persistLampGenieVoice = (voice: LampGenieVoiceId) => {

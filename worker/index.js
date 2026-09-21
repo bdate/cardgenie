@@ -4582,10 +4582,10 @@ const handleCardInterviewSpeak = async (request, env) => {
   try {
     const openai = getOpenAI(env)
     const model = env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
-    const requestedVoice = String(body.voice || env.OPENAI_TTS_VOICE || 'coral')
+    const requestedVoice = String(body.voice || env.OPENAI_TTS_VOICE || 'echo')
       .trim()
       .toLowerCase()
-    const voice = allowedVoices.has(requestedVoice) ? requestedVoice : 'coral'
+    const voice = allowedVoices.has(requestedVoice) ? requestedVoice : 'echo'
     let speech
     try {
       speech = await openai.audio.speech.create({
