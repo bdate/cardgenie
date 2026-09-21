@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
-import { toPng } from 'html-to-image'
 import './App.css'
 
 type CardDetails = {
@@ -1801,7 +1800,7 @@ const getVisibleInsideCardWidth = () => {
   return Math.round(Math.min(450, Math.max(280, window.innerWidth - 48)))
 }
 
-/** Match on-screen `.open-card-message` layout (cqi + CSS clamp) so print is a scale-up, not a reflow. */
+/** Match on-screen `.open-card-message` layout (cqi + CSS clamp) so print wraps match the preview. */
 const createInsideImageUrl = ({
   greeting,
   paragraphs,
@@ -1812,6 +1811,8 @@ const createInsideImageUrl = ({
   showFrame = true,
   density = 'is-short',
   printSafe = false,
+  /** When set, fonts/wraps use this width then the canvas is scaled up to `width` (sharp print). */
+  layoutBasisWidth,
 }: {
   greeting: string
   paragraphs: string[]
@@ -1822,10 +1823,15 @@ const createInsideImageUrl = ({
   showFrame?: boolean
   density?: InsideMessageDensity
   printSafe?: boolean
+  layoutBasisWidth?: number
 }) => {
   if (typeof document === 'undefined') {
     return ''
   }
+
+  const basisWidth = Math.max(1, Math.round(layoutBasisWidth || width))
+  const basisHeight = Math.round(basisWidth * (height / width))
+  const scale = width / basisWidth
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -1836,10 +1842,15 @@ const createInsideImageUrl = ({
     return ''
   }
 
-  const cqi = width / 100
+  // Draw in basis-space coordinates, scaled to full print pixels so glyphs stay sharp.
+  context.setTransform(scale, 0, 0, scale, 0, 0)
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+
+  const cqi = basisWidth / 100
   const padX = 16 * cqi
   const padY = 12 * cqi
-  const maxTextWidth = Math.max(1, width - padX * 2)
+  const maxTextWidth = Math.max(1, basisWidth - padX * 2)
 
   const bodyFontSize =
     density === 'is-long'
@@ -1865,28 +1876,28 @@ const createInsideImageUrl = ({
 
   if (printSafe) {
     context.fillStyle = '#ffffff'
-    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.fillRect(0, 0, basisWidth, basisHeight)
   } else {
     context.fillStyle = '#fffdf6'
-    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.fillRect(0, 0, basisWidth, basisHeight)
     const topGlow = context.createRadialGradient(
-      canvas.width * 0.82,
-      canvas.height * 0.08,
+      basisWidth * 0.82,
+      basisHeight * 0.08,
       0,
-      canvas.width * 0.82,
-      canvas.height * 0.08,
-      canvas.width * 0.55,
+      basisWidth * 0.82,
+      basisHeight * 0.08,
+      basisWidth * 0.55,
     )
     topGlow.addColorStop(0, 'rgba(245, 158, 51, 0.14)')
     topGlow.addColorStop(1, 'rgba(245, 158, 51, 0)')
     context.fillStyle = topGlow
-    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.fillRect(0, 0, basisWidth, basisHeight)
   }
 
   if (showFrame) {
     context.strokeStyle = 'rgba(63, 155, 145, 0.3)'
     context.lineWidth = Math.max(1, 0.35 * cqi)
-    context.strokeRect(padX * 0.35, padY * 0.35, canvas.width - padX * 0.7, canvas.height - padY * 0.7)
+    context.strokeRect(padX * 0.35, padY * 0.35, basisWidth - padX * 0.7, basisHeight - padY * 0.7)
   }
 
   context.textAlign = 'center'
@@ -1919,10 +1930,10 @@ const createInsideImageUrl = ({
   }
 
   const contentTop = padY
-  const contentBottom = canvas.height - padY
+  const contentBottom = basisHeight - padY
   const available = Math.max(0, contentBottom - contentTop)
   let y = contentTop + Math.max(0, (available - contentHeight) / 2)
-  const centerX = canvas.width / 2
+  const centerX = basisWidth / 2
 
   if (greetingLines.length) {
     context.fillStyle = '#315f5b'
@@ -1968,7 +1979,7 @@ const createInsideImageUrl = ({
   return canvas.toDataURL('image/png')
 }
 
-/** Layout the inside at the shopper's on-screen card width, then enlarge to print size. */
+/** Render the inside at full print pixels using on-screen wrap proportions (no soft bitmap upscale). */
 const buildPrintInsideImageUrl = async ({
   greeting,
   paragraphs,
@@ -1994,137 +2005,33 @@ const buildPrintInsideImageUrl = async ({
     }
   }
 
-  const layoutWidth = getVisibleInsideCardWidth()
-  const layoutHeight = Math.round(layoutWidth * (CARD_COVER_HEIGHT / CARD_COVER_WIDTH))
-
-  // Prefer canvas at the visible card width (reliable on mobile). DOM capture is a desktop enhancement.
-  const renderCanvasFallback = async () => {
-    const fallbackUrl = createInsideImageUrl({
-      greeting,
-      paragraphs,
-      closing,
-      signature,
-      width: Math.max(layoutWidth, 450),
-      height: Math.round(Math.max(layoutWidth, 450) * (CARD_COVER_HEIGHT / CARD_COVER_WIDTH)),
-      showFrame: false,
-      density,
-      printSafe: true,
-    })
-    if (!fallbackUrl) {
-      return ''
-    }
-    const image = await loadImageElement(fallbackUrl)
-    return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
-  }
-
-  if (isMobileDevice()) {
-    // On phones, layout at the actual on-screen width so wraps match what they see.
-    const mobileUrl = createInsideImageUrl({
-      greeting,
-      paragraphs,
-      closing,
-      signature,
-      width: layoutWidth,
-      height: layoutHeight,
-      showFrame: false,
-      density,
-      printSafe: true,
-    })
-    if (!mobileUrl) {
-      return ''
-    }
-    const image = await loadImageElement(mobileUrl)
-    return upscaleImageToDataUrl(image, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
-  }
-
-  const host = document.createElement('div')
-  host.setAttribute('aria-hidden', 'true')
-  host.style.cssText = [
-    'position:fixed',
-    'left:-10000px',
-    'top:0',
-    `width:${layoutWidth}px`,
-    `height:${layoutHeight}px`,
-    'pointer-events:none',
-    'opacity:0',
-    'z-index:-1',
-  ].join(';')
-
-  const cardEl = document.createElement('div')
-  cardEl.className = 'open-card'
-  cardEl.style.cssText = [
-    `width:${layoutWidth}px`,
-    `height:${layoutHeight}px`,
-    'max-width:none',
-    'margin:0',
-    'animation:none',
-    'box-shadow:none',
-    'border:0',
-    'border-radius:0',
-  ].join(';')
-
-  const messageEl = document.createElement('div')
-  messageEl.className = `open-card-message ${density}`
-  messageEl.style.cssText = 'width:100%;height:100%;box-sizing:border-box;background:#ffffff;'
-
-  if (greeting.trim()) {
-    const greetingEl = document.createElement('span')
-    greetingEl.textContent = greeting.trim()
-    messageEl.appendChild(greetingEl)
-  }
-
-  const paragraphsEl = document.createElement('div')
-  paragraphsEl.className = 'message-paragraphs'
-  paragraphs.forEach((paragraph) => {
-    const paragraphEl = document.createElement('p')
-    paragraphEl.textContent = paragraph
-    paragraphsEl.appendChild(paragraphEl)
-  })
-  messageEl.appendChild(paragraphsEl)
-
-  if (closing.trim()) {
-    const closingEl = document.createElement('div')
-    closingEl.className = 'card-closing'
-    closingEl.textContent = closing.trim()
-    messageEl.appendChild(closingEl)
-  }
-
-  if (signature.trim()) {
-    const signatureEl = document.createElement('div')
-    signatureEl.className = 'card-signature'
-    signatureEl.textContent = signature.trim()
-    messageEl.appendChild(signatureEl)
-  }
-
-  cardEl.appendChild(messageEl)
-  host.appendChild(cardEl)
-  document.body.appendChild(host)
-
   try {
-    await new Promise<void>((resolve) => {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
-    })
-
-    const captureRatio = Math.min(2, PRINT_CARD_WIDTH / layoutWidth)
-    const capturedUrl = await toPng(cardEl, {
-      width: layoutWidth,
-      height: layoutHeight,
-      pixelRatio: captureRatio,
-      cacheBust: true,
-      style: {
-        transform: 'none',
-        animation: 'none',
-      },
-    })
-    const capturedImage = await loadImageElement(capturedUrl)
-    return upscaleImageToDataUrl(capturedImage, PRINT_CARD_WIDTH, PRINT_CARD_HEIGHT)
-  } catch (error) {
-    console.error('Unable to capture on-screen inside layout for print.', error)
-    return renderCanvasFallback()
-  } finally {
-    host.remove()
+    await Promise.all([
+      document.fonts.load('700 64px "Playfair Display"'),
+      document.fonts.load('700 96px "Dancing Script"'),
+    ])
+  } catch {
+    // Fall through — system serif/script substitutes still print.
   }
+
+  const layoutWidth = Math.max(getVisibleInsideCardWidth(), 320)
+
+  return (
+    createInsideImageUrl({
+      greeting,
+      paragraphs,
+      closing,
+      signature,
+      width: PRINT_CARD_WIDTH,
+      height: PRINT_CARD_HEIGHT,
+      layoutBasisWidth: layoutWidth,
+      showFrame: false,
+      density,
+      printSafe: true,
+    }) || ''
+  )
 }
+
 
 function App() {
   const sharedCardId = useMemo(() => getSharedCardId(), [])
