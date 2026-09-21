@@ -3249,11 +3249,16 @@ const localRefineInterviewResult = ({
     }
   }
   const nameAmbiguous = localInterviewRecipientLooksAmbiguous(next.recipientName)
-  const ambiguousRecipient =
-    nameAmbiguous || localTranscriptHasAmbiguousRecipientCue(latestShopperText)
   if (nameAmbiguous) {
     next.recipientName = localScrubAmbiguousRecipientName(next.recipientName)
   }
+  // "a nice card for him" is common even when they already named the person.
+  const hasClearRecipient =
+    Boolean(String(next.recipientName || '').trim()) &&
+    !localInterviewRecipientLooksAmbiguous(next.recipientName)
+  const ambiguousRecipient =
+    !hasClearRecipient &&
+    (nameAmbiguous || localTranscriptHasAmbiguousRecipientCue(latestShopperText))
 
   let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
   let nextAssistant = String(assistantMessage || '').trim()

@@ -3481,18 +3481,28 @@ function App() {
     }
     recognition.onend = () => {
       setIsInterviewListening(false)
-      if (!interviewListenDesiredRef.current || isInterviewingRef.current) {
+      if (
+        !interviewListenDesiredRef.current ||
+        isInterviewingRef.current ||
+        interviewSpeakingRef.current
+      ) {
         return
       }
       window.setTimeout(() => {
-        if (!interviewListenDesiredRef.current || isInterviewingRef.current) {
+        if (
+          !interviewListenDesiredRef.current ||
+          isInterviewingRef.current ||
+          interviewSpeakingRef.current
+        ) {
           return
         }
         try {
           recognition.start()
           setIsInterviewListening(true)
         } catch {
-          interviewListenDesiredRef.current = false
+          // Browsers often refuse to restart the same recognition instance.
+          // Spin up a fresh listener so hands-free mode does not die after one turn.
+          startInterviewListening({ announce: false })
         }
       }, 180)
     }
@@ -7426,7 +7436,27 @@ function App() {
                 />
               </label>
               <div className="card-interview-actions">
-                {interviewSpeechSupported && !interviewComplete && !interviewVoiceLoop && (
+                {interviewSpeechSupported && !interviewComplete && interviewMode === 'chat' && (
+                  <button
+                    className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
+                    type="button"
+                    disabled={isInterviewing || isInterviewSpeaking}
+                    aria-pressed={isInterviewListening}
+                    onClick={() => {
+                      if (isInterviewListening) {
+                        stopInterviewListening()
+                        setInterviewNotice('Mic paused. Tap Talk when you’re ready again.')
+                      } else {
+                        interviewVoiceLoopRef.current = true
+                        setInterviewVoiceLoop(true)
+                        startInterviewListening({ announce: true })
+                      }
+                    }}
+                  >
+                    {isInterviewListening ? 'Listening…' : 'Talk'}
+                  </button>
+                )}
+                {interviewSpeechSupported && !interviewComplete && !interviewVoiceLoop && interviewMode !== 'chat' && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -7457,7 +7487,7 @@ function App() {
                 )}
                 {interviewComplete && (
                   <button className="secondary-button" type="button" onClick={closeCardInterview}>
-                    Hide Ask Genie
+                    Hide {interviewMode === 'chat' ? 'Lamp Genie' : 'Ask Genie'}
                   </button>
                 )}
                 <button className="text-action-link" type="button" onClick={resetCardInterview}>

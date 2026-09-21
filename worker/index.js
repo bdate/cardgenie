@@ -4303,13 +4303,17 @@ const refineInterviewResult = ({
   }
 
   const nameAmbiguous = interviewRecipientNameLooksAmbiguous(next.recipientName)
-  // Only inspect the latest shopper reply for him/her cues so an earlier
-  // "him and Anita" does not keep forcing name questions after clarification.
-  const ambiguousRecipient =
-    nameAmbiguous || transcriptHasAmbiguousRecipientCue(latestShopperText)
   if (nameAmbiguous) {
     next.recipientName = scrubAmbiguousRecipientName(next.recipientName)
   }
+  // "a nice card for him" is common even when they already named the person.
+  // Only force a name clarification when we still lack a clear recipient name.
+  const hasClearRecipient =
+    Boolean(String(next.recipientName || '').trim()) &&
+    !interviewRecipientNameLooksAmbiguous(next.recipientName)
+  const ambiguousRecipient =
+    !hasClearRecipient &&
+    (nameAmbiguous || transcriptHasAmbiguousRecipientCue(latestShopperText))
 
   let nextStatus = String(status || '').toLowerCase() === 'ready' ? 'ready' : 'ask'
   let nextAssistant = String(assistantMessage || '').trim()
