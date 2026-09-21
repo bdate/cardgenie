@@ -88,17 +88,17 @@ type InterviewSpeechRecognitionEvent = {
 }
 
 const interviewQuickGreeting =
-  'Tell me about the card you want to create — who it’s for, who it’s from, what its for and other details. I’ll fill out the form for you.'
+  'Tell me about the card you want to create — who it’s for, who it’s from, the occasion, and any details or memories.'
 
 const interviewChatGreeting =
-  'Hi! Tell me about the card you want — who it’s for, who it’s from, the occasion, and any details or memories to include. I’ll fill in the form for you.'
+  'Hi! Tell me about the card you want — who it’s for, who it’s from, the occasion, and any details or memories to include.'
 
 type InterviewMode = 'quick' | 'chat'
 
 const greetingForInterviewMode = (mode: InterviewMode) =>
   mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
 
-const interviewVoicePauseMs = 1700
+const interviewVoicePauseMs = 4500
 
 let genieSpeechAudio: HTMLAudioElement | null = null
 

@@ -3934,7 +3934,7 @@ Essentials for status "ready": senderName, a clear recipientName, occasion, and 
 Rules:
 - Extract every field you can from each reply into details.
 - If essentials are complete, return status "ready". Do not ask optional enriching questions.
-- If anything essential is still missing, return status "ask" with ONE short question that asks for ALL remaining gaps together (not one field per turn). Example: "Thanks — I still need who it’s from and a memory to mention inside."
+- If anything essential is still missing, return status "ask" with ONE short question that asks for ALL remaining gaps together (not one field per turn). When you already know the recipient’s name, personalize the ask (example: "Thanks. Do you have details, characteristics, or interests you can share about David, or any memories?"). Avoid generic phrasing like "a memory or detail to include" when a name is known.
 - Only ask a single-topic question when the issue is unclear names (speech-to-text), e.g. "him and Anita". Prefer: "I want to make sure I have the names right — who is the card for?"
 - Infer occasion from phrases like "thank you card", "thanks", "birthday card", "anniversary", "congratulations". Do NOT ask for occasion when it is already clear. Example: "send a thank you card" means occasion "Thank You".
 - Treat pronouns or vague words as UNCLEAR recipient names, not real names: him, her, them, he, she, they, someone, guy, etc. Never put "him", "her", or "them" into recipientName.
@@ -3971,7 +3971,7 @@ Essentials for status "ready": senderName, a clear recipientName, occasion, and 
 Conversation style:
 - The opening already asked for everything. On each shopper reply, extract every field you can into details.
 - If essentials are complete, return status "ready". Do not ask optional enriching questions.
-- If anything essential is still missing, return status "ask" with ONE short question that asks for ALL remaining gaps together (not one field per turn). Example: "Thanks — I still need who it’s from and a memory to mention inside."
+- If anything essential is still missing, return status "ask" with ONE short question that asks for ALL remaining gaps together (not one field per turn). When you already know the recipient’s name, personalize the ask (example: "Thanks. Do you have details, characteristics, or interests you can share about David, or any memories?"). Avoid generic phrasing like "a memory or detail to include" when a name is known.
 - Only ask a single-topic question when the issue is unclear names (speech-to-text), e.g. "him and Anita".
 - Infer occasion from phrases like "thank you card", "thanks", "birthday card". Do NOT re-ask occasion when clear.
 - Treat pronouns (him, her, them, he, she, they) as unclear names — ask who they mean. Never store "him"/"her" as recipientName.
@@ -4231,30 +4231,73 @@ const buildChatMissingPrompt = (details, ambiguousRecipient) => {
     return 'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
   }
 
+  const recipient = String(details.recipientName || '').trim()
+  const sender = String(details.senderName || '').trim()
+  const occasion = String(details.occasion || '').trim()
+  const hasDetails = Boolean(String(details.keyDetails || '').trim())
+
   const missing = []
-  if (!String(details.recipientName || '').trim()) {
-    missing.push('who it’s for')
+  if (!recipient) {
+    missing.push('for')
   }
-  if (!String(details.senderName || '').trim()) {
-    missing.push('who it’s from')
+  if (!sender) {
+    missing.push('from')
   }
-  if (!String(details.occasion || '').trim()) {
-    missing.push('the occasion')
+  if (!occasion) {
+    missing.push('occasion')
   }
-  if (!String(details.keyDetails || '').trim()) {
-    missing.push('a memory or detail to include')
+  if (!hasDetails) {
+    missing.push('details')
   }
   if (missing.length === 0) {
     return ''
   }
+
   if (missing.length === 1) {
-    return `Thanks — I still need ${missing[0]}.`
+    if (missing[0] === 'details' && recipient) {
+      return `Thanks. Do you have details, characteristics, or interests you can share about ${recipient}, or any memories?`
+    }
+    if (missing[0] === 'details') {
+      return 'Thanks. Do you have details, characteristics, interests, or any memories to include?'
+    }
+    if (missing[0] === 'from' && recipient) {
+      return `Thanks — who should the card to ${recipient} be from?`
+    }
+    if (missing[0] === 'from') {
+      return 'Thanks — who is the card from?'
+    }
+    if (missing[0] === 'occasion' && recipient) {
+      return `Thanks — what’s the occasion for ${recipient}’s card?`
+    }
+    if (missing[0] === 'occasion') {
+      return 'Thanks — what’s the occasion?'
+    }
+    return 'Thanks — who is the card for?'
   }
-  if (missing.length === 2) {
-    return `Thanks — I still need ${missing[0]} and ${missing[1]}.`
+
+  const parts = []
+  if (!recipient) {
+    parts.push('who it’s for')
   }
-  const last = missing[missing.length - 1]
-  return `Thanks — I still need ${missing.slice(0, -1).join(', ')}, and ${last}.`
+  if (!sender) {
+    parts.push('who it’s from')
+  }
+  if (!occasion) {
+    parts.push('the occasion')
+  }
+  if (!hasDetails) {
+    parts.push(
+      recipient
+        ? `details, interests, or a memory about ${recipient}`
+        : 'details, interests, or a memory to include',
+    )
+  }
+
+  if (parts.length === 2) {
+    return `Thanks — I still need ${parts[0]} and ${parts[1]}.`
+  }
+  const last = parts[parts.length - 1]
+  return `Thanks — I still need ${parts.slice(0, -1).join(', ')}, and ${last}.`
 }
 
 const refineInterviewResult = ({

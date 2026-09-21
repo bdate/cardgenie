@@ -3183,30 +3183,73 @@ const localBuildChatMissingPrompt = (details, ambiguousRecipient) => {
     return 'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
   }
 
+  const recipient = String(details.recipientName || '').trim()
+  const sender = String(details.senderName || '').trim()
+  const occasion = String(details.occasion || '').trim()
+  const hasDetails = Boolean(String(details.keyDetails || '').trim())
+
   const missing = []
-  if (!String(details.recipientName || '').trim()) {
-    missing.push('who it’s for')
+  if (!recipient) {
+    missing.push('for')
   }
-  if (!String(details.senderName || '').trim()) {
-    missing.push('who it’s from')
+  if (!sender) {
+    missing.push('from')
   }
-  if (!String(details.occasion || '').trim()) {
-    missing.push('the occasion')
+  if (!occasion) {
+    missing.push('occasion')
   }
-  if (!String(details.keyDetails || '').trim()) {
-    missing.push('a memory or detail to include')
+  if (!hasDetails) {
+    missing.push('details')
   }
   if (missing.length === 0) {
     return ''
   }
+
   if (missing.length === 1) {
-    return `Thanks — I still need ${missing[0]}.`
+    if (missing[0] === 'details' && recipient) {
+      return `Thanks. Do you have details, characteristics, or interests you can share about ${recipient}, or any memories?`
+    }
+    if (missing[0] === 'details') {
+      return 'Thanks. Do you have details, characteristics, interests, or any memories to include?'
+    }
+    if (missing[0] === 'from' && recipient) {
+      return `Thanks — who should the card to ${recipient} be from?`
+    }
+    if (missing[0] === 'from') {
+      return 'Thanks — who is the card from?'
+    }
+    if (missing[0] === 'occasion' && recipient) {
+      return `Thanks — what’s the occasion for ${recipient}’s card?`
+    }
+    if (missing[0] === 'occasion') {
+      return 'Thanks — what’s the occasion?'
+    }
+    return 'Thanks — who is the card for?'
   }
-  if (missing.length === 2) {
-    return `Thanks — I still need ${missing[0]} and ${missing[1]}.`
+
+  const parts = []
+  if (!recipient) {
+    parts.push('who it’s for')
   }
-  const last = missing[missing.length - 1]
-  return `Thanks — I still need ${missing.slice(0, -1).join(', ')}, and ${last}.`
+  if (!sender) {
+    parts.push('who it’s from')
+  }
+  if (!occasion) {
+    parts.push('the occasion')
+  }
+  if (!hasDetails) {
+    parts.push(
+      recipient
+        ? `details, interests, or a memory about ${recipient}`
+        : 'details, interests, or a memory to include',
+    )
+  }
+
+  if (parts.length === 2) {
+    return `Thanks — I still need ${parts[0]} and ${parts[1]}.`
+  }
+  const last = parts[parts.length - 1]
+  return `Thanks — I still need ${parts.slice(0, -1).join(', ')}, and ${last}.`
 }
 
 const localRefineInterviewResult = ({
