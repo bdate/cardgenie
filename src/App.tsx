@@ -92,12 +92,16 @@ const interviewQuickGreeting =
   'Tell me about the card you want to create — who it’s for, who it’s from, what its for and other details. I’ll fill out the form for you.'
 
 const interviewChatGreeting =
-  'Hi! I’ll help you create a card. Who is it for?'
+  'Hi! Tell me about the card you want — who it’s for, who it’s from, the occasion, and any details or memories to include. I’ll fill in the form from what you say.'
 
 type InterviewMode = 'quick' | 'chat'
 
 const greetingForInterviewMode = (mode: InterviewMode) =>
   mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
+
+const interviewVoicePauseMs = 1700
+
+let genieSpeechAudio: HTMLAudioElement | null = null
 
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
@@ -316,6 +320,115 @@ const maxReferencePhotoDataUrlLength = 480000
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
+
+const stopGenieSpeech = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel()
+  }
+  if (genieSpeechAudio) {
+    genieSpeechAudio.pause()
+    genieSpeechAudio.removeAttribute('src')
+    genieSpeechAudio.load()
+    genieSpeechAudio = null
+  }
+}
+
+const speakGenieBrowserFallback = (spoken: string) =>
+  new Promise<void>((resolve) => {
+    if (!window.speechSynthesis) {
+      resolve()
+      return
+    }
+
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(spoken)
+    utterance.lang = 'en-US'
+    utterance.rate = 1.02
+    utterance.pitch = 1.05
+    const voices = window.speechSynthesis.getVoices()
+    const voice =
+      voices.find(
+        (entry) =>
+          entry.lang.toLowerCase().startsWith('en') &&
+          /samantha|google us english|natural|premium|enhanced/i.test(entry.name),
+      ) || voices.find((entry) => entry.lang.toLowerCase().startsWith('en'))
+    if (voice) {
+      utterance.voice = voice
+    }
+
+    let settled = false
+    let keepAlive = 0
+    let safety = 0
+    const finish = () => {
+      if (settled) {
+        return
+      }
+      settled = true
+      window.clearInterval(keepAlive)
+      window.clearTimeout(safety)
+      resolve()
+    }
+    utterance.onend = finish
+    utterance.onerror = finish
+    keepAlive = window.setInterval(() => {
+      if (settled || !window.speechSynthesis.speaking) {
+        window.clearInterval(keepAlive)
+        return
+      }
+      window.speechSynthesis.resume()
+    }, 4000)
+    safety = window.setTimeout(finish, Math.min(30000, 2500 + spoken.length * 70))
+    window.speechSynthesis.speak(utterance)
+  })
+
+const speakGenieAloud = async (text: string) => {
+  const spoken = text.replace(/\s+/g, ' ').trim()
+  if (!spoken || typeof window === 'undefined') {
+    return
+  }
+
+  stopGenieSpeech()
+
+  try {
+    const response = await fetch(apiUrl('/api/card-interview-speak'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: spoken }),
+    })
+    if (response.ok) {
+      const blob = await response.blob()
+      const contentType = response.headers.get('content-type') || blob.type || ''
+      if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
+        const objectUrl = URL.createObjectURL(blob)
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(objectUrl)
+          genieSpeechAudio = audio
+          const finish = () => {
+            if (genieSpeechAudio === audio) {
+              genieSpeechAudio = null
+            }
+            URL.revokeObjectURL(objectUrl)
+            resolve()
+          }
+          audio.onended = finish
+          audio.onerror = finish
+          void audio.play().catch(() => {
+            finish()
+          })
+        })
+        return
+      }
+    }
+  } catch {
+    // Fall back to browser speech below.
+  }
+
+  await speakGenieBrowserFallback(spoken)
+}
+
 const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
 
 const localShareUrl = (cardId: string) =>
@@ -1283,9 +1396,13 @@ const loadCoverImageForPrint = async ({
   imageUrl?: string
   cardId?: string
 }): Promise<PrintImageSource> => {
+  // Prefer the live in-memory cover (including revised data URLs) over /c/{id}/cover.
+  // The share endpoint can lag behind revises and was previously preferred, which caused
+  // print orders to ship an older cover while the UI still showed the revision.
   const candidates = [
-    cardId ? getShareCoverImageUrl(cardId) : '',
     imageUrl || '',
+    // Cache-bust share fallback in case a prior cover response is still cached.
+    cardId ? `${getShareCoverImageUrl(cardId)}?v=${Date.now()}` : '',
   ].filter(Boolean)
 
   const tryCandidates = async () => {
@@ -2082,6 +2199,8 @@ function App() {
   const [error, setError] = useState('')
   const [showCardInterview, setShowCardInterview] = useState(false)
   const [interviewMode, setInterviewMode] = useState<InterviewMode>('quick')
+  const [interviewVoiceLoop, setInterviewVoiceLoop] = useState(false)
+  const [isInterviewSpeaking, setIsInterviewSpeaking] = useState(false)
   const [interviewMessages, setInterviewMessages] = useState<InterviewMessage[]>([
     { role: 'assistant', content: interviewQuickGreeting },
   ])
@@ -2107,6 +2226,10 @@ function App() {
   const interviewThreadRef = useRef<HTMLDivElement | null>(null)
   const isInterviewingRef = useRef(false)
   const showCardInterviewRef = useRef(false)
+  const interviewVoiceLoopRef = useRef(false)
+  const interviewSpeakingRef = useRef(false)
+  const interviewAutoSendTimerRef = useRef(0)
+  const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -3146,6 +3269,10 @@ function App() {
 
   const stopInterviewListening = () => {
     interviewListenDesiredRef.current = false
+    if (interviewAutoSendTimerRef.current) {
+      window.clearTimeout(interviewAutoSendTimerRef.current)
+      interviewAutoSendTimerRef.current = 0
+    }
     const recognition = interviewRecognitionRef.current
     interviewRecognitionRef.current = null
     if (recognition) {
@@ -3214,6 +3341,31 @@ function App() {
     })
   }
 
+  const clearInterviewAutoSend = () => {
+    if (interviewAutoSendTimerRef.current) {
+      window.clearTimeout(interviewAutoSendTimerRef.current)
+      interviewAutoSendTimerRef.current = 0
+    }
+  }
+
+  const scheduleVoiceAutoSend = () => {
+    if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
+      return
+    }
+    clearInterviewAutoSend()
+    interviewAutoSendTimerRef.current = window.setTimeout(() => {
+      interviewAutoSendTimerRef.current = 0
+      if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
+        return
+      }
+      const text = (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim()
+      if (text.length < 2) {
+        return
+      }
+      void sendCardInterviewRef.current()
+    }, interviewVoicePauseMs)
+  }
+
   const startInterviewListening = (options?: { announce?: boolean }) => {
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
@@ -3249,16 +3401,20 @@ function App() {
         interviewBaseDraftRef.current = merged
         interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
+        scheduleVoiceAutoSend()
       } else if (interimChunk) {
         const merged = `${interviewBaseDraftRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim()
         interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
+        scheduleVoiceAutoSend()
       }
     }
     recognition.onerror = (event) => {
       const code = String(event?.error || '')
       if (code === 'not-allowed' || code === 'service-not-allowed') {
         interviewListenDesiredRef.current = false
+        interviewVoiceLoopRef.current = false
+        setInterviewVoiceLoop(false)
         setIsInterviewListening(false)
         setInterviewNotice('Microphone permission is needed to talk to Genie. You can still type your reply.')
         return
@@ -3291,12 +3447,46 @@ function App() {
       recognition.start()
       setIsInterviewListening(true)
       if (options?.announce !== false) {
-        setInterviewNotice('Listening… tell Genie about the card, then tap I’m done.')
+        setInterviewNotice(
+          interviewVoiceLoopRef.current
+            ? 'Listening… just pause when you’re finished.'
+            : 'Listening… tell Genie about the card, then tap I’m done.',
+        )
       }
     } catch {
       interviewListenDesiredRef.current = false
       setIsInterviewListening(false)
       setInterviewNotice('Couldn’t start the microphone — type your reply instead.')
+    }
+  }
+
+  const runGenieVoiceTurn = async (text: string, thenListen: boolean) => {
+    if (!interviewVoiceLoopRef.current) {
+      return
+    }
+    clearInterviewAutoSend()
+    stopInterviewListening()
+    interviewSpeakingRef.current = true
+    setIsInterviewSpeaking(true)
+    setInterviewNotice('Genie is speaking…')
+    try {
+      await speakGenieAloud(text)
+    } finally {
+      interviewSpeakingRef.current = false
+      setIsInterviewSpeaking(false)
+    }
+    if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
+      return
+    }
+    if (thenListen && interviewSpeechSupported) {
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 350)
+      })
+      if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
+        return
+      }
+      setInterviewNotice('Listening… just pause when you’re finished.')
+      startInterviewListening({ announce: false })
     }
   }
 
@@ -3314,15 +3504,22 @@ function App() {
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
-    if (interviewSpeechSupported) {
-      setInterviewNotice(
-        mode === 'chat'
-          ? 'Listening… answer Genie’s question, then tap I’m done.'
-          : '',
-      )
-      startInterviewListening({ announce: mode !== 'chat' })
+    stopGenieSpeech()
+    window.speechSynthesis?.getVoices()
+    if (mode === 'chat' && interviewSpeechSupported) {
+      interviewVoiceLoopRef.current = true
+      setInterviewVoiceLoop(true)
+      void runGenieVoiceTurn(greetingForInterviewMode('chat'), true)
     } else {
-      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+      interviewVoiceLoopRef.current = false
+      setInterviewVoiceLoop(false)
+      setIsInterviewSpeaking(false)
+      if (interviewSpeechSupported) {
+        setInterviewNotice('')
+        startInterviewListening()
+      } else {
+        setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+      }
     }
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -3331,6 +3528,7 @@ function App() {
 
   const resetCardInterview = () => {
     stopInterviewListening()
+    stopGenieSpeech()
     setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(interviewMode) }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
@@ -3338,14 +3536,15 @@ function App() {
     setInterviewComplete(false)
     isInterviewingRef.current = false
     setIsInterviewing(false)
+    if (interviewVoiceLoopRef.current && interviewSpeechSupported) {
+      void runGenieVoiceTurn(greetingForInterviewMode(interviewMode), true)
+      return
+    }
+    setIsInterviewSpeaking(false)
     if (interviewSpeechSupported) {
-      setInterviewNotice(
-        interviewMode === 'chat'
-          ? 'Listening… answer Genie’s question, then tap I’m done.'
-          : '',
-      )
+      setInterviewNotice('')
       window.setTimeout(() => {
-        startInterviewListening({ announce: interviewMode !== 'chat' })
+        startInterviewListening()
       }, 0)
     } else {
       setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
@@ -3354,6 +3553,11 @@ function App() {
 
   const closeCardInterview = () => {
     stopInterviewListening()
+    stopGenieSpeech()
+    interviewSpeakingRef.current = false
+    setIsInterviewSpeaking(false)
+    interviewVoiceLoopRef.current = false
+    setInterviewVoiceLoop(false)
     showCardInterviewRef.current = false
     setShowCardInterview(false)
     setInterviewNotice('')
@@ -3365,6 +3569,11 @@ function App() {
     }
 
     stopInterviewListening()
+    stopGenieSpeech()
+    interviewSpeakingRef.current = false
+    setIsInterviewSpeaking(false)
+    interviewVoiceLoopRef.current = false
+    setInterviewVoiceLoop(false)
     showCardInterviewRef.current = false
     setShowCardInterview(false)
     setInterviewMessages([{ role: 'assistant', content: interviewQuickGreeting }])
@@ -3436,9 +3645,11 @@ function App() {
   const clearCreateCardInputs = startNewCard
 
   const sendCardInterview = async () => {
-    if (isInterviewingRef.current) {
+    if (isInterviewingRef.current || interviewSpeakingRef.current) {
       return
     }
+    clearInterviewAutoSend()
+    isInterviewingRef.current = true
 
     if (isInterviewListening || interviewRecognitionRef.current) {
       await pauseInterviewListeningForFinalWords()
@@ -3453,8 +3664,14 @@ function App() {
       interviewDraft
     ).trim()
     if (!message) {
-      setInterviewNotice('Say or type a bit about the card first, then tap I’m done.')
-      startInterviewListening({ announce: false })
+      isInterviewingRef.current = false
+      if (interviewVoiceLoopRef.current) {
+        setInterviewNotice('Listening… just pause when you’re finished.')
+        startInterviewListening({ announce: false })
+      } else {
+        setInterviewNotice('Say or type a bit about the card first, then tap I’m done.')
+        startInterviewListening({ announce: false })
+      }
       return
     }
 
@@ -3504,7 +3721,24 @@ function App() {
         applyInterviewDetails(details)
       }
 
-      if (isReady && details) {
+      if (interviewVoiceLoopRef.current && interviewSpeechSupported) {
+        isInterviewingRef.current = false
+        setIsInterviewing(false)
+        if (isReady && details) {
+          setInterviewComplete(true)
+          await runGenieVoiceTurn(assistantMessage, false)
+          if (!showCardInterviewRef.current) {
+            return
+          }
+          setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+          window.setTimeout(() => {
+            document.querySelector('.form-panel .field-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }, 80)
+        } else {
+          setInterviewComplete(false)
+          await runGenieVoiceTurn(assistantMessage, true)
+        }
+      } else if (isReady && details) {
         setInterviewComplete(true)
         setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
         window.setTimeout(() => {
@@ -3525,9 +3759,14 @@ function App() {
       }
     } catch (caughtError) {
       setInterviewComplete(false)
-      setInterviewNotice(
-        caughtError instanceof Error ? caughtError.message : 'Unable to continue that conversation.',
-      )
+      const friendly = getFriendlyErrorMessage(caughtError, 'Unable to continue that conversation.')
+      const message =
+        isLocalApiDev && /failed to fetch|load failed|networkerror|network request failed/i.test(
+          caughtError instanceof Error ? caughtError.message : '',
+        )
+          ? 'Local Genie API is not running. Start it with npm run dev:server (port 8787), then try again.'
+          : friendly
+      setInterviewNotice(interviewVoiceLoopRef.current ? `${message} Listening again.` : message)
       startInterviewListening({ announce: false })
     } finally {
       isInterviewingRef.current = false
@@ -3535,9 +3774,12 @@ function App() {
     }
   }
 
+  sendCardInterviewRef.current = sendCardInterview
+
   useEffect(() => {
     return () => {
       stopInterviewListening()
+      stopGenieSpeech()
     }
   }, [])
 
@@ -5289,6 +5531,28 @@ function App() {
       }
 
       setCard((current) => (current ? { ...current, imageUrl: data.imageUrl } : current))
+      if (typeof data.cardId === 'string' && data.cardId.trim()) {
+        const nextCardId = data.cardId.trim()
+        setSharedCard((current) => {
+          if (current?.id === nextCardId) {
+            return current
+          }
+          if (!card) {
+            return current
+          }
+          const shareUrl = isLocalApiDev
+            ? localShareUrl(nextCardId)
+            : apiUrl(`/c/${encodeURIComponent(nextCardId)}`)
+          return {
+            id: nextCardId,
+            shareUrl,
+            details,
+            card: { ...card, imageUrl: data.imageUrl },
+            greeting: insideGreeting || undefined,
+            signature: cardSignatureLabel || undefined,
+          }
+        })
+      }
       setHasSentCurrentCard(false)
       setImageRefinement('')
       setStep('front')
@@ -5418,6 +5682,7 @@ function App() {
       },
       body: JSON.stringify({
         ...buildCurrentCardPayload(storedCover),
+        ...(sharedCard?.id ? { cardId: sharedCard.id } : {}),
         ...(coverThumb ? { coverThumb } : {}),
       }),
     })
@@ -7061,12 +7326,15 @@ function App() {
                   className="card-interview-input"
                   rows={4}
                   value={interviewDraft}
-                  disabled={isInterviewing}
+                  disabled={isInterviewing || isInterviewSpeaking}
                   onChange={(event) => {
                     const value = event.target.value
                     interviewBaseDraftRef.current = value
                     interviewLatestDraftRef.current = value
                     setInterviewDraft(value)
+                    if (interviewVoiceLoopRef.current) {
+                      scheduleVoiceAutoSend()
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
@@ -7074,11 +7342,15 @@ function App() {
                       void sendCardInterview()
                     }
                   }}
-                  placeholder="Example: I'd like to send a birthday card to Jamie from Alex and Sam for their surprise party last weekend. We had a great time, specially enjoyed the swimming and BBQing in the backyard."
+                  placeholder={
+                    interviewVoiceLoop
+                      ? 'Genie is listening. Pause when you finish a thought — or type here.'
+                      : "Example: I'd like to send a birthday card to Jamie from Alex and Sam for their surprise party last weekend. We had a great time, specially enjoyed the swimming and BBQing in the backyard."
+                  }
                 />
               </label>
               <div className="card-interview-actions">
-                {interviewSpeechSupported && !interviewComplete && (
+                {interviewSpeechSupported && !interviewComplete && !interviewVoiceLoop && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -7096,7 +7368,7 @@ function App() {
                     {isInterviewListening ? 'Listening…' : 'Answer'}
                   </button>
                 )}
-                {!interviewComplete && (
+                {!interviewComplete && !interviewVoiceLoop && (
                   <button
                     className="primary-button"
                     type="button"
@@ -7119,7 +7391,13 @@ function App() {
               {interviewNotice && (
                 <p
                   className={`card-interview-notice${
-                    interviewComplete ? ' is-success' : isInterviewListening ? ' is-listening' : ''
+                    interviewComplete
+                      ? ' is-success'
+                      : isInterviewSpeaking
+                        ? ' is-speaking'
+                        : isInterviewListening
+                          ? ' is-listening'
+                          : ''
                   }`}
                 >
                   {interviewNotice}

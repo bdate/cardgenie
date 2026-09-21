@@ -567,7 +567,8 @@
   font-size: 0.9rem;
 }
 
-.card-interview-notice.is-listening {
+.card-interview-notice.is-listening,
+.card-interview-notice.is-speaking {
   color: #972044;
 }
 

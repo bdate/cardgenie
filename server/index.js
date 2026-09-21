@@ -3,6 +3,11 @@ import 'dotenv/config'
 import crypto from 'node:crypto'
 import express from 'express'
 import OpenAI, { toFile } from 'openai'
+import {
+  appendCoverRevision,
+  getCoverRevisionBytes,
+  listCoverRevisions,
+} from '../worker/cover-revisions.js'
 
 const COVER_IMAGE_SIZE = '1056x1472'
 const COVER_IMAGE_WIDTH = 1056
@@ -92,17 +97,64 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
-app.post('/api/cards', (req, res) => {
+app.post('/api/cards', async (req, res) => {
   try {
-    const record = buildCardRecord(req.body)
+    const requestedId = typeof req.body?.cardId === 'string' ? req.body.cardId.trim() : ''
+    const existing = requestedId ? cardStore.get(requestedId) : null
+    const record = buildCardRecord({
+      ...req.body,
+      cardId: existing ? requestedId : '',
+    })
+    if (existing?.createdAt) {
+      record.createdAt = existing.createdAt
+      record.updatedAt = new Date().toISOString()
+    }
     cardStore.set(record.id, record)
+    try {
+      await appendCoverRevision(
+        {},
+        {
+          cardId: record.id,
+          imageUrl: record.card?.imageUrl,
+          source: 'save',
+          details: record.details || null,
+        },
+      )
+    } catch (revisionError) {
+      console.error('Unable to save cover revision snapshot.', revisionError)
+    }
 
-    res.status(201).json(getCardSummary(record, req))
+    res.status(existing ? 200 : 201).json(getCardSummary(record, req))
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : 'Unable to save the card.',
     })
   }
+})
+
+app.get('/api/cards/:cardId/revisions/:revisionId/image', async (req, res) => {
+  const revisions = await listCoverRevisions({}, req.params.cardId)
+  const meta = revisions.find((entry) => entry.id === req.params.revisionId)
+  const image = await getCoverRevisionBytes({}, req.params.revisionId)
+  if (!meta || !image?.bytes?.byteLength) {
+    return res.status(404).json({ error: 'Cover revision not found or expired.' })
+  }
+  res.setHeader('Content-Type', image.contentType || meta.contentType || 'image/jpeg')
+  res.setHeader('Cache-Control', 'private, max-age=300')
+  return res.send(Buffer.from(image.bytes))
+})
+
+app.get('/api/cards/:cardId/revisions', async (req, res) => {
+  const revisions = await listCoverRevisions({}, req.params.cardId)
+  const origin = `${req.protocol}://${req.get('host')}`
+  res.json({
+    cardId: req.params.cardId,
+    retentionDays: 7,
+    revisions: revisions.map((entry) => ({
+      ...entry,
+      imageUrl: `${origin}/api/cards/${encodeURIComponent(req.params.cardId)}/revisions/${encodeURIComponent(entry.id)}/image`,
+    })),
+  })
 })
 
 app.get('/api/cards/:cardId', (req, res) => {
@@ -131,7 +183,7 @@ app.get('/c/:cardId/cover', (req, res) => {
 
   if (parsed) {
     res.setHeader('Content-Type', parsed.mimeType)
-    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate')
     return res.send(parsed.bytes)
   }
 
@@ -458,6 +510,21 @@ app.post('/api/order-print-card', async (req, res) => {
       })
     } catch (confirmationError) {
       console.error('Unable to send print order confirmation email.', confirmationError)
+    }
+
+    try {
+      await appendCoverRevision(
+        {},
+        {
+          cardId: record.id,
+          imageUrl: coverImage,
+          source: 'print',
+          orderNumber: orderCode,
+          details: record.details || null,
+        },
+      )
+    } catch (revisionError) {
+      console.error('Unable to save print-order cover revision.', revisionError)
     }
 
     return res.json({
@@ -1640,8 +1707,10 @@ const buildCardRecord = (payload) => {
     throw new Error('Missing card image or message.')
   }
 
+  const existingId = typeof payload?.cardId === 'string' ? payload.cardId.trim() : ''
+
   return {
-    id: createCardId(),
+    id: existingId || createCardId(),
     createdAt: new Date().toISOString(),
     details: {
       recipientName: details.recipientName?.trim() || '',
@@ -2469,7 +2538,51 @@ app.post('/api/refine-image', async (req, res) => {
             },
           )
 
-    res.json({ imageUrl })
+    const revisionSource = imageMode === 'new' ? 'new' : 'revise'
+    let responseCardId = typeof cardId === 'string' ? cardId.trim() : ''
+    let revisionId = ''
+
+    if (responseCardId && cardStore.get(responseCardId)?.card) {
+      const existing = cardStore.get(responseCardId)
+      const next = {
+        ...existing,
+        updatedAt: new Date().toISOString(),
+        card: {
+          ...existing.card,
+          imageUrl,
+        },
+      }
+      cardStore.set(responseCardId, next)
+      const entry = await appendCoverRevision(
+        {},
+        {
+          cardId: responseCardId,
+          imageUrl,
+          source: revisionSource,
+          refinement: String(refinement || '').trim(),
+          details: details || existing.details || null,
+        },
+      )
+      revisionId = entry?.id || ''
+      return res.json({ imageUrl, cardId: responseCardId, revisionId: revisionId || undefined })
+    }
+
+    const snapshotCardId = createCardId()
+    const entry = await appendCoverRevision(
+      {},
+      {
+        cardId: snapshotCardId,
+        imageUrl,
+        source: revisionSource,
+        refinement: String(refinement || '').trim(),
+        details,
+      },
+    )
+    res.json({
+      imageUrl,
+      revisionId: entry?.id || undefined,
+      revisionCardId: snapshotCardId,
+    })
   } catch (error) {
     console.error(error)
     res.status(isSafetyRejection(error) ? 400 : 500).json({
@@ -2900,9 +3013,20 @@ const localScrubAmbiguousRecipientName = (name) => {
   return kept
 }
 
-const localTranscriptHasAmbiguousRecipientCue = (text) =>
-  /\b(?:him|her|them|he|she|they)\s+and\s+[A-Za-z]/i.test(String(text || '')) ||
-  /\b(?:to|for)\s+(?:him|her|them)\b/i.test(String(text || ''))
+const localTranscriptHasAmbiguousRecipientCue = (text) => {
+  const value = String(text || '')
+  // "him and Anita" / "her and Bob" — not "visiting them and want to thank them"
+  if (/\b(?:him|her|he|she)\s+and\s+[A-Za-z][\w'-]+\b/i.test(value)) {
+    return true
+  }
+  if (/\b(?:to|for)\s+(?:him|her|them)\b/i.test(value)) {
+    return true
+  }
+  if (/\b(?:to|for)\s+(?:him|her|them)\s+and\s+[A-Za-z][\w'-]+\b/i.test(value)) {
+    return true
+  }
+  return false
+}
 
 const localLatestShopperUtterance = (transcript) => {
   const lines = String(transcript || '')
@@ -2965,6 +3089,57 @@ const localInferSenderNameFromTranscript = (transcript, shopperFirstName) => {
   return ''
 }
 
+const localInferRecipientNameFromTranscript = (transcript) => {
+  const text = String(transcript || '')
+  const patterns = [
+    /\b(?:send\s+(?:a\s+)?)?(?:thank\s*you\s+)?(?:card\s+)?(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b|his\b|her\b|their\b|him\b|them\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
+    /\b(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
+  ]
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    const candidate = String(match?.[1] || '').replace(/\s+/g, ' ').trim()
+    if (!candidate || localInterviewRecipientLooksAmbiguous(candidate)) {
+      continue
+    }
+    if (/^(birthday|anniversary|thanks|thank|fun|dinner|night|party|weekend)$/i.test(candidate)) {
+      continue
+    }
+    return candidate
+  }
+  return ''
+}
+
+const localBuildChatMissingPrompt = (details, ambiguousRecipient) => {
+  if (ambiguousRecipient) {
+    return 'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
+  }
+
+  const missing = []
+  if (!String(details.recipientName || '').trim()) {
+    missing.push('who it’s for')
+  }
+  if (!String(details.senderName || '').trim()) {
+    missing.push('who it’s from')
+  }
+  if (!String(details.occasion || '').trim()) {
+    missing.push('the occasion')
+  }
+  if (!String(details.keyDetails || '').trim()) {
+    missing.push('a memory or detail to include')
+  }
+  if (missing.length === 0) {
+    return ''
+  }
+  if (missing.length === 1) {
+    return `Thanks — I still need ${missing[0]}.`
+  }
+  if (missing.length === 2) {
+    return `Thanks — I still need ${missing[0]} and ${missing[1]}.`
+  }
+  const last = missing[missing.length - 1]
+  return `Thanks — I still need ${missing.slice(0, -1).join(', ')}, and ${last}.`
+}
+
 const localRefineInterviewResult = ({
   details,
   status,
@@ -2975,7 +3150,6 @@ const localRefineInterviewResult = ({
   shopperFirstName,
 }) => {
   const next = { ...details }
-  const isChat = mode === 'chat'
   const latestShopperText = localLatestShopperUtterance(transcript)
   const selfName = String(shopperFirstName || '').trim()
   if (!next.occasion) {
@@ -2991,6 +3165,12 @@ const localRefineInterviewResult = ({
   }
   if (localSenderNameStillHasSelfReference(next.senderName)) {
     next.senderName = ''
+  }
+  if (!next.recipientName) {
+    const inferredRecipient = localInferRecipientNameFromTranscript(transcript)
+    if (inferredRecipient) {
+      next.recipientName = inferredRecipient
+    }
   }
   const nameAmbiguous = localInterviewRecipientLooksAmbiguous(next.recipientName)
   const ambiguousRecipient =
@@ -3009,52 +3189,36 @@ const localRefineInterviewResult = ({
       next.keyDetails,
   )
 
-  if (ambiguousRecipient && !shouldForceReady) {
+  // Both modes: parse everything said, then ask once for ALL remaining gaps.
+  // Only single-topic ask when a pronoun name is unclear (him/her + someone).
+  if (!shouldForceReady && (ambiguousRecipient || !essentialsReady)) {
     nextStatus = 'ask'
-    nextAssistant =
-      'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
-  } else if (!next.recipientName && !shouldForceReady) {
-    nextStatus = 'ask'
-    if (!nextAssistant || /occasion/i.test(nextAssistant)) {
-      nextAssistant = 'Who should the card be to?'
+    const combined = localBuildChatMissingPrompt(next, ambiguousRecipient)
+    if (combined) {
+      nextAssistant = combined
     }
-  } else if (!next.senderName && !shouldForceReady) {
-    nextStatus = 'ask'
-    nextAssistant = 'Can you tell me who the card should be from?'
-  } else if (!next.occasion && !shouldForceReady) {
-    nextStatus = 'ask'
   } else if (shouldForceReady) {
     nextStatus = 'ready'
-  } else if (isChat) {
-    if (nextStatus === 'ready' && essentialsReady) {
-      nextStatus = 'ready'
-    } else if (nextStatus === 'ask') {
-      nextStatus = 'ask'
-    } else if (essentialsReady) {
-      nextStatus = 'ready'
-    } else {
-      nextStatus = 'ask'
-    }
   } else if (essentialsReady) {
     nextStatus = 'ready'
-  }
-
-  if (nextStatus === 'ask' && /occasion/i.test(nextAssistant) && next.occasion) {
-    if (ambiguousRecipient || !next.recipientName) {
-      nextAssistant =
-        'I want to make sure I have the names right — who is the card for? (I may have misheard one of them.)'
-    } else if (!next.senderName) {
-      nextAssistant = 'Can you tell me who the card should be from?'
-    } else if (isChat && !next.keyDetails) {
-      nextAssistant = 'What made that moment special — anything I should mention inside the card?'
-    }
   }
 
   if (!nextAssistant) {
     nextAssistant =
       nextStatus === 'ready'
         ? 'I filled in the form below. Tweak anything you want, then create your card.'
-        : 'Tell me a bit more so I can fill in the form.'
+        : localBuildChatMissingPrompt(next, ambiguousRecipient) ||
+          'Tell me a bit more so I can fill in the form.'
+  }
+
+  if (
+    nextStatus === 'ready' &&
+    (/names right|who is the card for|who should the card be|i still need|confirm (?:the )?recipient|full names|tell me who|what.?s the occasion/i.test(
+      nextAssistant,
+    ) ||
+      /\?/.test(nextAssistant))
+  ) {
+    nextAssistant = 'I filled in the form below. Tweak anything you want, then create your card.'
   }
 
   return { details: next, status: nextStatus, assistantMessage: nextAssistant }
@@ -3094,10 +3258,7 @@ app.post('/api/card-interview', async (req, res) => {
     const transcript = messages
       .map((entry) => `${entry.role === 'assistant' ? 'Genie' : 'Shopper'}: ${entry.content}`)
       .join('\n')
-    const chatExtra =
-      mode === 'chat'
-        ? `Talk like a helpful ChatGPT guide: ask one clarifying question at a time. You may ask one enriching follow-up about a memory after names/occasion/from are known if the story is thin. Prefer clarifying unclear names first.`
-        : `If all essentials are known with real names, status "ready" immediately — no optional follow-ups.`
+    const chatExtra = `Batch mode: extract every field you can from each reply. If anything essential is still missing, ask for ALL remaining gaps in one short question — never one field per turn. Only single-topic ask for unclear names like "him and Anita". When essentials are complete, status "ready" with no optional follow-ups.`
     const shopperNameNote = shopperFirstName
       ? `Shopper first name on their account: "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself" (example: me and Mindy → ${shopperFirstName} and Mindy).`
       : ''
@@ -3113,8 +3274,7 @@ Essentials for "ready": senderName, a clear recipientName, occasion, keyDetails.
 Shoppers often speak, so text may have speech-to-text mistakes.
 Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for occasion when it is already clear.
 Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
-Ask about unclear names before sender or occasion.
-When senderName is missing and recipient/occasion are clear, ask: "Can you tell me who the card should be from?"
+Ask about unclear names before other gaps.
 ${shopperNameNote}
 ${chatExtra}
 Guess recipientType when unclear. Fill details as far as you can even when asking.
@@ -3188,6 +3348,58 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
     console.error(error)
     return res.status(isSafetyRejection(error) ? 400 : 500).json({
       error: publicGenerationError(error, 'Unable to continue that conversation. Please try again.'),
+    })
+  }
+})
+
+app.post('/api/card-interview-speak', async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({
+      error: 'Missing OPENAI_API_KEY. Add it to a local .env file and restart the dev server.',
+    })
+  }
+
+  const text = String(req.body?.text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 800)
+
+  if (!text) {
+    return res.status(400).json({ error: 'Nothing to say.' })
+  }
+
+  try {
+    const openai = getOpenAI()
+    const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
+    const voice = process.env.OPENAI_TTS_VOICE || 'coral'
+    let speech
+    try {
+      speech = await openai.audio.speech.create({
+        model,
+        voice,
+        input: text,
+        instructions:
+          'Speak warmly and naturally, like a friendly conversational helper named Genie. Clear, calm, and human — not robotic or overly theatrical.',
+      })
+    } catch (primaryError) {
+      console.warn('Primary TTS model failed, falling back to tts-1-hd', primaryError)
+      speech = await openai.audio.speech.create({
+        model: 'tts-1-hd',
+        voice: voice === 'coral' ? 'nova' : voice,
+        input: text,
+      })
+    }
+
+    const audioBytes = Buffer.from(await speech.arrayBuffer())
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Cache-Control': 'no-store',
+    })
+    return res.send(audioBytes)
+  } catch (error) {
+    console.error(error)
+    return res.status(isSafetyRejection(error) ? 400 : 500).json({
+      error: publicGenerationError(error, 'Unable to speak that reply.'),
     })
   }
 })
