@@ -4091,6 +4091,26 @@ const latestShopperUtterance = (transcript) => {
   return String(transcript || '')
 }
 
+/** Only shopper lines — never Genie prompts like “fill in the form from what you say”. */
+const shopperOnlyTranscriptText = (transcript) => {
+  const lines = String(transcript || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const shopperLines = lines
+    .filter((line) => /^Shopper:\s*/i.test(line))
+    .map((line) => line.replace(/^Shopper:\s*/i, '').trim())
+    .filter(Boolean)
+  if (shopperLines.length > 0) {
+    return shopperLines.join('\n')
+  }
+  // Bare user text with no role prefixes (quick single-turn payloads).
+  if (!/^Genie:/im.test(String(transcript || ''))) {
+    return String(transcript || '').trim()
+  }
+  return ''
+}
+
 const normalizeInterviewOccasionLabel = (occasion) => {
   const raw = String(occasion || '').trim()
   if (!raw) {
@@ -4115,17 +4135,43 @@ const resolveShopperSelfInSenderName = (senderName, shopperFirstName) => {
 const senderNameStillHasSelfReference = (senderName) =>
   /\b(me|myself)\b/i.test(String(senderName || ''))
 
+const senderNameLooksInvalid = (senderName) => {
+  const value = String(senderName || '').trim()
+  if (!value) {
+    return true
+  }
+  if (
+    /^(what you say|what you said|the form|who it'?s from|who it is from|anyone|someone|you say|details|memories)$/i.test(
+      value,
+    )
+  ) {
+    return true
+  }
+  if (/\b(what you say|fill (?:in|out) the form|tell me about)\b/i.test(value)) {
+    return true
+  }
+  // Reject bare filler words that are not names.
+  if (/^(what|who|you|the|a|an|from|form|card)$/i.test(value)) {
+    return true
+  }
+  return false
+}
+
 const inferSenderNameFromTranscript = (transcript, shopperFirstName) => {
-  const text = String(transcript || '')
+  const text = shopperOnlyTranscriptText(transcript)
+  if (!text) {
+    return ''
+  }
+  // Capture at most one "and …" name pair so we don't swallow "and Joey loves to…".
   const patterns = [
-    /\b(?:card\s+is\s+)?from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
-    /\b(?:it's|its)\s+from\s+([^.\n]+?)(?:\s+for\s+|\s+to\s+|[.!,]|$)/i,
+    /\b(?:(?:the\s+)?card\s+is\s+)?from\s+((?:me|myself|[A-Za-z][\w'-]+)(?:\s+and\s+(?:me|myself|[A-Za-z][\w'-]+))?)\b/i,
+    /\b(?:it's|its)\s+from\s+((?:me|myself|[A-Za-z][\w'-]+)(?:\s+and\s+(?:me|myself|[A-Za-z][\w'-]+))?)\b/i,
   ]
   for (const pattern of patterns) {
     const match = text.match(pattern)
     if (match?.[1]) {
       const candidate = resolveShopperSelfInSenderName(match[1].trim(), shopperFirstName)
-      if (candidate && !senderNameStillHasSelfReference(candidate)) {
+      if (candidate && !senderNameStillHasSelfReference(candidate) && !senderNameLooksInvalid(candidate)) {
         return candidate.replace(/\s+/g, ' ').trim()
       }
     }
@@ -4133,15 +4179,22 @@ const inferSenderNameFromTranscript = (transcript, shopperFirstName) => {
   // "me and Mindy" / "Mindy and me" without an explicit "from"
   const andMe = text.match(/\b((?:me|myself)\s+and\s+[A-Za-z][\w'-]+|[A-Za-z][\w'-]+\s+and\s+(?:me|myself))\b/i)
   if (andMe?.[1]) {
-    return resolveShopperSelfInSenderName(andMe[1], shopperFirstName)
+    const candidate = resolveShopperSelfInSenderName(andMe[1], shopperFirstName)
+    if (candidate && !senderNameLooksInvalid(candidate)) {
+      return candidate
+    }
   }
   return ''
 }
 
 const inferRecipientNameFromTranscript = (transcript) => {
-  const text = String(transcript || '')
+  const text = shopperOnlyTranscriptText(transcript)
+  if (!text) {
+    return ''
+  }
   const patterns = [
-    /\b(?:send\s+(?:a\s+)?)?(?:thank\s*you\s+)?(?:card\s+)?(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b|his\b|her\b|their\b|him\b|them\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
+    /\b(?:send\s+(?:a\s+)?)?(?:thank\s*you\s+)?(?:card\s+)(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b|his\b|her\b|their\b|him\b|them\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
+    /\b(?:birthday|anniversary|thank(?:\s*you)?|congrats|congratulations)?\s*card\s+(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
     /\b(?:to|for)\s+(?!a\b|an\b|the\b|my\b|our\b)([A-Za-z][\w'-]+(?:\s+and\s+[A-Za-z][\w'-]+)?)\b/i,
   ]
   for (const pattern of patterns) {
@@ -4150,12 +4203,27 @@ const inferRecipientNameFromTranscript = (transcript) => {
     if (!candidate || interviewRecipientNameLooksAmbiguous(candidate)) {
       continue
     }
-    if (/^(birthday|anniversary|thanks|thank|fun|dinner|night|party|weekend)$/i.test(candidate)) {
+    if (recipientNameLooksInvalid(candidate)) {
       continue
     }
     return candidate
   }
   return ''
+}
+
+const recipientNameLooksInvalid = (recipientName) => {
+  const value = String(recipientName || '').trim()
+  if (!value) {
+    return true
+  }
+  if (
+    /^(create|make|send|get|buy|order|want|like|need|have|do|be|birthday|anniversary|thanks|thank|fun|dinner|night|party|weekend|card|form)$/i.test(
+      value,
+    )
+  ) {
+    return true
+  }
+  return false
 }
 
 const buildChatMissingPrompt = (details, ambiguousRecipient) => {
@@ -4199,29 +4267,36 @@ const refineInterviewResult = ({
   shopperFirstName,
 }) => {
   const next = { ...details }
-  const shopperText = String(transcript || '')
-  const latestShopperText = latestShopperUtterance(shopperText)
+  const fullTranscript = String(transcript || '')
+  const shopperText = shopperOnlyTranscriptText(fullTranscript)
+  const latestShopperText = latestShopperUtterance(fullTranscript)
   const selfName = String(shopperFirstName || '').trim()
 
   if (!next.occasion) {
-    next.occasion = inferInterviewOccasionFromText(shopperText)
+    next.occasion = inferInterviewOccasionFromText(shopperText || fullTranscript)
   }
   next.occasion = normalizeInterviewOccasionLabel(next.occasion)
 
   next.senderName = resolveShopperSelfInSenderName(next.senderName, selfName)
+  if (senderNameLooksInvalid(next.senderName)) {
+    next.senderName = ''
+  }
   if (!next.senderName || senderNameStillHasSelfReference(next.senderName)) {
-    const inferredSender = inferSenderNameFromTranscript(shopperText, selfName)
+    const inferredSender = inferSenderNameFromTranscript(fullTranscript, selfName)
     if (inferredSender) {
       next.senderName = inferredSender
     }
   }
-  if (senderNameStillHasSelfReference(next.senderName)) {
-    // Still unresolved (no account first name) — don't keep "me" as the From value.
+  if (senderNameStillHasSelfReference(next.senderName) || senderNameLooksInvalid(next.senderName)) {
+    // Still unresolved (no account first name) — don't keep "me" / junk as the From value.
     next.senderName = ''
   }
 
+  if (recipientNameLooksInvalid(next.recipientName)) {
+    next.recipientName = ''
+  }
   if (!next.recipientName) {
-    const inferredRecipient = inferRecipientNameFromTranscript(shopperText)
+    const inferredRecipient = inferRecipientNameFromTranscript(fullTranscript)
     if (inferredRecipient) {
       next.recipientName = inferredRecipient
     }
