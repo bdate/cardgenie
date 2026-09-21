@@ -405,7 +405,7 @@ const persistLampGenieVoice = (voice: LampGenieVoiceId) => {
 const lampGenieVoiceLabel = (voice: LampGenieVoiceId) =>
   lampGenieVoiceOptions.find((entry) => entry.id === voice)?.label || voice
 
-const speakGenieBrowserFallback = (spoken: string) =>
+const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void) =>
   new Promise<void>((resolve) => {
     if (!window.speechSynthesis) {
       resolve()
@@ -440,6 +440,9 @@ const speakGenieBrowserFallback = (spoken: string) =>
       window.clearTimeout(safety)
       resolve()
     }
+    utterance.onstart = () => {
+      onSpeakingStart?.()
+    }
     utterance.onend = finish
     utterance.onerror = finish
     keepAlive = window.setInterval(() => {
@@ -453,7 +456,11 @@ const speakGenieBrowserFallback = (spoken: string) =>
     window.speechSynthesis.speak(utterance)
   })
 
-const speakGenieAloud = async (text: string, voiceOverride?: LampGenieVoiceId) => {
+const speakGenieAloud = async (
+  text: string,
+  voiceOverride?: LampGenieVoiceId,
+  onSpeakingStart?: () => void,
+) => {
   const spoken = text.replace(/\s+/g, ' ').trim()
   if (!spoken || typeof window === 'undefined') {
     return
@@ -476,6 +483,14 @@ const speakGenieAloud = async (text: string, voiceOverride?: LampGenieVoiceId) =
         await new Promise<void>((resolve) => {
           const audio = new Audio(objectUrl)
           genieSpeechAudio = audio
+          let started = false
+          const markStarted = () => {
+            if (started) {
+              return
+            }
+            started = true
+            onSpeakingStart?.()
+          }
           const finish = () => {
             if (genieSpeechAudio === audio) {
               genieSpeechAudio = null
@@ -483,11 +498,18 @@ const speakGenieAloud = async (text: string, voiceOverride?: LampGenieVoiceId) =
             URL.revokeObjectURL(objectUrl)
             resolve()
           }
+          audio.onplay = markStarted
+          audio.onplaying = markStarted
           audio.onended = finish
           audio.onerror = finish
-          void audio.play().catch(() => {
-            finish()
-          })
+          void audio
+            .play()
+            .then(() => {
+              markStarted()
+            })
+            .catch(() => {
+              finish()
+            })
         })
         return
       }
@@ -496,7 +518,7 @@ const speakGenieAloud = async (text: string, voiceOverride?: LampGenieVoiceId) =
     // Fall back to browser speech below.
   }
 
-  await speakGenieBrowserFallback(spoken)
+  await speakGenieBrowserFallback(spoken, onSpeakingStart)
 }
 
 const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
@@ -3486,9 +3508,13 @@ function App() {
     stopInterviewListening()
     interviewSpeakingRef.current = true
     setIsInterviewSpeaking(true)
-    setInterviewNotice('Genie is speaking…')
+    setInterviewNotice('Genie is getting ready…')
     try {
-      await speakGenieAloud(text)
+      await speakGenieAloud(text, undefined, () => {
+        if (interviewSpeakingRef.current && showCardInterviewRef.current) {
+          setInterviewNotice('Genie is speaking…')
+        }
+      })
     } finally {
       interviewSpeakingRef.current = false
       setIsInterviewSpeaking(false)
