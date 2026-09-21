@@ -577,6 +577,90 @@
   font-weight: 700;
 }
 
+.card-interview-voice {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(49, 95, 91, 0.12);
+}
+
+.card-interview-voice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-interview-voice-bar p {
+  margin: 0;
+  color: #315f5b;
+  font-size: 0.92rem;
+}
+
+.card-interview-voice-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.card-interview-voice-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(49, 95, 91, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.card-interview-voice-option.is-selected {
+  border-color: rgba(245, 158, 51, 0.55);
+  background: rgba(255, 248, 239, 0.9);
+}
+
+.card-interview-voice-option strong {
+  display: block;
+  color: #243b39;
+  font-size: 0.95rem;
+}
+
+.card-interview-voice-option span {
+  display: block;
+  color: #5d7370;
+  font-size: 0.82rem;
+}
+
+.card-interview-voice-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.card-interview-voice-option-actions .secondary-button,
+.card-interview-voice-option-actions .primary-button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .card-interview-voice-option {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card-interview-voice-option-actions {
+    justify-content: stretch;
+  }
+
+  .card-interview-voice-option-actions .secondary-button,
+  .card-interview-voice-option-actions .primary-button {
+    flex: 1;
+  }
+}
+
 .proof-heading {
   align-items: flex-start;
 }

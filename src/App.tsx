@@ -336,6 +336,57 @@ const stopGenieSpeech = () => {
   }
 }
 
+const lampGenieVoiceStorageKey = 'cardGenieLampVoice'
+
+/** OpenAI gpt-4o-mini-tts voices Lamp Genie can use. */
+const lampGenieVoiceOptions = [
+  { id: 'coral', label: 'Coral', blurb: 'Warm & friendly (default)' },
+  { id: 'nova', label: 'Nova', blurb: 'Bright & clear' },
+  { id: 'shimmer', label: 'Shimmer', blurb: 'Soft & expressive' },
+  { id: 'sage', label: 'Sage', blurb: 'Calm & steady' },
+  { id: 'alloy', label: 'Alloy', blurb: 'Neutral & even' },
+  { id: 'echo', label: 'Echo', blurb: 'Smooth mid-tone' },
+  { id: 'fable', label: 'Fable', blurb: 'Storyteller feel' },
+  { id: 'onyx', label: 'Onyx', blurb: 'Deeper & grounded' },
+  { id: 'ash', label: 'Ash', blurb: 'Soft-spoken' },
+  { id: 'ballad', label: 'Ballad', blurb: 'Warm narrative' },
+  { id: 'verse', label: 'Verse', blurb: 'Light & lively' },
+] as const
+
+type LampGenieVoiceId = (typeof lampGenieVoiceOptions)[number]['id']
+
+const isLampGenieVoiceId = (value: unknown): value is LampGenieVoiceId =>
+  typeof value === 'string' && lampGenieVoiceOptions.some((entry) => entry.id === value)
+
+const readStoredLampGenieVoice = (): LampGenieVoiceId => {
+  if (typeof window === 'undefined') {
+    return 'coral'
+  }
+  try {
+    const stored = window.localStorage.getItem(lampGenieVoiceStorageKey)
+    if (isLampGenieVoiceId(stored)) {
+      return stored
+    }
+  } catch {
+    // Ignore storage failures.
+  }
+  return 'coral'
+}
+
+const persistLampGenieVoice = (voice: LampGenieVoiceId) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage.setItem(lampGenieVoiceStorageKey, voice)
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+const lampGenieVoiceLabel = (voice: LampGenieVoiceId) =>
+  lampGenieVoiceOptions.find((entry) => entry.id === voice)?.label || voice
+
 const speakGenieBrowserFallback = (spoken: string) =>
   new Promise<void>((resolve) => {
     if (!window.speechSynthesis) {
@@ -384,19 +435,20 @@ const speakGenieBrowserFallback = (spoken: string) =>
     window.speechSynthesis.speak(utterance)
   })
 
-const speakGenieAloud = async (text: string) => {
+const speakGenieAloud = async (text: string, voiceOverride?: LampGenieVoiceId) => {
   const spoken = text.replace(/\s+/g, ' ').trim()
   if (!spoken || typeof window === 'undefined') {
     return
   }
 
   stopGenieSpeech()
+  const voice = voiceOverride && isLampGenieVoiceId(voiceOverride) ? voiceOverride : readStoredLampGenieVoice()
 
   try {
     const response = await fetch(apiUrl('/api/card-interview-speak'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: spoken }),
+      body: JSON.stringify({ text: spoken, voice }),
     })
     if (response.ok) {
       const blob = await response.blob()
@@ -2209,6 +2261,9 @@ function App() {
   const [isInterviewing, setIsInterviewing] = useState(false)
   const [isInterviewListening, setIsInterviewListening] = useState(false)
   const [interviewComplete, setInterviewComplete] = useState(false)
+  const [showLampVoicePicker, setShowLampVoicePicker] = useState(false)
+  const [lampGenieVoice, setLampGenieVoice] = useState<LampGenieVoiceId>(() => readStoredLampGenieVoice())
+  const [previewingLampVoice, setPreviewingLampVoice] = useState<LampGenieVoiceId | null>(null)
   const [interviewSpeechSupported] = useState(() => {
     if (typeof window === 'undefined') {
       return false
@@ -3488,6 +3543,27 @@ function App() {
       setInterviewNotice('Listening… just pause when you’re finished.')
       startInterviewListening({ announce: false })
     }
+  }
+
+  const previewLampGenieVoice = async (voice: LampGenieVoiceId) => {
+    setPreviewingLampVoice(voice)
+    setInterviewNotice(`Playing ${lampGenieVoiceLabel(voice)}…`)
+    try {
+      await speakGenieAloud(
+        `Hi, I'm Genie with the ${lampGenieVoiceLabel(voice)} voice. If you like how I sound, tap Use this voice.`,
+        voice,
+      )
+    } finally {
+      setPreviewingLampVoice((current) => (current === voice ? null : current))
+      setInterviewNotice(`Current voice: ${lampGenieVoiceLabel(lampGenieVoice)}.`)
+    }
+  }
+
+  const chooseLampGenieVoice = (voice: LampGenieVoiceId) => {
+    persistLampGenieVoice(voice)
+    setLampGenieVoice(voice)
+    setShowLampVoicePicker(false)
+    setInterviewNotice(`Lamp Genie will use ${lampGenieVoiceLabel(voice)} from now on.`)
   }
 
   const openCardInterview = (mode: InterviewMode = 'quick') => {
@@ -7388,6 +7464,60 @@ function App() {
                   Start over
                 </button>
               </div>
+              {interviewMode === 'chat' && (
+                <div className="card-interview-voice">
+                  <div className="card-interview-voice-bar">
+                    <p>
+                      Lamp Genie voice: <strong>{lampGenieVoiceLabel(lampGenieVoice)}</strong>
+                    </p>
+                    <button
+                      className="text-action-link"
+                      type="button"
+                      onClick={() => setShowLampVoicePicker((open) => !open)}
+                    >
+                      {showLampVoicePicker ? 'Hide voices' : 'Try voices'}
+                    </button>
+                  </div>
+                  {showLampVoicePicker && (
+                    <div className="card-interview-voice-picker" role="list">
+                      {lampGenieVoiceOptions.map((option) => {
+                        const isSelected = option.id === lampGenieVoice
+                        const isPreviewing = previewingLampVoice === option.id
+                        return (
+                          <div
+                            className={`card-interview-voice-option${isSelected ? ' is-selected' : ''}`}
+                            key={option.id}
+                            role="listitem"
+                          >
+                            <div>
+                              <strong>{option.label}</strong>
+                              <span>{option.blurb}</span>
+                            </div>
+                            <div className="card-interview-voice-option-actions">
+                              <button
+                                className="secondary-button"
+                                type="button"
+                                disabled={Boolean(previewingLampVoice) || isInterviewing}
+                                onClick={() => void previewLampGenieVoice(option.id)}
+                              >
+                                {isPreviewing ? 'Playing…' : 'Preview'}
+                              </button>
+                              <button
+                                className="primary-button"
+                                type="button"
+                                disabled={isSelected}
+                                onClick={() => chooseLampGenieVoice(option.id)}
+                              >
+                                {isSelected ? 'Selected' : 'Use this voice'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               {interviewNotice && (
                 <p
                   className={`card-interview-notice${

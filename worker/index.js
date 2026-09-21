@@ -4554,10 +4554,34 @@ const handleCardInterviewSpeak = async (request, env) => {
     return jsonResponse(request, env, { error: 'Nothing to say.' }, 400)
   }
 
+  const allowedVoices = new Set([
+    'alloy',
+    'ash',
+    'ballad',
+    'coral',
+    'echo',
+    'fable',
+    'nova',
+    'onyx',
+    'sage',
+    'shimmer',
+    'verse',
+  ])
+  const tts1FallbackByVoice = {
+    ash: 'alloy',
+    ballad: 'fable',
+    coral: 'nova',
+    sage: 'shimmer',
+    verse: 'nova',
+  }
+
   try {
     const openai = getOpenAI(env)
     const model = env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts'
-    const voice = env.OPENAI_TTS_VOICE || 'coral'
+    const requestedVoice = String(body.voice || env.OPENAI_TTS_VOICE || 'coral')
+      .trim()
+      .toLowerCase()
+    const voice = allowedVoices.has(requestedVoice) ? requestedVoice : 'coral'
     let speech
     try {
       speech = await openai.audio.speech.create({
@@ -4570,9 +4594,10 @@ const handleCardInterviewSpeak = async (request, env) => {
     } catch (primaryError) {
       // Older accounts may not have gpt-4o-mini-tts yet.
       console.warn('Primary TTS model failed, falling back to tts-1-hd', primaryError)
+      const fallbackVoice = tts1FallbackByVoice[voice] || voice
       speech = await openai.audio.speech.create({
         model: 'tts-1-hd',
-        voice: voice === 'coral' ? 'nova' : voice,
+        voice: fallbackVoice,
         input: text,
       })
     }
