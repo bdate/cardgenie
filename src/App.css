@@ -2261,6 +2261,7 @@ textarea:focus {
   max-width: 360px;
   width: 100%;
   justify-self: center;
+  overflow: visible;
   border: 1px solid rgba(143, 208, 201, 0.26);
   border-radius: 18px;
   padding: 6px 6px 10px;
@@ -2278,7 +2279,9 @@ textarea:focus {
 
 .editor-message-length-picker {
   margin-top: 12px;
-  width: 100%;
+  width: min(340px, 100%);
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .recipient-save-links {
@@ -3753,21 +3756,47 @@ textarea:focus {
     display: none;
   }
 
+  /* Keep length-toggle selection chrome visible (was clipping “Medium”). */
   .editor-preview {
-    overflow: hidden;
+    overflow: visible;
   }
 }
 
 .editor-inside-preview {
-  width: min(300px, 88%);
+  width: min(340px, 92%);
   box-shadow:
     0 18px 42px rgba(63, 155, 145, 0.14),
     0 0 0 8px rgba(255, 255, 255, 0.72);
   animation: none;
 }
 
+/* Match printed/card proportions: don't let rem clamp floors oversize type on the small preview. */
 .editor-inside-preview .open-card-message {
-  padding: 12cqi 16cqi;
+  padding: 12cqi 14cqi;
+}
+
+.editor-inside-preview .open-card-message span {
+  font-size: 3.74cqi;
+}
+
+.editor-inside-preview .message-paragraphs p {
+  font-size: 3.85cqi;
+}
+
+.editor-inside-preview .open-card-message.is-medium .message-paragraphs p {
+  font-size: 3.41cqi;
+}
+
+.editor-inside-preview .open-card-message.is-long .message-paragraphs p {
+  font-size: 3.03cqi;
+}
+
+.editor-inside-preview .card-closing {
+  font-size: 3.52cqi;
+}
+
+.editor-inside-preview .card-signature {
+  font-size: 9.35cqi;
 }
 
 .refinement-panel {
@@ -3852,11 +3881,17 @@ textarea:focus {
   border-radius: 0;
   padding: 0;
   background: transparent;
+  overflow: visible;
 }
 
 .mode-toggle.message-length-toggle button {
-  padding: 10px 8px;
+  min-width: 0;
+  padding: 10px 4px;
+  overflow: visible;
+  line-height: 1.15;
   white-space: nowrap;
+  font-size: 0.84rem;
+  letter-spacing: 0;
 }
 
 .refinement-card textarea {
@@ -4748,8 +4783,8 @@ textarea:focus {
   }
 
   .mode-toggle.message-length-toggle button {
-    padding: 9px 4px;
-    font-size: 0.78rem;
+    padding: 9px 2px;
+    font-size: 0.8rem;
   }
 
   .inside-editor-header {
