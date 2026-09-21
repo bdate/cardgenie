@@ -3283,6 +3283,10 @@ function App() {
         next.tone && toneOptions.includes(next.tone)
           ? next.tone
           : current.tone,
+      imageStyle:
+        next.imageStyle && styleOptions.includes(next.imageStyle)
+          ? next.imageStyle
+          : current.imageStyle,
       keyDetails: next.keyDetails?.trim() || current.keyDetails,
     }))
     setHighlightInvalidFields(false)

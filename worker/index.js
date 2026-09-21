@@ -3894,6 +3894,24 @@ const CARD_INTERVIEW_MAX_USER_TURNS_QUICK = 3
 const CARD_INTERVIEW_MAX_USER_TURNS_CHAT = 6
 const CARD_INTERVIEW_FORCE_READY_TURNS_QUICK = 2
 const CARD_INTERVIEW_FORCE_READY_TURNS_CHAT = 5
+const CARD_INTERVIEW_IMAGE_STYLES = [
+  'AI chooses the best style for this card',
+  'Photorealistic warm portrait photography',
+  'Premium editorial illustration',
+  'Watercolor greeting card illustration',
+  'Comic book art',
+  'Whimsical storybook illustration',
+  'Animated 3D family-film style',
+  'Minimal modern flat vector art',
+  'Elegant botanical paper-cut style',
+  'Cozy hand-drawn colored pencil',
+  'Retro travel poster style',
+  'Claymation-inspired 3D scene',
+  'Luxury foil and paper collage',
+  'Soft pastel nursery-book illustration',
+  'Bold graphic poster art',
+  'Vintage greeting card illustration',
+]
 const AMBIGUOUS_RECIPIENT_TOKENS = new Set([
   'him',
   'her',
@@ -3926,6 +3944,7 @@ Return ONLY valid JSON with this shape:
     "senderName": "",
     "occasion": "",
     "tone": "Heartfelt",
+    "imageStyle": "",
     "keyDetails": ""
   }
 }
@@ -3940,6 +3959,7 @@ Rules:
 - Treat pronouns or vague words as UNCLEAR recipient names, not real names: him, her, them, he, she, they, someone, guy, etc. Never put "him", "her", or "them" into recipientName.
 - If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - Never ask whether anyone else should be included, or for tone, style, or relation, when essentials are already known.
+- If the shopper mentions an image/art style (example: "comic version", "watercolor", "photorealistic"), set imageStyle to the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style preferences only inside keyDetails. Never ask for style.
 - If relation is unclear, guess (friends, couple, family, coworkers) in recipientType rather than asking.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 - keyDetails should be a concise single-paragraph summary of memories/scene ideas. Do not write the finished inside note.
@@ -3963,6 +3983,7 @@ Return ONLY valid JSON with this shape:
     "senderName": "",
     "occasion": "",
     "tone": "Heartfelt",
+    "imageStyle": "",
     "keyDetails": ""
   }
 }
@@ -3977,6 +3998,7 @@ Conversation style:
 - Treat pronouns (him, her, them, he, she, they) as unclear names — ask who they mean. Never store "him"/"her" as recipientName.
 - If the shopper says "me", "myself", or "me and …" for who the card is from, and a shopper first name is provided in the request notes, expand "me"/"myself" to that first name (example: me and Mindy → Nasser and Mindy).
 - Do not ask about art style, tone, or relation. Guess recipientType when unclear.
+- If the shopper mentions an image/art style (example: "comic version", "watercolor"), set imageStyle to the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style preferences only inside keyDetails.
 - tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 - keyDetails is a concise paragraph of memories/scene ideas, not the finished inside note.
 - assistantMessage is the chat reply only (1-3 sentences). Never put the card message body there.
@@ -3986,10 +4008,86 @@ Conversation style:
 
 const cardInterviewSystemPrompt = cardInterviewSystemPromptQuick
 
+const inferInterviewImageStyleFromText = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (!value) {
+    return ''
+  }
+  if (/\bcomic(\s*book)?(\s*(art|style|version|look|cover))?\b|\bcomics\b/.test(value)) {
+    return 'Comic book art'
+  }
+  if (/\bwater[\s-]?color\b|\bwatercolor\b/.test(value)) {
+    return 'Watercolor greeting card illustration'
+  }
+  if (/\bphoto[\s-]?real|\bphotoreal|\brealistic\s+(?:photo|portrait)|\bphotograph/.test(value)) {
+    return 'Photorealistic warm portrait photography'
+  }
+  if (/\bstory[\s-]?book\b|\bstorybook\b/.test(value)) {
+    return 'Whimsical storybook illustration'
+  }
+  if (/\bpaper[\s-]?cut\b|\bbotanical\b/.test(value)) {
+    return 'Elegant botanical paper-cut style'
+  }
+  if (/\bpencil\b|\bhand[\s-]?drawn\b/.test(value)) {
+    return 'Cozy hand-drawn colored pencil'
+  }
+  if (/\bvector\b|\bflat\s+art\b|\bminimal(?:ist)?\b/.test(value)) {
+    return 'Minimal modern flat vector art'
+  }
+  if (/\b3d\b|\banimat(?:ed|ion)\b|\bpixar\b|\bfamily[\s-]?film\b/.test(value)) {
+    return 'Animated 3D family-film style'
+  }
+  if (/\beditorial\b|\bmagazine\b/.test(value)) {
+    return 'Premium editorial illustration'
+  }
+  if (/\btravel\s+poster\b|\bretro\s+poster\b/.test(value)) {
+    return 'Retro travel poster style'
+  }
+  if (/\bclay(?:mation)?\b/.test(value)) {
+    return 'Claymation-inspired 3D scene'
+  }
+  if (/\bcollage\b|\bfoil\b/.test(value)) {
+    return 'Luxury foil and paper collage'
+  }
+  if (/\bnursery\b|\bpastel\b/.test(value)) {
+    return 'Soft pastel nursery-book illustration'
+  }
+  if (/\bgraphic\s+poster\b|\bbold\s+graphic\b/.test(value)) {
+    return 'Bold graphic poster art'
+  }
+  if (/\bvintage\b/.test(value)) {
+    return 'Vintage greeting card illustration'
+  }
+  for (const style of CARD_INTERVIEW_IMAGE_STYLES) {
+    if (style === 'AI chooses the best style for this card') {
+      continue
+    }
+    if (value.includes(style.toLowerCase())) {
+      return style
+    }
+  }
+  return ''
+}
+
+const normalizeInterviewImageStyle = (raw) => {
+  const value = String(raw || '').trim()
+  if (!value) {
+    return ''
+  }
+  const exact = CARD_INTERVIEW_IMAGE_STYLES.find(
+    (style) => style.toLowerCase() === value.toLowerCase(),
+  )
+  if (exact) {
+    return exact
+  }
+  return inferInterviewImageStyleFromText(value)
+}
+
 const normalizeInterviewDetails = (raw = {}) => {
   const toneRaw = String(raw.tone || 'Heartfelt').trim()
   const tone =
     CARD_INTERVIEW_TONES.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt'
+  const imageStyle = normalizeInterviewImageStyle(raw.imageStyle)
 
   return {
     recipientName: String(raw.recipientName || '').trim(),
@@ -3997,6 +4095,7 @@ const normalizeInterviewDetails = (raw = {}) => {
     senderName: String(raw.senderName || '').trim(),
     occasion: String(raw.occasion || '').trim(),
     tone,
+    imageStyle,
     keyDetails: String(raw.keyDetails || '').trim(),
   }
 }
@@ -4319,6 +4418,11 @@ const refineInterviewResult = ({
     next.occasion = inferInterviewOccasionFromText(shopperText || fullTranscript)
   }
   next.occasion = normalizeInterviewOccasionLabel(next.occasion)
+
+  next.imageStyle = normalizeInterviewImageStyle(next.imageStyle)
+  if (!next.imageStyle) {
+    next.imageStyle = inferInterviewImageStyleFromText(shopperText || fullTranscript)
+  }
 
   next.senderName = resolveShopperSelfInSenderName(next.senderName, selfName)
   if (senderNameLooksInvalid(next.senderName)) {

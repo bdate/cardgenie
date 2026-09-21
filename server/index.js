@@ -2951,6 +2951,97 @@ app.post('/api/refine-copy', async (req, res) => {
 })
 
 const localInterviewTones = ['Heartfelt', 'Playful', 'Elegant', 'Funny', 'Romantic', 'Encouraging', 'Business']
+const localInterviewImageStyles = [
+  'AI chooses the best style for this card',
+  'Photorealistic warm portrait photography',
+  'Premium editorial illustration',
+  'Watercolor greeting card illustration',
+  'Comic book art',
+  'Whimsical storybook illustration',
+  'Animated 3D family-film style',
+  'Minimal modern flat vector art',
+  'Elegant botanical paper-cut style',
+  'Cozy hand-drawn colored pencil',
+  'Retro travel poster style',
+  'Claymation-inspired 3D scene',
+  'Luxury foil and paper collage',
+  'Soft pastel nursery-book illustration',
+  'Bold graphic poster art',
+  'Vintage greeting card illustration',
+]
+
+const localInferInterviewImageStyle = (text) => {
+  const value = String(text || '').toLowerCase()
+  if (!value) {
+    return ''
+  }
+  if (/\bcomic(\s*book)?(\s*(art|style|version|look|cover))?\b|\bcomics\b/.test(value)) {
+    return 'Comic book art'
+  }
+  if (/\bwater[\s-]?color\b|\bwatercolor\b/.test(value)) {
+    return 'Watercolor greeting card illustration'
+  }
+  if (/\bphoto[\s-]?real|\bphotoreal|\brealistic\s+(?:photo|portrait)|\bphotograph/.test(value)) {
+    return 'Photorealistic warm portrait photography'
+  }
+  if (/\bstory[\s-]?book\b|\bstorybook\b/.test(value)) {
+    return 'Whimsical storybook illustration'
+  }
+  if (/\bpaper[\s-]?cut\b|\bbotanical\b/.test(value)) {
+    return 'Elegant botanical paper-cut style'
+  }
+  if (/\bpencil\b|\bhand[\s-]?drawn\b/.test(value)) {
+    return 'Cozy hand-drawn colored pencil'
+  }
+  if (/\bvector\b|\bflat\s+art\b|\bminimal(?:ist)?\b/.test(value)) {
+    return 'Minimal modern flat vector art'
+  }
+  if (/\b3d\b|\banimat(?:ed|ion)\b|\bpixar\b|\bfamily[\s-]?film\b/.test(value)) {
+    return 'Animated 3D family-film style'
+  }
+  if (/\beditorial\b|\bmagazine\b/.test(value)) {
+    return 'Premium editorial illustration'
+  }
+  if (/\btravel\s+poster\b|\bretro\s+poster\b/.test(value)) {
+    return 'Retro travel poster style'
+  }
+  if (/\bclay(?:mation)?\b/.test(value)) {
+    return 'Claymation-inspired 3D scene'
+  }
+  if (/\bcollage\b|\bfoil\b/.test(value)) {
+    return 'Luxury foil and paper collage'
+  }
+  if (/\bnursery\b|\bpastel\b/.test(value)) {
+    return 'Soft pastel nursery-book illustration'
+  }
+  if (/\bgraphic\s+poster\b|\bbold\s+graphic\b/.test(value)) {
+    return 'Bold graphic poster art'
+  }
+  if (/\bvintage\b/.test(value)) {
+    return 'Vintage greeting card illustration'
+  }
+  for (const style of localInterviewImageStyles) {
+    if (style === 'AI chooses the best style for this card') {
+      continue
+    }
+    if (value.includes(style.toLowerCase())) {
+      return style
+    }
+  }
+  return ''
+}
+
+const localNormalizeInterviewImageStyle = (raw) => {
+  const value = String(raw || '').trim()
+  if (!value) {
+    return ''
+  }
+  const exact = localInterviewImageStyles.find((style) => style.toLowerCase() === value.toLowerCase())
+  if (exact) {
+    return exact
+  }
+  return localInferInterviewImageStyle(value)
+}
 const localAmbiguousRecipientTokens = new Set([
   'him',
   'her',
@@ -3269,6 +3360,10 @@ const localRefineInterviewResult = ({
     next.occasion = localInferInterviewOccasion(shopperText || transcript)
   }
   next.occasion = localNormalizeInterviewOccasion(next.occasion)
+  next.imageStyle = localNormalizeInterviewImageStyle(next.imageStyle)
+  if (!next.imageStyle) {
+    next.imageStyle = localInferInterviewImageStyle(shopperText || transcript)
+  }
   next.senderName = localResolveShopperSelfInSenderName(next.senderName, selfName)
   if (localSenderNameLooksInvalid(next.senderName)) {
     next.senderName = ''
@@ -3393,12 +3488,13 @@ app.post('/api/card-interview', async (req, res) => {
         {
           role: 'system',
           content: `You help shoppers fill out a greeting-card form for Card Genie.
-Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","keyDetails":""}}
+Return ONLY JSON: {"assistantMessage":"...","status":"ask"|"ready","details":{"recipientName":"","recipientType":"","senderName":"","occasion":"","tone":"Heartfelt","imageStyle":"","keyDetails":""}}
 Essentials for "ready": senderName, a clear recipientName, occasion, keyDetails.
 Shoppers often speak, so text may have speech-to-text mistakes.
 Infer occasion from "thank you card", birthday, anniversary, etc. Never ask for occasion when it is already clear.
 Pronouns like him/her/them are NOT names. For "him and Anita", status "ask" and confirm the real names. Never store "him" as a recipient name.
 Ask about unclear names before other gaps.
+If they mention an image/art style (example: "comic version"), set imageStyle to the closest exact option from: ${localInterviewImageStyles.filter((style) => style !== 'AI chooses the best style for this card').join('; ')}. Do not leave style only in keyDetails. Never ask for style.
 ${shopperNameNote}
 ${chatExtra}
 Guess recipientType when unclear. Fill details as far as you can even when asking.
@@ -3450,6 +3546,7 @@ ${shouldForceReady ? 'You MUST return status "ready" now with best-effort detail
       senderName: String(parsed.details?.senderName || '').trim(),
       occasion: String(parsed.details?.occasion || '').trim(),
       tone: localInterviewTones.find((option) => option.toLowerCase() === toneRaw.toLowerCase()) || 'Heartfelt',
+      imageStyle: localNormalizeInterviewImageStyle(parsed.details?.imageStyle),
       keyDetails: String(parsed.details?.keyDetails || '').trim(),
     }
     const refined = localRefineInterviewResult({
