@@ -7494,7 +7494,7 @@ function App() {
                   Start over
                 </button>
               </div>
-              {interviewMode === 'chat' && (
+              {interviewMode === 'chat' && isAdmin && (
                 <div className="card-interview-voice">
                   <div className="card-interview-voice-bar">
                     <p>
