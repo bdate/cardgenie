@@ -4902,6 +4902,63 @@ const handleCardInterviewSpeak = async (request, env) => {
   }
 }
 
+/** Durable Chrome mic path: MediaRecorder chunks → Whisper (no SpeechRecognition restart). */
+const handleCardInterviewTranscribe = async (request, env) => {
+  const missingKeyResponse = requireOpenAIKey(request, env)
+  if (missingKeyResponse) {
+    return missingKeyResponse
+  }
+
+  const body = (await readJson(request)) || {}
+  const audioBase64 = String(body.audioBase64 || body.audio || '').replace(/\s+/g, '')
+  const mimeType = String(body.mimeType || 'audio/webm').trim() || 'audio/webm'
+  const prompt = String(body.prompt || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240)
+
+  if (!audioBase64 || audioBase64.length < 64) {
+    return jsonResponse(request, env, { error: 'Nothing to transcribe.' }, 400)
+  }
+
+  // Cap ~2.5MB raw audio after base64 decode.
+  if (audioBase64.length > 3_500_000) {
+    return jsonResponse(request, env, { error: 'Audio chunk is too large.' }, 413)
+  }
+
+  try {
+    const binary = Uint8Array.from(atob(audioBase64), (char) => char.charCodeAt(0))
+    const extension = /mp4|m4a|aac/i.test(mimeType)
+      ? 'mp4'
+      : /ogg/i.test(mimeType)
+        ? 'ogg'
+        : /wav/i.test(mimeType)
+          ? 'wav'
+          : 'webm'
+    const file = new File([binary], `interview-chunk.${extension}`, { type: mimeType })
+    const openai = getOpenAI(env)
+    const model = env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1'
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model,
+      language: 'en',
+      ...(prompt ? { prompt } : {}),
+    })
+    const text = String(transcription?.text || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return jsonResponse(request, env, { ok: true, text })
+  } catch (error) {
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: publicGenerationError(error, 'Unable to transcribe that audio.') },
+      isSafetyRejection(error) ? 400 : 500,
+    )
+  }
+}
+
 const handleRequest = async (request, env, ctx) => {
   const url = new URL(request.url)
 
@@ -5064,6 +5121,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/card-interview-speak') {
     return handleCardInterviewSpeak(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/card-interview-transcribe') {
+    return handleCardInterviewTranscribe(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)

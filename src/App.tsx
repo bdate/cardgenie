@@ -110,6 +110,25 @@ let genieSpeechPlayer: HTMLAudioElement | null = null
 const genieSpeechPlaybackRate = 1.1
 /** Session cache so we don’t re-call getUserMedia (Chrome’s “Microphone access allowed” toast). */
 let microphoneAccessKnown: 'granted' | 'denied' | null = null
+/** One long MediaStream for Chrome Lamp Genie — never stop/restart mid-chat. */
+let interviewMicStream: MediaStream | null = null
+
+const releaseInterviewMicStream = () => {
+  if (!interviewMicStream) {
+    return
+  }
+  for (const track of interviewMicStream.getTracks()) {
+    try {
+      track.stop()
+    } catch {
+      // Ignore.
+    }
+  }
+  interviewMicStream = null
+}
+
+const interviewMicStreamIsLive = () =>
+  Boolean(interviewMicStream?.getTracks().some((track) => track.readyState === 'live'))
 
 const queryMicrophonePermission = async (): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> => {
   try {
@@ -128,16 +147,22 @@ const queryMicrophonePermission = async (): Promise<'granted' | 'denied' | 'prom
 }
 
 /**
- * Prefer Permissions API / session cache so we only call getUserMedia when Chrome still needs
- * a prompt. Re-calling getUserMedia after grant is what keeps flashing “Microphone access allowed”.
- * Do NOT keep a hold stream open — it steals the mic from SpeechRecognition on mobile Chrome.
+ * Chrome Lamp Genie uses holdStream:true (one MediaStream for the whole chat).
+ * Safari SpeechRecognition path still grants then releases so SR can own the mic.
  */
-const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsupported'> => {
+const ensureMicrophoneAccess = async (
+  options?: { holdStream?: boolean },
+): Promise<'granted' | 'denied' | 'unsupported'> => {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     return 'unsupported'
   }
 
-  if (microphoneAccessKnown === 'granted') {
+  if (options?.holdStream && interviewMicStreamIsLive()) {
+    microphoneAccessKnown = 'granted'
+    return 'granted'
+  }
+
+  if (!options?.holdStream && microphoneAccessKnown === 'granted') {
     return 'granted'
   }
   if (microphoneAccessKnown === 'denied') {
@@ -145,30 +170,110 @@ const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsuppo
   }
 
   const permission = await queryMicrophonePermission()
-  if (permission === 'granted') {
-    microphoneAccessKnown = 'granted'
-    return 'granted'
-  }
   if (permission === 'denied') {
     microphoneAccessKnown = 'denied'
     return 'denied'
   }
 
+  if (!options?.holdStream && permission === 'granted') {
+    microphoneAccessKnown = 'granted'
+    return 'granted'
+  }
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    for (const track of stream.getTracks()) {
-      try {
-        track.stop()
-      } catch {
-        // Ignore.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    })
+    if (options?.holdStream) {
+      releaseInterviewMicStream()
+      interviewMicStream = stream
+    } else {
+      for (const track of stream.getTracks()) {
+        try {
+          track.stop()
+        } catch {
+          // Ignore.
+        }
       }
     }
     microphoneAccessKnown = 'granted'
     return 'granted'
   } catch {
     microphoneAccessKnown = 'denied'
+    if (options?.holdStream) {
+      releaseInterviewMicStream()
+    }
     return 'denied'
   }
+}
+
+const pickInterviewRecorderMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') {
+    return ''
+  }
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/aac',
+    'audio/ogg;codecs=opus',
+  ]
+  return candidates.find((type) => {
+    try {
+      return MediaRecorder.isTypeSupported(type)
+    } catch {
+      return false
+    }
+  }) || ''
+}
+
+const blobToBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.onerror = () => reject(reader.error || new Error('Unable to read audio chunk.'))
+    reader.readAsDataURL(blob)
+  })
+
+const isJunkInterviewTranscript = (text: string) => {
+  const trimmed = text.replace(/\s+/g, ' ').trim()
+  if (trimmed.length < 2) {
+    return true
+  }
+  const lower = trimmed.toLowerCase()
+  return /^(thanks for watching[.!]?|thank you[.!]?|thanks[.!]?|please subscribe[.!]?|bye[.!]?|you|the end[.!]?|music|applause)$/i.test(
+    lower,
+  )
+}
+
+const transcribeInterviewAudioChunk = async (blob: Blob, prompt = '') => {
+  if (blob.size < 1200) {
+    return ''
+  }
+  const audioBase64 = await blobToBase64(blob)
+  const response = await fetch(apiUrl('/api/card-interview-transcribe'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audioBase64,
+      mimeType: blob.type || 'audio/webm',
+      prompt: prompt.slice(0, 240),
+    }),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(String((data as { error?: string }).error || 'Unable to transcribe that audio.'))
+  }
+  return String((data as { text?: string }).text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 const getInterviewSpeechRecognition = () => {
@@ -1879,6 +1984,10 @@ const isMobileSafariBrowser = () => {
  */
 const preferContinuousInterviewListen = () => !isMobileDevice() || !isMobileSafariBrowser()
 
+/** Chrome/Android: durable MediaRecorder+Whisper session. Safari keeps SpeechRecognition. */
+const preferStreamInterviewListen = () =>
+  typeof MediaRecorder !== 'undefined' && preferContinuousInterviewListen()
+
 type ScreenWakeLock = {
   released: boolean
   release: () => Promise<void>
@@ -2549,6 +2658,8 @@ function App() {
     }
     return Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition)
   })
+  const [interviewStreamListenSupported] = useState(() => preferStreamInterviewListen())
+  const interviewMicSupported = interviewSpeechSupported || interviewStreamListenSupported
   const interviewRecognitionRef = useRef<InterviewSpeechRecognition | null>(null)
   const interviewListenDesiredRef = useRef(false)
   const interviewBaseDraftRef = useRef('')
@@ -2569,6 +2680,12 @@ function App() {
   const interviewListenActiveRef = useRef(false)
   /** Ignore mic transcripts while Genie speaks (and briefly after) so we can keep the session alive. */
   const interviewMicIgnoreUntilRef = useRef(0)
+  const interviewStreamDesiredRef = useRef(false)
+  const interviewStreamPausedRef = useRef(false)
+  const interviewMediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const interviewStreamLoopIdRef = useRef(0)
+  const interviewStreamChunkTimerRef = useRef(0)
+  const interviewStreamTranscribingRef = useRef(false)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -3102,7 +3219,7 @@ function App() {
       if (!showCardInterviewRef.current || !interviewVoiceLoopRef.current) {
         return
       }
-      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
+      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewMicSupported) {
         return
       }
       const savedDraft = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '').trim()
@@ -3135,7 +3252,14 @@ function App() {
       if (!showCardInterviewRef.current || !interviewListenDesiredRef.current) {
         return
       }
-      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
+      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewMicSupported) {
+        return
+      }
+      // Stream mic path keeps one MediaStream — just resume chunking, never restart getUserMedia.
+      if (preferStreamInterviewListen()) {
+        if (interviewMicStreamIsLive()) {
+          resumeInterviewStreamListening({ announce: false })
+        }
         return
       }
       const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
@@ -3170,6 +3294,7 @@ function App() {
     interviewDraft,
     interviewComplete,
     interviewSpeechSupported,
+    interviewMicSupported,
   ])
 
   useEffect(() => {
@@ -3816,9 +3941,267 @@ function App() {
     thread.scrollTop = thread.scrollHeight
   }
 
+  const stopInterviewStreamLoop = () => {
+    interviewStreamDesiredRef.current = false
+    interviewStreamPausedRef.current = false
+    interviewStreamLoopIdRef.current += 1
+    if (interviewStreamChunkTimerRef.current) {
+      window.clearTimeout(interviewStreamChunkTimerRef.current)
+      interviewStreamChunkTimerRef.current = 0
+    }
+    const recorder = interviewMediaRecorderRef.current
+    interviewMediaRecorderRef.current = null
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.ondataavailable = null
+        recorder.onerror = null
+        recorder.onstop = null
+        recorder.stop()
+      } catch {
+        // Ignore.
+      }
+    }
+  }
+
+  const appendStreamTranscript = (chunkText: string) => {
+    const cleaned = chunkText.replace(/\s+/g, ' ').trim()
+    if (!cleaned || isJunkInterviewTranscript(cleaned)) {
+      return
+    }
+    interviewLastSpeechResultAtRef.current = Date.now()
+    const merged = `${interviewBaseDraftRef.current} ${cleaned}`.replace(/\s+/g, ' ').trim()
+    interviewBaseDraftRef.current = merged
+    interviewLatestDraftRef.current = merged
+    setInterviewDraft(merged)
+    scheduleVoiceAutoSend(interviewVoicePauseMs)
+  }
+
+  const runInterviewStreamChunkLoop = (loopId: number) => {
+    if (loopId !== interviewStreamLoopIdRef.current) {
+      return
+    }
+    if (
+      !interviewStreamDesiredRef.current ||
+      interviewStreamPausedRef.current ||
+      isInterviewingRef.current ||
+      interviewSpeakingRef.current ||
+      !interviewMicStreamIsLive()
+    ) {
+      return
+    }
+
+    const stream = interviewMicStream
+    if (!stream) {
+      return
+    }
+
+    const mimeType = pickInterviewRecorderMimeType()
+    let recorder: MediaRecorder
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    } catch {
+      setInterviewNotice('Voice capture isn’t available in this browser — type your reply instead.')
+      interviewStreamDesiredRef.current = false
+      setIsInterviewListening(false)
+      return
+    }
+
+    interviewMediaRecorderRef.current = recorder
+    recorder.ondataavailable = (event) => {
+      const blob = event.data
+      if (!blob || blob.size < 1200) {
+        return
+      }
+      if (
+        !interviewStreamDesiredRef.current ||
+        interviewStreamPausedRef.current ||
+        isInterviewingRef.current ||
+        interviewSpeakingRef.current ||
+        Date.now() < interviewMicIgnoreUntilRef.current
+      ) {
+        return
+      }
+      if (interviewStreamTranscribingRef.current) {
+        return
+      }
+      interviewStreamTranscribingRef.current = true
+      void (async () => {
+        try {
+          const prompt = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '')
+            .trim()
+            .slice(-180)
+          const text = await transcribeInterviewAudioChunk(blob, prompt)
+          if (
+            !interviewStreamDesiredRef.current ||
+            interviewStreamPausedRef.current ||
+            isInterviewingRef.current ||
+            interviewSpeakingRef.current
+          ) {
+            return
+          }
+          appendStreamTranscript(text)
+        } catch {
+          // Keep the long session alive; a single failed chunk shouldn’t kill listening.
+        } finally {
+          interviewStreamTranscribingRef.current = false
+        }
+      })()
+    }
+
+    try {
+      recorder.start()
+      interviewListenActiveRef.current = true
+      setIsInterviewListening(true)
+    } catch {
+      interviewMediaRecorderRef.current = null
+      interviewStreamChunkTimerRef.current = window.setTimeout(() => {
+        runInterviewStreamChunkLoop(loopId)
+      }, 700)
+      return
+    }
+
+    interviewStreamChunkTimerRef.current = window.setTimeout(() => {
+      interviewStreamChunkTimerRef.current = 0
+      if (loopId !== interviewStreamLoopIdRef.current) {
+        return
+      }
+      try {
+        if (recorder.state !== 'inactive') {
+          recorder.stop()
+        }
+      } catch {
+        // Ignore.
+      }
+      interviewMediaRecorderRef.current = null
+      // Same MediaStream — never re-request the mic. Just record the next slice.
+      interviewStreamChunkTimerRef.current = window.setTimeout(() => {
+        runInterviewStreamChunkLoop(loopId)
+      }, 120)
+    }, 2400)
+  }
+
+  const pauseInterviewStreamListening = () => {
+    interviewStreamPausedRef.current = true
+    interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
+    if (interviewStreamChunkTimerRef.current) {
+      window.clearTimeout(interviewStreamChunkTimerRef.current)
+      interviewStreamChunkTimerRef.current = 0
+    }
+    const recorder = interviewMediaRecorderRef.current
+    interviewMediaRecorderRef.current = null
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.ondataavailable = null
+        recorder.stop()
+      } catch {
+        // Ignore.
+      }
+    }
+    setIsInterviewListening(false)
+  }
+
+  const resumeInterviewStreamListening = (options?: { announce?: boolean }) => {
+    if (!preferStreamInterviewListen()) {
+      return
+    }
+    if (!interviewMicStreamIsLive()) {
+      void (async () => {
+        const access = await ensureMicrophoneAccess({ holdStream: true })
+        if (access !== 'granted' || !interviewMicStreamIsLive()) {
+          setInterviewNotice(
+            'Microphone permission is needed to talk to Genie. You can still type your reply.',
+          )
+          return
+        }
+        resumeInterviewStreamListening(options)
+      })()
+      return
+    }
+    interviewListenDesiredRef.current = true
+    interviewStreamDesiredRef.current = true
+    interviewStreamPausedRef.current = false
+    interviewMicIgnoreUntilRef.current = Date.now() + 500
+    interviewListenActiveRef.current = true
+    setIsInterviewListening(true)
+    if (options?.announce !== false) {
+      setInterviewNotice(
+        interviewVoiceLoopRef.current
+          ? 'Listening… just pause when you’re finished.'
+          : 'Listening… tell Genie about the card, then tap I’m done.',
+      )
+    }
+    if (!interviewStreamChunkTimerRef.current && !interviewMediaRecorderRef.current) {
+      if (!interviewStreamLoopIdRef.current) {
+        interviewStreamLoopIdRef.current = 1
+      }
+      runInterviewStreamChunkLoop(interviewStreamLoopIdRef.current)
+    }
+  }
+
+  const startStreamInterviewListening = (options?: { announce?: boolean }) => {
+    if (isInterviewingRef.current) {
+      return
+    }
+
+    // Already in a long stream session — just unpause (never restart getUserMedia).
+    if (interviewStreamDesiredRef.current && interviewMicStreamIsLive()) {
+      resumeInterviewStreamListening(options)
+      return
+    }
+
+    const recognition = interviewRecognitionRef.current
+    interviewRecognitionRef.current = null
+    if (recognition) {
+      recognition.onresult = null
+      recognition.onerror = null
+      recognition.onend = null
+      try {
+        recognition.abort()
+      } catch {
+        // Ignore.
+      }
+    }
+
+    void (async () => {
+      const access = await ensureMicrophoneAccess({ holdStream: true })
+      if (access !== 'granted' || !interviewMicStreamIsLive()) {
+        setInterviewNotice(
+          'Microphone permission is needed to talk to Genie. You can still type your reply.',
+        )
+        return
+      }
+      if (isInterviewingRef.current || !showCardInterviewRef.current) {
+        return
+      }
+      interviewListenDesiredRef.current = true
+      interviewStreamDesiredRef.current = true
+      interviewStreamPausedRef.current = false
+      interviewMicIgnoreUntilRef.current = Date.now()
+      interviewBaseDraftRef.current = (
+        interviewLatestDraftRef.current ||
+        interviewBaseDraftRef.current ||
+        interviewDraft
+      ).trim()
+      interviewLastSpeechResultAtRef.current = Date.now()
+      interviewStreamLoopIdRef.current += 1
+      const loopId = interviewStreamLoopIdRef.current
+      setIsInterviewListening(true)
+      interviewListenActiveRef.current = true
+      if (options?.announce !== false) {
+        setInterviewNotice(
+          interviewVoiceLoopRef.current
+            ? 'Listening… just pause when you’re finished.'
+            : 'Listening… tell Genie about the card, then tap I’m done.',
+        )
+      }
+      runInterviewStreamChunkLoop(loopId)
+    })()
+  }
+
   const stopInterviewListening = () => {
     interviewListenDesiredRef.current = false
     interviewListenActiveRef.current = false
+    stopInterviewStreamLoop()
     if (interviewAutoSendTimerRef.current) {
       window.clearTimeout(interviewAutoSendTimerRef.current)
       interviewAutoSendTimerRef.current = 0
@@ -3968,6 +4351,11 @@ function App() {
   }
 
   const startInterviewListening = (options?: { announce?: boolean }) => {
+    if (preferStreamInterviewListen()) {
+      startStreamInterviewListening(options)
+      return
+    }
+
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
     }
@@ -4181,6 +4569,16 @@ function App() {
    * the session, start fresh so “Listening…” means the mic can hear again.
    */
   const ensureInterviewListening = (options?: { announce?: boolean }) => {
+    if (preferStreamInterviewListen()) {
+      // Never tear down the MediaStream — only pause/resume chunking on the same session.
+      if (interviewMicStreamIsLive() && interviewStreamDesiredRef.current) {
+        resumeInterviewStreamListening(options)
+        return
+      }
+      startStreamInterviewListening(options)
+      return
+    }
+
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
     }
@@ -4216,15 +4614,18 @@ function App() {
       return false
     }
     clearInterviewAutoSend()
-    // Prefer keeping SpeechRecognition alive on Chrome to avoid mid-chat mic toasts.
-    // If Chrome kills the session during TTS playback, ensureInterviewListening restarts it.
-    const keepMicSession = preferContinuousInterviewListen()
-    if (!keepMicSession) {
-      stopInterviewListening()
-    } else {
+    const useStreamMic = preferStreamInterviewListen()
+    if (useStreamMic) {
+      // One long MediaStream session — pause chunking only; never release/restart the mic.
+      pauseInterviewStreamListening()
+      interviewListenDesiredRef.current = true
+      interviewStreamDesiredRef.current = true
+    } else if (preferContinuousInterviewListen()) {
       interviewListenDesiredRef.current = true
       interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
       setIsInterviewListening(false)
+    } else {
+      stopInterviewListening()
     }
     interviewSpeakingRef.current = true
     setIsInterviewSpeaking(true)
@@ -4245,9 +4646,8 @@ function App() {
       return played
     }
     if (!played) {
-      // Mid-chat: keep the conversation going; audio is optional via Hear Genie.
       setPendingHearGenieText(text)
-      if (thenListen && interviewSpeechSupported) {
+      if (thenListen && (interviewSpeechSupported || useStreamMic)) {
         setInterviewNotice('Couldn’t play audio — tap Hear Genie, or just keep talking.')
         ensureInterviewListening({ announce: false })
       } else {
@@ -4256,16 +4656,18 @@ function App() {
       return false
     }
     setPendingHearGenieText(null)
-    if (thenListen && interviewSpeechSupported) {
+    if (thenListen && (interviewSpeechSupported || useStreamMic)) {
       await new Promise((resolve) => {
-        window.setTimeout(resolve, keepMicSession ? 180 : 280)
+        window.setTimeout(resolve, useStreamMic ? 200 : 280)
       })
       if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
         return true
       }
       ensureInterviewListening({ announce: true })
-    } else if (keepMicSession) {
-      // Conversation finished — release the mic so Chrome can drop the indicator.
+    } else if (useStreamMic) {
+      stopInterviewListening()
+      releaseInterviewMicStream()
+    } else if (preferContinuousInterviewListen()) {
       stopInterviewListening()
     }
     return true
@@ -4354,7 +4756,7 @@ function App() {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
 
-    if (!interviewSpeechSupported) {
+    if (!interviewMicSupported) {
       interviewVoiceLoopRef.current = false
       setInterviewVoiceLoop(false)
       setIsInterviewSpeaking(false)
@@ -4368,7 +4770,7 @@ function App() {
 
     const greeting = greetingForInterviewMode(mode)
     setInterviewNotice(
-      microphoneAccessKnown === 'granted'
+      microphoneAccessKnown === 'granted' || interviewMicStreamIsLive()
         ? 'Genie is getting ready…'
         : 'Allow the microphone so Genie can hear you…',
     )
@@ -4376,7 +4778,9 @@ function App() {
       // Prefetch greeting TTS while the mic dialog is open.
       const prefetchPromise =
         mode === 'chat' ? prefetchGenieSpeechBlob(greeting) : Promise.resolve(null)
-      const micAccess = await ensureMicrophoneAccess()
+      const micAccess = await ensureMicrophoneAccess({
+        holdStream: preferStreamInterviewListen(),
+      })
       if (!showCardInterviewRef.current) {
         return
       }
@@ -4421,14 +4825,14 @@ function App() {
     setInterviewComplete(false)
     isInterviewingRef.current = false
     setIsInterviewing(false)
-    if (!interviewSpeechSupported) {
+    if (!interviewMicSupported) {
       setIsInterviewSpeaking(false)
       setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
       return
     }
 
     setInterviewNotice(
-      microphoneAccessKnown === 'granted'
+      microphoneAccessKnown === 'granted' || interviewMicStreamIsLive()
         ? 'Genie is getting ready…'
         : 'Allow the microphone so Genie can hear you…',
     )
@@ -4440,7 +4844,9 @@ function App() {
         interviewVoiceLoopRef.current || interviewMode === 'chat'
           ? prefetchGenieSpeechBlob(greeting)
           : Promise.resolve(null)
-      const micAccess = await ensureMicrophoneAccess()
+      const micAccess = await ensureMicrophoneAccess({
+        holdStream: preferStreamInterviewListen(),
+      })
       if (!showCardInterviewRef.current) {
         return
       }
@@ -4470,6 +4876,7 @@ function App() {
   const closeCardInterview = () => {
     stopInterviewListening()
     stopGenieSpeech()
+    releaseInterviewMicStream()
     interviewSpeakingRef.current = false
     setIsInterviewSpeaking(false)
     interviewVoiceLoopRef.current = false
@@ -4570,10 +4977,17 @@ function App() {
     clearInterviewAutoSend()
     isInterviewingRef.current = true
 
-    // Chrome: keep the live mic session across turns so “Microphone access allowed” doesn’t
-    // reappear after every Genie follow-up. Safari still pauses to flush final words.
-    const keepMicSession = preferContinuousInterviewListen() && interviewVoiceLoopRef.current
-    if (keepMicSession) {
+    // Chrome stream path: pause chunking on the same MediaStream (never restart the mic).
+    // Safari SpeechRecognition still pauses to flush final words.
+    const useStreamMic = preferStreamInterviewListen() && interviewVoiceLoopRef.current
+    if (useStreamMic) {
+      pauseInterviewStreamListening()
+      interviewListenDesiredRef.current = true
+      interviewStreamDesiredRef.current = true
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 280)
+      })
+    } else if (preferContinuousInterviewListen() && interviewVoiceLoopRef.current) {
       interviewListenDesiredRef.current = true
       interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
       setIsInterviewListening(false)
@@ -4651,7 +5065,7 @@ function App() {
         applyInterviewDetails(details)
       }
 
-      if (interviewVoiceLoopRef.current && interviewSpeechSupported) {
+      if (interviewVoiceLoopRef.current && interviewMicSupported) {
         isInterviewingRef.current = false
         setIsInterviewing(false)
         if (isReady && details) {
@@ -8374,7 +8788,7 @@ function App() {
                     Hear Genie
                   </button>
                 )}
-                {interviewSpeechSupported && !interviewComplete && interviewMode === 'chat' && !pendingHearGenieText && (
+                {interviewMicSupported && !interviewComplete && interviewMode === 'chat' && !pendingHearGenieText && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -8386,10 +8800,12 @@ function App() {
                         setInterviewNotice('Mic paused. Tap Talk when you’re ready again.')
                       } else {
                         void (async () => {
-                          if (microphoneAccessKnown !== 'granted') {
+                          if (microphoneAccessKnown !== 'granted' && !interviewMicStreamIsLive()) {
                             setInterviewNotice('Allow the microphone so Genie can hear you…')
                           }
-                          const micAccess = await ensureMicrophoneAccess()
+                          const micAccess = await ensureMicrophoneAccess({
+                            holdStream: preferStreamInterviewListen(),
+                          })
                           if (micAccess === 'denied') {
                             setInterviewNotice(
                               'Microphone permission is needed to talk to Genie. You can still type your reply.',
@@ -8408,7 +8824,7 @@ function App() {
                     {isInterviewListening ? 'Listening…' : 'Talk'}
                   </button>
                 )}
-                {interviewSpeechSupported && !interviewComplete && !interviewVoiceLoop && interviewMode !== 'chat' && (
+                {interviewMicSupported && !interviewComplete && !interviewVoiceLoop && interviewMode !== 'chat' && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -8421,7 +8837,9 @@ function App() {
                       } else {
                         void (async () => {
                           setInterviewNotice('Allow the microphone so Genie can hear you…')
-                          const micAccess = await ensureMicrophoneAccess()
+                          const micAccess = await ensureMicrophoneAccess({
+                            holdStream: preferStreamInterviewListen(),
+                          })
                           if (micAccess === 'denied') {
                             setInterviewNotice(
                               'Microphone permission is needed to talk to Genie. You can still type your reply.',
@@ -8527,8 +8945,9 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  Chrome may show “Microphone access allowed” when the mic starts — tap the page to dismiss it.
-                  If Listening is on but nothing appears, tap Talk once. Low Power Mode can still dim the screen.
+                  On Chrome, Genie keeps one microphone session for the whole chat — it shouldn’t need to
+                  restart after follow-ups. Low Power Mode can still dim the screen; turn it off for longer
+                  sessions.
                 </p>
               )}
             </div>

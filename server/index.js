@@ -3706,6 +3706,57 @@ app.post('/api/card-interview-speak', async (req, res) => {
   }
 })
 
+app.post('/api/card-interview-transcribe', async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({
+      error: 'Missing OPENAI_API_KEY. Add it to a local .env file and restart the dev server.',
+    })
+  }
+
+  const audioBase64 = String(req.body?.audioBase64 || req.body?.audio || '').replace(/\s+/g, '')
+  const mimeType = String(req.body?.mimeType || 'audio/webm').trim() || 'audio/webm'
+  const prompt = String(req.body?.prompt || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240)
+
+  if (!audioBase64 || audioBase64.length < 64) {
+    return res.status(400).json({ error: 'Nothing to transcribe.' })
+  }
+  if (audioBase64.length > 3_500_000) {
+    return res.status(413).json({ error: 'Audio chunk is too large.' })
+  }
+
+  try {
+    const binary = Buffer.from(audioBase64, 'base64')
+    const extension = /mp4|m4a|aac/i.test(mimeType)
+      ? 'mp4'
+      : /ogg/i.test(mimeType)
+        ? 'ogg'
+        : /wav/i.test(mimeType)
+          ? 'wav'
+          : 'webm'
+    const openai = getOpenAI()
+    const model = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1'
+    const file = await toFile(binary, `interview-chunk.${extension}`, { type: mimeType })
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model,
+      language: 'en',
+      ...(prompt ? { prompt } : {}),
+    })
+    const text = String(transcription?.text || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return res.json({ ok: true, text })
+  } catch (error) {
+    console.error(error)
+    return res.status(isSafetyRejection(error) ? 400 : 500).json({
+      error: publicGenerationError(error, 'Unable to transcribe that audio.'),
+    })
+  }
+})
+
 app.listen(port, () => {
   console.log(`AI Card Buddy API listening on http://localhost:${port}`)
   if (localDevAuthEnabled) {
