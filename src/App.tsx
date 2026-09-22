@@ -98,9 +98,13 @@ type InterviewMode = 'quick' | 'chat'
 const greetingForInterviewMode = (mode: InterviewMode) =>
   mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
 
-const interviewVoicePauseMs = 4500
+const interviewVoicePauseMs = 3200
+/** After interim speech with no final result, treat the turn as finished. */
+const interviewInterimFinalizeMs = 2800
 
 let genieSpeechAudio: HTMLAudioElement | null = null
+/** Kept across plays so iOS can reuse an unlocked audio element mid-conversation. */
+let genieSpeechPlayer: HTMLAudioElement | null = null
 
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
@@ -349,9 +353,18 @@ const stopGenieSpeech = () => {
   }
   if (genieSpeechAudio) {
     genieSpeechAudio.pause()
-    genieSpeechAudio.removeAttribute('src')
-    genieSpeechAudio.load()
-    genieSpeechAudio = null
+    try {
+      genieSpeechAudio.removeAttribute('src')
+      genieSpeechAudio.load()
+    } catch {
+      // Ignore.
+    }
+    // Keep the unlocked player instance for the next Genie reply.
+    if (genieSpeechAudio !== genieSpeechPlayer) {
+      genieSpeechAudio = null
+    } else {
+      genieSpeechAudio = null
+    }
   }
 }
 
@@ -499,7 +512,7 @@ const speakGenieAloud = async (
       if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
         const objectUrl = URL.createObjectURL(blob)
         return await new Promise<boolean>((resolve) => {
-          const audio = new Audio(objectUrl)
+          const audio = ensureGenieSpeechPlayer() || new Audio()
           genieSpeechAudio = audio
           let started = false
           let settled = false
@@ -525,13 +538,15 @@ const speakGenieAloud = async (
           audio.onplaying = markStarted
           audio.onended = () => finish(true)
           audio.onerror = () => finish(started)
+          audio.src = objectUrl
           void audio
             .play()
             .then(() => {
               markStarted()
             })
-            .catch(() => {
-              finish(false)
+            .catch(async () => {
+              const fallbackPlayed = await speakGenieBrowserFallback(spoken, onSpeakingStart)
+              finish(fallbackPlayed)
             })
         })
       }
@@ -1799,6 +1814,44 @@ const stopSilentStayAwakeAudio = (audio: HTMLAudioElement | null) => {
   audio.currentTime = 0
 }
 
+const ensureGenieSpeechPlayer = () => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  if (!genieSpeechPlayer) {
+    genieSpeechPlayer = new Audio()
+    genieSpeechPlayer.setAttribute('playsinline', 'true')
+    genieSpeechPlayer.preload = 'auto'
+  }
+  return genieSpeechPlayer
+}
+
+/** Call from a user gesture so later Genie replies can play without another tap. */
+const unlockGenieSpeechAudio = async () => {
+  const player = ensureGenieSpeechPlayer()
+  if (!player) {
+    return false
+  }
+  try {
+    player.muted = true
+    player.src = silentStayAwakeAudioSrc
+    await player.play()
+    player.pause()
+    player.currentTime = 0
+    player.muted = false
+    player.removeAttribute('src')
+    player.load()
+    return true
+  } catch {
+    try {
+      player.muted = false
+    } catch {
+      // Ignore.
+    }
+    return false
+  }
+}
+
 const formatEmailAddress = (email: string) => email.trim().toLowerCase()
 
 const validateEmailAddress = (email: string) => {
@@ -2391,6 +2444,7 @@ function App() {
   const interviewVoiceLoopRef = useRef(false)
   const interviewSpeakingRef = useRef(false)
   const interviewAutoSendTimerRef = useRef(0)
+  const interviewInterimFinalizeTimerRef = useRef(0)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -3603,6 +3657,10 @@ function App() {
       window.clearTimeout(interviewAutoSendTimerRef.current)
       interviewAutoSendTimerRef.current = 0
     }
+    if (interviewInterimFinalizeTimerRef.current) {
+      window.clearTimeout(interviewInterimFinalizeTimerRef.current)
+      interviewInterimFinalizeTimerRef.current = 0
+    }
     const recognition = interviewRecognitionRef.current
     interviewRecognitionRef.current = null
     if (recognition) {
@@ -3676,13 +3734,20 @@ function App() {
       window.clearTimeout(interviewAutoSendTimerRef.current)
       interviewAutoSendTimerRef.current = 0
     }
+    if (interviewInterimFinalizeTimerRef.current) {
+      window.clearTimeout(interviewInterimFinalizeTimerRef.current)
+      interviewInterimFinalizeTimerRef.current = 0
+    }
   }
 
-  const scheduleVoiceAutoSend = () => {
+  const scheduleVoiceAutoSend = (delayMs = interviewVoicePauseMs) => {
     if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
       return
     }
-    clearInterviewAutoSend()
+    if (interviewAutoSendTimerRef.current) {
+      window.clearTimeout(interviewAutoSendTimerRef.current)
+      interviewAutoSendTimerRef.current = 0
+    }
     interviewAutoSendTimerRef.current = window.setTimeout(() => {
       interviewAutoSendTimerRef.current = 0
       if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
@@ -3693,7 +3758,7 @@ function App() {
         return
       }
       void sendCardInterviewRef.current()
-    }, interviewVoicePauseMs)
+    }, delayMs)
   }
 
   const startInterviewListening = (options?: { announce?: boolean }) => {
@@ -3727,16 +3792,40 @@ function App() {
       }
 
       if (finalChunk) {
+        if (interviewInterimFinalizeTimerRef.current) {
+          window.clearTimeout(interviewInterimFinalizeTimerRef.current)
+          interviewInterimFinalizeTimerRef.current = 0
+        }
         const merged = `${interviewBaseDraftRef.current} ${finalChunk}`.replace(/\s+/g, ' ').trim()
         interviewBaseDraftRef.current = merged
         interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
-        scheduleVoiceAutoSend()
+        // Only finals start the “I’m done talking” timer — interim noise was resetting it forever.
+        scheduleVoiceAutoSend(interviewVoicePauseMs)
       } else if (interimChunk) {
         const merged = `${interviewBaseDraftRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim()
         interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
-        scheduleVoiceAutoSend()
+        if (interviewAutoSendTimerRef.current) {
+          window.clearTimeout(interviewAutoSendTimerRef.current)
+          interviewAutoSendTimerRef.current = 0
+        }
+        if (interviewInterimFinalizeTimerRef.current) {
+          window.clearTimeout(interviewInterimFinalizeTimerRef.current)
+        }
+        interviewInterimFinalizeTimerRef.current = window.setTimeout(() => {
+          interviewInterimFinalizeTimerRef.current = 0
+          if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
+            return
+          }
+          const text = (interviewLatestDraftRef.current || '').trim()
+          if (text.length < 2) {
+            return
+          }
+          // Promote lasting interim text into the base draft, then send after a short beat.
+          interviewBaseDraftRef.current = text
+          scheduleVoiceAutoSend(900)
+        }, interviewInterimFinalizeMs)
       }
     }
     recognition.onerror = (event) => {
@@ -3749,10 +3838,20 @@ function App() {
         setInterviewNotice('Microphone permission is needed to talk to Genie. You can still type your reply.')
         return
       }
-      if (code === 'aborted' || code === 'no-speech') {
+      // Common on mobile Chrome/Safari while restarting recognition — ignore quietly.
+      if (
+        code === 'aborted' ||
+        code === 'no-speech' ||
+        code === 'network' ||
+        code === 'audio-capture' ||
+        code === 'interrupted'
+      ) {
         return
       }
-      setInterviewNotice('Couldn’t hear that clearly — try again or type your reply.')
+      if (isInterviewingRef.current || interviewSpeakingRef.current) {
+        return
+      }
+      setInterviewNotice('Still listening… keep talking, or type your reply.')
     }
     recognition.onend = () => {
       setIsInterviewListening(false)
@@ -3762,6 +3861,11 @@ function App() {
         interviewSpeakingRef.current
       ) {
         return
+      }
+      // If we already have words and recognition dropped, finish the turn instead of hanging.
+      const pendingText = (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim()
+      if (pendingText.length >= 2 && interviewVoiceLoopRef.current && !interviewAutoSendTimerRef.current) {
+        scheduleVoiceAutoSend(700)
       }
       window.setTimeout(() => {
         if (
@@ -3775,11 +3879,9 @@ function App() {
           recognition.start()
           setIsInterviewListening(true)
         } catch {
-          // Browsers often refuse to restart the same recognition instance.
-          // Spin up a fresh listener so hands-free mode does not die after one turn.
           startInterviewListening({ announce: false })
         }
-      }, 180)
+      }, 220)
     }
 
     interviewRecognitionRef.current = recognition
@@ -3806,7 +3908,6 @@ function App() {
     }
     clearInterviewAutoSend()
     stopInterviewListening()
-    setPendingHearGenieText(null)
     interviewSpeakingRef.current = true
     setIsInterviewSpeaking(true)
     setInterviewNotice('Genie is getting ready…')
@@ -3825,14 +3926,20 @@ function App() {
       return played
     }
     if (!played) {
-      // iOS often drops the original tap while the mic dialog is open — require a fresh tap.
+      // Mid-chat: keep the conversation going; audio is optional via Hear Genie.
       setPendingHearGenieText(text)
-      setInterviewNotice('Microphone is ready. Tap Hear Genie to begin.')
+      if (thenListen && interviewSpeechSupported) {
+        setInterviewNotice('Couldn’t play audio — tap Hear Genie, or just keep talking.')
+        startInterviewListening({ announce: false })
+      } else {
+        setInterviewNotice('Couldn’t play audio — tap Hear Genie to hear that aloud.')
+      }
       return false
     }
+    setPendingHearGenieText(null)
     if (thenListen && interviewSpeechSupported) {
       await new Promise((resolve) => {
-        window.setTimeout(resolve, 350)
+        window.setTimeout(resolve, 280)
       })
       if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
         return true
@@ -3846,6 +3953,7 @@ function App() {
   const beginLampGenieAfterMic = (greeting: string) => {
     interviewVoiceLoopRef.current = true
     setInterviewVoiceLoop(true)
+    void unlockGenieSpeechAudio()
     void acquireScreenStayAwake()
     // After a delayed Allow, the original logo tap is usually stale — wait for Hear Genie.
     if (!hasFreshUserActivation()) {
@@ -3862,6 +3970,7 @@ function App() {
     setPendingHearGenieText(null)
     interviewVoiceLoopRef.current = true
     setInterviewVoiceLoop(true)
+    void unlockGenieSpeechAudio()
     void acquireScreenStayAwake()
     void runGenieVoiceTurn(text, true)
   }
@@ -3948,6 +4057,7 @@ function App() {
       setInterviewVoiceLoop(false)
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
+      void unlockGenieSpeechAudio()
       void acquireScreenStayAwake()
       startInterviewListening()
     })()
@@ -7913,6 +8023,7 @@ function App() {
                           }
                           interviewVoiceLoopRef.current = true
                           setInterviewVoiceLoop(true)
+                          void unlockGenieSpeechAudio()
                           void acquireScreenStayAwake()
                           startInterviewListening({ announce: true })
                         })()
