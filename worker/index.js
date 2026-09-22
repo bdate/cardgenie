@@ -1466,6 +1466,78 @@ const sendEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
   throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
 }
 
+/** Ops inbox for live deploy summaries. */
+const DEPLOY_SUMMARY_TO = 'cardgenie@gcuniverse.com'
+
+const formatDeploySubjectStamp = (date = new Date()) => {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(date)
+  } catch {
+    return date.toISOString()
+  }
+}
+
+const buildDeploySummaryCopy = ({ subject, summary }) => {
+  const safeSummary = String(summary || '').trim()
+  return {
+    subject,
+    text: safeSummary,
+    html: `
+      <div style="font-family: Georgia, 'Times New Roman', serif; color: #1f1a17; line-height: 1.55; max-width: 640px;">
+        <p style="margin: 0 0 12px; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: #7a6a60;">Card Genie deploy</p>
+        <div style="white-space: pre-wrap; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 15px;">${escapeHtml(safeSummary)}</div>
+      </div>
+    `,
+  }
+}
+
+const handleAdminDeploySummary = async (request, env) => {
+  const expected = String(env.DEPLOY_NOTIFY_SECRET || env.ADMIN_SECRET || '').trim()
+  const headerToken = readAccountToken(request)
+  const querySecret = new URL(request.url).searchParams.get('secret') || ''
+  const body = await request.json().catch(() => ({}))
+  const bodySecret = String(body?.secret || '').trim()
+  const provided = String(headerToken || querySecret || bodySecret || '').trim()
+  const secretOk = Boolean(expected && provided && provided === expected)
+  if (!secretOk && !(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  const summary = String(body?.summary || body?.text || '').trim()
+  if (!summary) {
+    return jsonResponse(request, env, { error: 'Missing summary.' }, 400)
+  }
+
+  const to = normalizeEmailAddress(String(body?.to || DEPLOY_SUMMARY_TO).trim() || DEPLOY_SUMMARY_TO)
+  const stamp = formatDeploySubjectStamp(new Date())
+  const subject = String(body?.subject || '').trim() || `Card Genie latest code - ${stamp}`
+
+  try {
+    await sendEmailDelivery({
+      env,
+      to,
+      copy: buildDeploySummaryCopy({ subject, summary }),
+    })
+  } catch (error) {
+    return jsonResponse(
+      request,
+      env,
+      { error: error instanceof Error ? error.message : 'Unable to send deploy summary email.' },
+      500,
+    )
+  }
+
+  return jsonResponse(request, env, { ok: true, to, subject })
+}
+
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
 
@@ -4916,6 +4988,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/grant-credits') {
     return handleAdminGrantCredits(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/deploy-summary') {
+    return handleAdminDeploySummary(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {

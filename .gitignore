@@ -32,3 +32,9 @@ vite.config.ts.timestamp-*.mjs
 *.njsproj
 *.sln
 *.sw?
+
+# Local deploy notify secret
+.cursor/deploy-notify.secret
+
+# Local Cursor IDE settings
+.cursor/settings.json

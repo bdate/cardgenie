@@ -10,6 +10,7 @@
     "start": "node server/index.js",
     "build": "tsc -b && vite build",
     "deploy:worker": "wrangler deploy",
+    "notify:deploy": "node scripts/notify-deploy.mjs",
     "dev:worker": "wrangler dev",
     "lint": "eslint .",
     "preview": "vite preview"

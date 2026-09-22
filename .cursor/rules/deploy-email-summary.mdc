@@ -1,0 +1,33 @@
+---
+description: After every live Card Genie deploy, email a summary to cardgenie@gcuniverse.com
+alwaysApply: true
+---
+
+# Live deploy email summary
+
+Whenever code is moved to the live servers (git push to main / Pages deploy and/or `npm run deploy:worker`), also email a plain-language summary of what shipped.
+
+## How to send
+
+Use Card Genie’s email path (not a personal mail client):
+
+```bash
+DEPLOY_NOTIFY_SECRET=… npm run notify:deploy -- "$(cat <<'EOF'
+<summary matching the chat deploy summary>
+EOF
+)"
+```
+
+Or:
+
+```bash
+DEPLOY_NOTIFY_SECRET=… node scripts/notify-deploy.mjs --file /tmp/deploy-summary.txt
+```
+
+- **To:** `cardgenie@gcuniverse.com` (script default)
+- **Subject:** `Card Genie latest code - <date/time>` (Pacific, auto-inserted by the script/API)
+- **Body:** Same style of summary you just gave in chat (what was wrong, what changed, how to verify)
+
+`DEPLOY_NOTIFY_SECRET` is a Wrangler secret on `cardgenie-api`. Endpoint: `POST /api/admin/deploy-summary`.
+
+Do this as part of finishing the live move — not as a separate “want me to email?” question.
