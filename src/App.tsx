@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import {
+  connectLampGenieRealtime,
+  type LampGenieRealtimeSession,
+} from './lampGenieRealtime'
 import './App.css'
 
 type CardDetails = {
@@ -578,15 +582,6 @@ const persistLampGenieVoice = (voice: LampGenieVoiceId) => {
 const lampGenieVoiceLabel = (voice: LampGenieVoiceId) =>
   lampGenieVoiceOptions.find((entry) => entry.id === voice)?.label || voice
 
-const hasFreshUserActivation = () => {
-  const activation = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation
-  if (activation && typeof activation.isActive === 'boolean') {
-    return activation.isActive
-  }
-  // Older browsers: assume the current gesture is still usable.
-  return true
-}
-
 const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void) =>
   new Promise<boolean>((resolve) => {
     if (!window.speechSynthesis) {
@@ -731,36 +726,6 @@ const speakGenieAloud = async (
   }
 
   return speakGenieBrowserFallback(spoken, onSpeakingStart)
-}
-
-/** Start TTS fetch during the mic prompt so Genie can talk as soon as Allow lands. */
-const prefetchGenieSpeechBlob = async (
-  text: string,
-  voiceOverride?: LampGenieVoiceId,
-): Promise<Blob | null> => {
-  const spoken = text.replace(/\s+/g, ' ').trim()
-  if (!spoken || typeof window === 'undefined') {
-    return null
-  }
-  const voice = voiceOverride && isLampGenieVoiceId(voiceOverride) ? voiceOverride : readStoredLampGenieVoice()
-  try {
-    const response = await fetch(apiUrl('/api/card-interview-speak'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: spoken, voice }),
-    })
-    if (!response.ok) {
-      return null
-    }
-    const blob = await response.blob()
-    const contentType = response.headers.get('content-type') || blob.type || ''
-    if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
-      return blob
-    }
-  } catch {
-    // Prefetch is best-effort.
-  }
-  return null
 }
 
 const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
@@ -2687,6 +2652,8 @@ function App() {
   const interviewStreamChunkTimerRef = useRef(0)
   const interviewStreamTranscribingRef = useRef(false)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
+  const lampGenieRealtimeRef = useRef<LampGenieRealtimeSession | null>(null)
+  const lampGenieRealtimeGenerationRef = useRef(0)
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -4703,34 +4670,6 @@ function App() {
     return true
   }
 
-  const beginLampGenieAfterMic = (
-    greeting: string,
-    prefetchedBlob?: Blob | null,
-  ) => {
-    interviewVoiceLoopRef.current = true
-    setInterviewVoiceLoop(true)
-    // Audio should already be unlocked from the logo tap. Retry only if gesture is still alive.
-    if (hasFreshUserActivation()) {
-      void unlockGenieSpeechAudio()
-    }
-    void acquireScreenStayAwake()
-    // Always attempt playback — the unlocked player survives a delayed mic Allow.
-    // Only fall back to Hear Genie if play() actually fails.
-    void (async () => {
-      const played = await runGenieVoiceTurn(greeting, true, prefetchedBlob)
-      if (!played && showCardInterviewRef.current && interviewVoiceLoopRef.current) {
-        setPendingHearGenieText(greeting)
-        setInterviewNotice('Tap Hear Genie to start — then talk when you’re ready.')
-        window.setTimeout(() => {
-          document.querySelector('.card-interview-actions .primary-button')?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-          })
-        }, 80)
-      }
-    })()
-  }
-
   const hearPendingGenie = () => {
     const text = pendingHearGenieText || greetingForInterviewMode(interviewMode)
     setPendingHearGenieText(null)
@@ -4762,6 +4701,172 @@ function App() {
     setInterviewNotice(`Lamp Genie will use ${lampGenieVoiceLabel(voice)} from now on.`)
   }
 
+  const disconnectLampGenieRealtime = () => {
+    lampGenieRealtimeGenerationRef.current += 1
+    const session = lampGenieRealtimeRef.current
+    lampGenieRealtimeRef.current = null
+    try {
+      session?.disconnect()
+    } catch {
+      // Ignore.
+    }
+    interviewVoiceLoopRef.current = false
+    setInterviewVoiceLoop(false)
+    interviewSpeakingRef.current = false
+    setIsInterviewSpeaking(false)
+    setIsInterviewListening(false)
+  }
+
+  const startLampGenieRealtimeSession = () => {
+    disconnectLampGenieRealtime()
+    stopInterviewListening()
+    stopGenieSpeech()
+    releaseInterviewMicStream()
+    setPendingHearGenieText(null)
+
+    const canRealtime =
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      typeof RTCPeerConnection !== 'undefined'
+
+    if (!canRealtime) {
+      interviewVoiceLoopRef.current = false
+      setInterviewVoiceLoop(false)
+      setIsInterviewSpeaking(false)
+      setInterviewNotice('Voice isn’t available in this browser — type your reply instead.')
+      return
+    }
+
+    interviewVoiceLoopRef.current = true
+    setInterviewVoiceLoop(true)
+    setInterviewComplete(false)
+    setInterviewMessages([])
+    setInterviewDraft('')
+    interviewBaseDraftRef.current = ''
+    interviewLatestDraftRef.current = ''
+    setInterviewNotice('Allow the microphone once — Genie will keep listening for this chat.')
+    void unlockGenieSpeechAudio()
+    void acquireScreenStayAwake()
+
+    const generation = lampGenieRealtimeGenerationRef.current
+    void (async () => {
+      try {
+        const session = await connectLampGenieRealtime({
+          apiUrl,
+          voice: lampGenieVoice,
+          shopperFirstName: accountFirstName || undefined,
+          handlers: {
+            onNotice: (message) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setInterviewNotice(message)
+            },
+            onListening: (listening) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setIsInterviewListening(listening)
+            },
+            onSpeaking: (speaking) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              interviewSpeakingRef.current = speaking
+              setIsInterviewSpeaking(speaking)
+            },
+            onUserTranscript: (text, isFinal) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation || !text.trim()) {
+                return
+              }
+              if (!isFinal) {
+                setInterviewDraft(text.trim())
+                return
+              }
+              const cleaned = text.trim()
+              setInterviewDraft('')
+              setInterviewMessages((current) => [...current, { role: 'user', content: cleaned }])
+            },
+            onAssistantTranscript: (text, isFinal) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation || !text.trim() || !isFinal) {
+                return
+              }
+              const cleaned = text.trim()
+              setInterviewMessages((current) => {
+                const last = current[current.length - 1]
+                if (last?.role === 'assistant' && last.content === cleaned) {
+                  return current
+                }
+                return [...current, { role: 'assistant', content: cleaned }]
+              })
+            },
+            onDetails: (details) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              applyInterviewDetails(details)
+            },
+            onComplete: (details) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              applyInterviewDetails(details)
+              setInterviewComplete(true)
+              setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+              window.setTimeout(() => {
+                document
+                  .querySelector('.form-panel .field-grid')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 80)
+            },
+            onError: (message) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setInterviewNotice(message)
+            },
+            onConnected: () => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setInterviewNotice('Listening… talk naturally — Genie will reply by voice.')
+            },
+            onDisconnected: () => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              interviewVoiceLoopRef.current = false
+              setInterviewVoiceLoop(false)
+              setIsInterviewListening(false)
+              interviewSpeakingRef.current = false
+              setIsInterviewSpeaking(false)
+            },
+          },
+        })
+
+        if (
+          lampGenieRealtimeGenerationRef.current !== generation ||
+          !showCardInterviewRef.current
+        ) {
+          session.disconnect()
+          return
+        }
+        lampGenieRealtimeRef.current = session
+      } catch (caughtError) {
+        if (lampGenieRealtimeGenerationRef.current !== generation) {
+          return
+        }
+        interviewVoiceLoopRef.current = false
+        setInterviewVoiceLoop(false)
+        const friendly = getFriendlyErrorMessage(
+          caughtError,
+          'Unable to start Genie voice. You can still type your reply.',
+        )
+        setInterviewNotice(friendly)
+      }
+    })()
+  }
+
   const openCardInterview = (mode: InterviewMode = 'quick') => {
     if (isRecipientView) {
       return
@@ -4774,7 +4879,6 @@ function App() {
     showCardInterviewRef.current = true
     setShowCardInterview(true)
     setInterviewMode(mode)
-    setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(mode) }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
@@ -4785,6 +4889,14 @@ function App() {
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
+
+    if (mode === 'chat') {
+      // Path 1: OpenAI Realtime WebRTC — one mic Allow for the whole session.
+      startLampGenieRealtimeSession()
+      return
+    }
+
+    setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(mode) }])
 
     if (!interviewMicSupported) {
       interviewVoiceLoopRef.current = false
@@ -4798,16 +4910,12 @@ function App() {
     void unlockGenieSpeechAudio()
     void acquireScreenStayAwake()
 
-    const greeting = greetingForInterviewMode(mode)
     setInterviewNotice(
       microphoneAccessKnown === 'granted' || interviewMicStreamIsLive()
         ? 'Genie is getting ready…'
         : 'Allow the microphone so Genie can hear you…',
     )
     void (async () => {
-      // Prefetch greeting TTS while the mic dialog is open.
-      const prefetchPromise =
-        mode === 'chat' ? prefetchGenieSpeechBlob(greeting) : Promise.resolve(null)
       const useStreamMic = preferStreamInterviewListen()
       const micAccess = await ensureMicrophoneAccess({
         holdStream: useStreamMic,
@@ -4828,25 +4936,6 @@ function App() {
         return
       }
 
-      if (mode === 'chat') {
-        // Start the long MediaRecorder immediately after Allow (same gesture window),
-        // then ignore chunks while Genie greets — never wait until after TTS to start().
-        if (useStreamMic) {
-          interviewVoiceLoopRef.current = true
-          setInterviewVoiceLoop(true)
-          await startStreamInterviewListening({ announce: false })
-          pauseInterviewStreamListening()
-          interviewStreamDesiredRef.current = true
-          interviewListenDesiredRef.current = true
-        }
-        const prefetched = await prefetchPromise
-        if (!showCardInterviewRef.current) {
-          return
-        }
-        beginLampGenieAfterMic(greeting, prefetched)
-        return
-      }
-
       interviewVoiceLoopRef.current = false
       setInterviewVoiceLoop(false)
       setIsInterviewSpeaking(false)
@@ -4856,6 +4945,10 @@ function App() {
   }
 
   const resetCardInterview = () => {
+    if (interviewMode === 'chat') {
+      startLampGenieRealtimeSession()
+      return
+    }
     stopInterviewListening()
     stopGenieSpeech()
     setPendingHearGenieText(null)
@@ -4880,11 +4973,6 @@ function App() {
     void unlockGenieSpeechAudio()
     void acquireScreenStayAwake()
     void (async () => {
-      const greeting = greetingForInterviewMode(interviewMode)
-      const prefetchPromise =
-        interviewVoiceLoopRef.current || interviewMode === 'chat'
-          ? prefetchGenieSpeechBlob(greeting)
-          : Promise.resolve(null)
       const useStreamMic = preferStreamInterviewListen()
       const micAccess = await ensureMicrophoneAccess({
         holdStream: useStreamMic,
@@ -4901,22 +4989,6 @@ function App() {
         )
         return
       }
-      if (interviewVoiceLoopRef.current || interviewMode === 'chat') {
-        if (useStreamMic) {
-          interviewVoiceLoopRef.current = true
-          setInterviewVoiceLoop(true)
-          await startStreamInterviewListening({ announce: false })
-          pauseInterviewStreamListening()
-          interviewStreamDesiredRef.current = true
-          interviewListenDesiredRef.current = true
-        }
-        const prefetched = await prefetchPromise
-        if (!showCardInterviewRef.current) {
-          return
-        }
-        beginLampGenieAfterMic(greeting, prefetched)
-        return
-      }
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
       startInterviewListening()
@@ -4924,6 +4996,7 @@ function App() {
   }
 
   const closeCardInterview = () => {
+    disconnectLampGenieRealtime()
     stopInterviewListening()
     stopGenieSpeech()
     releaseInterviewMicStream()
@@ -4943,6 +5016,7 @@ function App() {
       return
     }
 
+    disconnectLampGenieRealtime()
     stopInterviewListening()
     stopGenieSpeech()
     interviewSpeakingRef.current = false
@@ -5173,6 +5247,7 @@ function App() {
 
   useEffect(() => {
     return () => {
+      disconnectLampGenieRealtime()
       stopInterviewListening()
       stopGenieSpeech()
       if (actionFeedbackClearRef.current !== null) {

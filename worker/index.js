@@ -4902,6 +4902,174 @@ const handleCardInterviewSpeak = async (request, env) => {
   }
 }
 
+const REALTIME_VOICES = new Set([
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'sage',
+  'shimmer',
+  'verse',
+  'marin',
+  'cedar',
+])
+
+const REALTIME_VOICE_FALLBACK = {
+  nova: 'shimmer',
+  fable: 'ballad',
+  onyx: 'echo',
+}
+
+const buildLampGenieRealtimeInstructions = (shopperFirstName = '') => {
+  const shopperNote = shopperFirstName
+    ? `The shopper’s first name on their account is "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself".`
+    : ''
+  return `You are Genie, the friendly Lamp Genie voice helper for Card Genie. Speak warmly, briefly, and naturally — about 10% faster than a casual chat pace. Never sound robotic.
+
+Your job is to fill a greeting-card form by talking with the shopper.
+Essentials before finishing: senderName, a clear recipientName (not a pronoun), occasion, and keyDetails (memories, inside jokes, what to celebrate).
+Also capture tone and imageStyle when mentioned — never ask for them unless the shopper brings them up.
+
+Tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
+Image style must be the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.join('; ')}.
+
+Pronouns like him/her/them are NOT names. If they say "him and Anita", ask for the real names before other gaps.
+Guess recipientType when unclear (friend, partner, parent, etc.).
+Ask for ALL remaining essential gaps in one short question when possible — never drip one field per turn.
+${shopperNote}
+
+As soon as you learn new fields, call update_card_details with whatever you know (partial updates are fine).
+When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card.
+Do not invent facts. Keep replies to 1–2 short sentences.`
+}
+
+const lampGenieRealtimeTools = [
+  {
+    type: 'function',
+    name: 'update_card_details',
+    description:
+      'Save partial or full card form fields as soon as you learn them from the shopper.',
+    parameters: {
+      type: 'object',
+      properties: {
+        recipientName: { type: 'string' },
+        recipientType: { type: 'string' },
+        senderName: { type: 'string' },
+        occasion: { type: 'string' },
+        tone: { type: 'string', enum: CARD_INTERVIEW_TONES },
+        imageStyle: { type: 'string', enum: CARD_INTERVIEW_IMAGE_STYLES },
+        keyDetails: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'complete_card_interview',
+    description:
+      'Call when senderName, recipientName, occasion, and keyDetails are known. Pass the best-filled details.',
+    parameters: {
+      type: 'object',
+      properties: {
+        recipientName: { type: 'string' },
+        recipientType: { type: 'string' },
+        senderName: { type: 'string' },
+        occasion: { type: 'string' },
+        tone: { type: 'string', enum: CARD_INTERVIEW_TONES },
+        imageStyle: { type: 'string', enum: CARD_INTERVIEW_IMAGE_STYLES },
+        keyDetails: { type: 'string' },
+      },
+      required: ['recipientName', 'senderName', 'occasion', 'keyDetails'],
+      additionalProperties: false,
+    },
+  },
+]
+
+/** Mint ephemeral Realtime client secret for Lamp Genie WebRTC (browser never sees OPENAI_API_KEY). */
+const handleRealtimeSession = async (request, env) => {
+  const missingKeyResponse = requireOpenAIKey(request, env)
+  if (missingKeyResponse) {
+    return missingKeyResponse
+  }
+
+  const body = (await readJson(request)) || {}
+  const shopperFirstName = String(body.shopperFirstName || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 60)
+  const requestedVoice = String(body.voice || env.OPENAI_TTS_VOICE || 'echo')
+    .trim()
+    .toLowerCase()
+  const voice = REALTIME_VOICES.has(requestedVoice)
+    ? requestedVoice
+    : REALTIME_VOICE_FALLBACK[requestedVoice] || 'echo'
+  const model = env.OPENAI_REALTIME_MODEL || 'gpt-realtime'
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Safety-Identifier': `cardgenie-lamp-${shopperFirstName || 'guest'}`.slice(0, 64),
+      },
+      body: JSON.stringify({
+        expires_after: { anchor: 'created_at', seconds: 60 },
+        session: {
+          type: 'realtime',
+          model,
+          instructions: buildLampGenieRealtimeInstructions(shopperFirstName),
+          output_modalities: ['audio'],
+          audio: {
+            input: {
+              transcription: { model: 'gpt-4o-mini-transcribe' },
+              turn_detection: {
+                type: 'semantic_vad',
+                create_response: true,
+                interrupt_response: true,
+              },
+            },
+            output: {
+              voice,
+            },
+          },
+          tools: lampGenieRealtimeTools,
+          tool_choice: 'auto',
+        },
+      }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    const value = String(data?.value || data?.client_secret?.value || '').trim()
+    if (!response.ok || !value) {
+      console.error('Realtime client_secrets failed', response.status, data)
+      return jsonResponse(
+        request,
+        env,
+        { error: data?.error?.message || 'Unable to start a secure voice session.' },
+        response.status >= 400 ? response.status : 502,
+      )
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      value,
+      expires_at: data.expires_at || data.client_secret?.expires_at || null,
+      model,
+      voice,
+    })
+  } catch (error) {
+    console.error(error)
+    return jsonResponse(
+      request,
+      env,
+      { error: publicGenerationError(error, 'Unable to start a secure voice session.') },
+      isSafetyRejection(error) ? 400 : 500,
+    )
+  }
+}
+
 /** Durable Chrome mic path: MediaRecorder chunks → Whisper (no SpeechRecognition restart). */
 const handleCardInterviewTranscribe = async (request, env) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
@@ -5125,6 +5293,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/card-interview-transcribe') {
     return handleCardInterviewTranscribe(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/realtime/session') {
+    return handleRealtimeSession(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)
