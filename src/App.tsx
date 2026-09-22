@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
   connectLampGenieRealtime,
+  LAMP_GENIE_COMPLETE_LINE,
   type LampGenieRealtimeSession,
 } from './lampGenieRealtime'
 import './App.css'
@@ -4834,7 +4835,7 @@ function App() {
               }
               applyInterviewDetails(details)
               setInterviewComplete(true)
-              setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+              setInterviewNotice(LAMP_GENIE_COMPLETE_LINE)
               window.setTimeout(() => {
                 document
                   .querySelector('.form-panel .field-grid')
@@ -5220,7 +5221,7 @@ function App() {
           if (!showCardInterviewRef.current) {
             return
           }
-          setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+          setInterviewNotice(LAMP_GENIE_COMPLETE_LINE)
           window.setTimeout(() => {
             document.querySelector('.form-panel .field-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }, 80)
@@ -5230,7 +5231,7 @@ function App() {
         }
       } else if (isReady && details) {
         setInterviewComplete(true)
-        setInterviewNotice('All set — I filled the form below. Review it, then create your card.')
+        setInterviewNotice(LAMP_GENIE_COMPLETE_LINE)
         window.setTimeout(() => {
           document.querySelector('.form-panel .field-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 80)

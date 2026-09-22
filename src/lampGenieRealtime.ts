@@ -55,6 +55,10 @@ type SessionTokenResponse = {
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 
+/** Spoken + on-screen line when the interview is done. */
+export const LAMP_GENIE_COMPLETE_LINE =
+  'All set — I filled the form below. Review it, then create your card.'
+
 /** Silence / echo hallucinations often show up as CJK, Cyrillic, or Whisper filler. */
 export const isJunkRealtimeTranscript = (text: string) => {
   const trimmed = text.replace(/\s+/g, ' ').trim()
@@ -175,6 +179,7 @@ export const connectLampGenieRealtime = async (options: {
   let interviewComplete = false
   let responseInFlight = false
   let pendingReplyAfterGenie = false
+  let pendingClosingSpeech = false
   let awaitingOutputAudioEnd = false
   let lastAssistantTranscript = ''
   let ignoreUserUntil = 0
@@ -246,7 +251,7 @@ export const connectLampGenieRealtime = async (options: {
     if (cleanedUp) {
       return
     }
-    if (interviewComplete && !extra) {
+    if (interviewComplete && !extra && !pendingClosingSpeech) {
       return
     }
     if (responseInFlight || genieSpeaking || awaitingOutputAudioEnd) {
@@ -256,9 +261,18 @@ export const connectLampGenieRealtime = async (options: {
     responseInFlight = true
     setMicEnabled(false)
     clearPhantomAudio()
+    const closingExtra =
+      pendingClosingSpeech && !extra
+        ? {
+            instructions: `Say exactly this sentence, word for word, in a warm clear voice, then stop speaking: "${LAMP_GENIE_COMPLETE_LINE}"`,
+          }
+        : extra
+    if (pendingClosingSpeech) {
+      pendingClosingSpeech = false
+    }
     sendEvent({
       type: 'response.create',
-      ...(extra ? { response: extra } : {}),
+      ...(closingExtra ? { response: closingExtra } : {}),
     })
   }
 
@@ -290,12 +304,20 @@ export const connectLampGenieRealtime = async (options: {
 
     if (interviewComplete) {
       setMicEnabled(false)
+      // Closing “All set…” line finished — end the voice session shortly after.
+      if (endSessionTimer) {
+        window.clearTimeout(endSessionTimer)
+      }
+      endSessionTimer = window.setTimeout(() => {
+        endSessionTimer = 0
+        cleanup()
+      }, 1200)
       return
     }
-    if (pendingReplyAfterGenie) {
+    if (pendingReplyAfterGenie || pendingClosingSpeech) {
       pendingReplyAfterGenie = false
       window.setTimeout(() => {
-        if (!cleanedUp && !interviewComplete) {
+        if (!cleanedUp) {
           requestAssistantResponse()
         }
       }, 400)
@@ -457,6 +479,7 @@ export const connectLampGenieRealtime = async (options: {
 
     if (name === 'complete_card_interview') {
       interviewComplete = true
+      pendingClosingSpeech = true
       setMicEnabled(false)
       handlers.onDetails?.(details)
       handlers.onComplete?.(details)
@@ -469,18 +492,27 @@ export const connectLampGenieRealtime = async (options: {
           output: JSON.stringify({ ok: true, complete: true }),
         },
       })
+      // Drop any in-flight reply so the exact “All set…” line can be spoken.
+      try {
+        sendEvent({ type: 'response.cancel' })
+      } catch {
+        // Ignore.
+      }
       responseInFlight = false
+      genieSpeaking = false
+      awaitingOutputAudioEnd = false
+      pendingReplyAfterGenie = false
       requestAssistantResponse({
-        instructions:
-          'Say one short closing sentence: the form is filled — review it below and create the card. Then stop.',
+        instructions: `Say exactly this sentence, word for word, in a warm clear voice, then stop speaking: "${LAMP_GENIE_COMPLETE_LINE}"`,
       })
       if (endSessionTimer) {
         window.clearTimeout(endSessionTimer)
       }
+      // Fallback if audio-end never arrives.
       endSessionTimer = window.setTimeout(() => {
         endSessionTimer = 0
         cleanup()
-      }, 8000)
+      }, 16000)
       return
     }
 

@@ -3788,18 +3788,22 @@ CRITICAL — only respond to clear English speech from the shopper.
 
 Your job is to fill a greeting-card form by talking with the shopper.
 Essentials before finishing: senderName, a clear recipientName (not a pronoun), occasion, and keyDetails (memories, inside jokes, what to celebrate).
-Also capture tone and imageStyle WHEN THE SHOPPER MENTIONS THEM — never ask for tone or art style.
 
-Tone must be one of: ${localInterviewTones.join(', ')}.
-Image style must be the closest exact option from: ${localInterviewImageStyles.join('; ')}.
+NEVER ask about tone, mood, or image/art style. Those are optional.
+- If the shopper volunteers a tone or style, capture it.
+- If they do not mention them, leave them unset and do not bring them up.
+- Do not say things like “what tone do you want” or “any art style”.
+
+If the shopper does volunteer a tone, map it to one of: ${localInterviewTones.join(', ')}.
+If they volunteer an image style, map it to the closest option from: ${localInterviewImageStyles.join('; ')}.
 
 Pronouns like him/her/them are NOT names. If they say "him and Anita", ask for the real names before other gaps.
 Guess recipientType when unclear (friend, partner, parent, etc.).
-Ask for ALL remaining essential gaps in one short question when possible — never drip one field per turn.
+Ask for ALL remaining essential gaps (sender, recipient name, occasion, key details) in one short question when possible — never drip one field per turn.
 ${shopperNote}
 
 As soon as you learn new fields, call update_card_details with whatever you know (partial updates are fine).
-When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card — then stop talking.
+When essentials are complete, call complete_card_interview with the full details. After that tool returns, say exactly: "All set — I filled the form below. Review it, then create your card." Then stop talking.
 Do not invent facts. Keep replies to 1–2 short sentences.`
 }
 
@@ -3827,7 +3831,7 @@ const lampGenieRealtimeTools = [
     type: 'function',
     name: 'complete_card_interview',
     description:
-      'Call when senderName, recipientName, occasion, and keyDetails are known. Pass the best-filled details.',
+      'Call when senderName, recipientName, occasion, and keyDetails are known. Do not wait for tone or image style. Pass the best-filled details.',
     parameters: {
       type: 'object',
       properties: {
