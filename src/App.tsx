@@ -1863,6 +1863,22 @@ const isMobileDevice = () =>
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
+/** Safari (not Chrome/Firefox/Edge) on iPhone/iPad. */
+const isMobileSafariBrowser = () => {
+  const ua = navigator.userAgent
+  if (!/iPhone|iPad|iPod/i.test(ua) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return false
+  }
+  return /WebKit/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome|Android/i.test(ua)
+}
+
+/**
+ * Chrome iOS shows “Microphone access allowed” on every recognition.start().
+ * Prefer one long continuous session there. Mobile Safari is happier with
+ * continuous:false + quiet onend restarts.
+ */
+const preferContinuousInterviewListen = () => !isMobileDevice() || !isMobileSafariBrowser()
+
 type ScreenWakeLock = {
   released: boolean
   release: () => Promise<void>
@@ -2547,6 +2563,8 @@ function App() {
   const interviewListenWatchdogRef = useRef(0)
   const interviewLastSpeechResultAtRef = useRef(0)
   const interviewListenRestartCountRef = useRef(0)
+  const interviewListenStartAtRef = useRef(0)
+  const interviewListenRecoverAtRef = useRef(0)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -3101,14 +3119,44 @@ function App() {
       resumeListeningIfNeeded()
     }
 
-    // Do not restart on window focus — Chrome’s mic toast / URL bar focus was causing
-    // constant “Mic paused / refreshed” churn and killing live recognition mid-sentence.
+    /**
+     * Chrome’s “Microphone access allowed” toast steals focus, kills SpeechRecognition,
+     * then leaves Listening UI on with a dead session. After the toast dismisses, focus
+     * returns — quietly revive once (no getUserMedia, no notice spam).
+     */
+    const recoverAfterMicToast = () => {
+      if (document.visibilityState !== 'visible') {
+        return
+      }
+      if (!showCardInterviewRef.current || !interviewListenDesiredRef.current) {
+        return
+      }
+      if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
+        return
+      }
+      const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
+      // Still getting transcripts — don’t touch a healthy session.
+      if (quietForMs < 2000) {
+        return
+      }
+      // Session started moments ago — give it time before declaring zombie.
+      if (Date.now() - interviewListenStartAtRef.current < 2500) {
+        return
+      }
+      if (Date.now() - interviewListenRecoverAtRef.current < 9000) {
+        return
+      }
+      interviewListenRecoverAtRef.current = Date.now()
+      startInterviewListening({ announce: false })
+    }
 
     document.addEventListener('visibilitychange', resumeAfterLock)
+    window.addEventListener('focus', recoverAfterMicToast)
     window.addEventListener('pagehide', flushInterviewSession)
 
     return () => {
       document.removeEventListener('visibilitychange', resumeAfterLock)
+      window.removeEventListener('focus', recoverAfterMicToast)
       window.removeEventListener('pagehide', flushInterviewSession)
     }
   }, [
@@ -3919,6 +3967,11 @@ function App() {
       return
     }
 
+    // Prevent rapid stop/start loops (each recognition.start() can flash Chrome’s mic toast).
+    if (Date.now() - interviewListenStartAtRef.current < 1200 && interviewRecognitionRef.current) {
+      return
+    }
+
     stopInterviewListening()
     const recognition = getInterviewSpeechRecognition()
     if (!recognition) {
@@ -3926,16 +3979,18 @@ function App() {
       return
     }
 
-    const mobileMic = isMobileDevice()
+    const continuousListen = preferContinuousInterviewListen()
     interviewListenDesiredRef.current = true
+    interviewListenStartAtRef.current = Date.now()
     interviewBaseDraftRef.current = (
       interviewLatestDraftRef.current ||
       interviewBaseDraftRef.current ||
       interviewDraft
     ).trim()
     interviewLastSpeechResultAtRef.current = Date.now()
-    // continuous:true often dies silently on iPhone Chrome/Safari (“Listening…” but no audio).
-    recognition.continuous = !mobileMic
+    // Chrome iOS: continuous true = one mic-toast per listen turn, not after every pause.
+    // Mobile Safari: continuous false + onend restart is still more reliable.
+    recognition.continuous = continuousListen
     recognition.interimResults = true
     recognition.lang = 'en-US'
     recognition.maxAlternatives = 1
@@ -4012,11 +4067,12 @@ function App() {
           if (
             interviewListenDesiredRef.current &&
             !isInterviewingRef.current &&
-            !interviewSpeakingRef.current
+            !interviewSpeakingRef.current &&
+            Date.now() - interviewListenStartAtRef.current > 2000
           ) {
             startInterviewListening({ announce: false })
           }
-        }, 350)
+        }, 900)
         return
       }
       setInterviewNotice('Still listening… keep talking, or type your reply.')
@@ -4034,6 +4090,9 @@ function App() {
       if (pendingText.length >= 2 && interviewVoiceLoopRef.current && !interviewAutoSendTimerRef.current) {
         scheduleVoiceAutoSend(700)
       }
+      // continuous:true sessions should rarely end; when they do, wait longer so we don’t
+      // immediately re-trigger Chrome’s mic toast mid-sentence.
+      const restartDelay = continuousListen ? 650 : 200
       window.setTimeout(() => {
         if (
           !interviewListenDesiredRef.current ||
@@ -4042,14 +4101,20 @@ function App() {
         ) {
           return
         }
+        if (interviewRecognitionRef.current && interviewRecognitionRef.current !== recognition) {
+          return
+        }
         try {
           recognition.start()
+          interviewListenStartAtRef.current = Date.now()
           setIsInterviewListening(true)
           armInterviewListenWatchdog()
         } catch {
-          startInterviewListening({ announce: false })
+          if (Date.now() - interviewListenStartAtRef.current > 1500) {
+            startInterviewListening({ announce: false })
+          }
         }
-      }, mobileMic ? 160 : 220)
+      }, restartDelay)
     }
 
     interviewRecognitionRef.current = recognition
@@ -8367,8 +8432,8 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  Low Power Mode can still dim the screen while you talk. Your notes save as you go — turn off Low
-                  Power for the longest sessions.
+                  If Chrome shows “Microphone access allowed,” tap the page to dismiss it — listening will
+                  reconnect. Low Power Mode can still dim the screen; turn it off for the longest sessions.
                 </p>
               )}
             </div>
