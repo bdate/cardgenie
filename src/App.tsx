@@ -4780,22 +4780,44 @@ function App() {
                 return
               }
               if (!isFinal) {
-                setInterviewDraft(text.trim())
+                const partial = text.trim()
+                interviewLatestDraftRef.current = partial
+                setInterviewDraft(partial)
+                window.requestAnimationFrame(() => {
+                  scrollInterviewThreadToBottom()
+                })
                 return
               }
               const cleaned = text.trim()
               setInterviewDraft('')
+              interviewLatestDraftRef.current = ''
+              interviewBaseDraftRef.current = ''
               setInterviewMessages((current) => [...current, { role: 'user', content: cleaned }])
             },
             onAssistantTranscript: (text, isFinal) => {
-              if (lampGenieRealtimeGenerationRef.current !== generation || !text.trim() || !isFinal) {
+              if (lampGenieRealtimeGenerationRef.current !== generation || !text.trim()) {
+                return
+              }
+              // Stream Genie’s words into the last bubble while speaking.
+              if (!isFinal) {
+                const partial = text.trim()
+                setInterviewMessages((current) => {
+                  const last = current[current.length - 1]
+                  if (last?.role === 'assistant') {
+                    return [...current.slice(0, -1), { role: 'assistant', content: partial }]
+                  }
+                  return [...current, { role: 'assistant', content: partial }]
+                })
+                window.requestAnimationFrame(() => {
+                  scrollInterviewThreadToBottom()
+                })
                 return
               }
               const cleaned = text.trim()
               setInterviewMessages((current) => {
                 const last = current[current.length - 1]
-                if (last?.role === 'assistant' && last.content === cleaned) {
-                  return current
+                if (last?.role === 'assistant') {
+                  return [...current.slice(0, -1), { role: 'assistant', content: cleaned }]
                 }
                 return [...current, { role: 'assistant', content: cleaned }]
               })
@@ -5281,7 +5303,14 @@ function App() {
       scrollInterviewThreadToBottom()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [interviewMessages, interviewNotice, isInterviewing])
+  }, [
+    interviewMessages,
+    interviewDraft,
+    interviewNotice,
+    isInterviewing,
+    isInterviewListening,
+    isInterviewSpeaking,
+  ])
 
   const referenceImagePayload = referencePhotos.map((photo) => photo.dataUrl)
 
@@ -8869,6 +8898,15 @@ function App() {
                     <p>{entry.content}</p>
                   </div>
                 ))}
+                {interviewMode === 'chat' &&
+                  interviewVoiceLoop &&
+                  Boolean(interviewDraft.trim()) &&
+                  isInterviewListening && (
+                    <div className="card-interview-bubble is-user is-live" aria-live="polite">
+                      <span className="card-interview-role">You</span>
+                      <p>{interviewDraft.trim()}</p>
+                    </div>
+                  )}
               </div>
               <label className="card-interview-compose">
                 Your reply

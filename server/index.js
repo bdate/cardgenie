@@ -3882,7 +3882,7 @@ app.post('/api/realtime/session', async (req, res) => {
           audio: {
             input: {
               transcription: {
-                model: 'gpt-4o-mini-transcribe',
+                model: 'gpt-4o-transcribe',
                 language: 'en',
               },
               turn_detection: {

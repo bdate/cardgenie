@@ -572,12 +572,15 @@ export const connectLampGenieRealtime = async (options: {
       ) {
         return
       }
-      const delta = String(event.delta || '')
-      if (delta) {
-        userBuffer += delta
-        if (!isJunkRealtimeTranscript(userBuffer) && !looksLikeGenieEcho(userBuffer, lastAssistantTranscript)) {
-          handlers.onUserTranscript?.(userBuffer, false)
-        }
+      const delta = String(event.delta || event.transcript || '')
+      if (!delta) {
+        return
+      }
+      userBuffer += delta
+      const partial = userBuffer.replace(/\s+/g, ' ').trim()
+      // Show live partials generously — only block clear non-English scripts mid-utterance.
+      if (partial && !/[\u0400-\u04FF\u0600-\u06FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/.test(partial)) {
+        handlers.onUserTranscript?.(partial, false)
       }
       return
     }
