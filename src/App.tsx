@@ -2565,6 +2565,8 @@ function App() {
   const interviewListenRestartCountRef = useRef(0)
   const interviewListenStartAtRef = useRef(0)
   const interviewListenRecoverAtRef = useRef(0)
+  /** True only while SpeechRecognition is actually running (start succeeded, onend not yet fired). */
+  const interviewListenActiveRef = useRef(false)
   /** Ignore mic transcripts while Genie speaks (and briefly after) so we can keep the session alive. */
   const interviewMicIgnoreUntilRef = useRef(0)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
@@ -3816,6 +3818,7 @@ function App() {
 
   const stopInterviewListening = () => {
     interviewListenDesiredRef.current = false
+    interviewListenActiveRef.current = false
     if (interviewAutoSendTimerRef.current) {
       window.clearTimeout(interviewAutoSendTimerRef.current)
       interviewAutoSendTimerRef.current = 0
@@ -3944,8 +3947,8 @@ function App() {
       ) {
         return
       }
-      // Recognition object gone but we still want to listen — quiet revive.
-      if (!interviewRecognitionRef.current) {
+      // Recognition object gone / inactive but we still want to listen — quiet revive.
+      if (!interviewRecognitionRef.current || !interviewListenActiveRef.current) {
         startInterviewListening({ announce: false })
         return
       }
@@ -3970,7 +3973,11 @@ function App() {
     }
 
     // Prevent rapid stop/start loops (each recognition.start() can flash Chrome’s mic toast).
-    if (Date.now() - interviewListenStartAtRef.current < 1200 && interviewRecognitionRef.current) {
+    if (
+      Date.now() - interviewListenStartAtRef.current < 1200 &&
+      interviewRecognitionRef.current &&
+      interviewListenActiveRef.current
+    ) {
       return
     }
 
@@ -3983,6 +3990,7 @@ function App() {
 
     const continuousListen = preferContinuousInterviewListen()
     interviewListenDesiredRef.current = true
+    interviewListenActiveRef.current = false
     interviewListenStartAtRef.current = Date.now()
     interviewBaseDraftRef.current = (
       interviewLatestDraftRef.current ||
@@ -4092,14 +4100,25 @@ function App() {
       setInterviewNotice('Still listening… keep talking, or type your reply.')
     }
     recognition.onend = () => {
+      interviewListenActiveRef.current = false
       setIsInterviewListening(false)
-      if (
-        !interviewListenDesiredRef.current ||
-        isInterviewingRef.current ||
-        interviewSpeakingRef.current
-      ) {
+
+      // Session died while Genie was speaking / thinking — drop the dead handle so we
+      // restart for real after the follow-up (otherwise UI shows Listening but hears nothing).
+      if (isInterviewingRef.current || interviewSpeakingRef.current) {
+        if (interviewRecognitionRef.current === recognition) {
+          interviewRecognitionRef.current = null
+        }
         return
       }
+
+      if (!interviewListenDesiredRef.current) {
+        if (interviewRecognitionRef.current === recognition) {
+          interviewRecognitionRef.current = null
+        }
+        return
+      }
+
       const pendingText = (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim()
       if (pendingText.length >= 2 && interviewVoiceLoopRef.current && !interviewAutoSendTimerRef.current) {
         scheduleVoiceAutoSend(700)
@@ -4120,10 +4139,14 @@ function App() {
         }
         try {
           recognition.start()
+          interviewListenActiveRef.current = true
           interviewListenStartAtRef.current = Date.now()
+          interviewRecognitionRef.current = recognition
           setIsInterviewListening(true)
           armInterviewListenWatchdog()
         } catch {
+          interviewRecognitionRef.current = null
+          interviewListenActiveRef.current = false
           if (Date.now() - interviewListenStartAtRef.current > 1500) {
             startInterviewListening({ announce: false })
           }
@@ -4134,6 +4157,7 @@ function App() {
     interviewRecognitionRef.current = recognition
     try {
       recognition.start()
+      interviewListenActiveRef.current = true
       setIsInterviewListening(true)
       armInterviewListenWatchdog()
       if (options?.announce !== false) {
@@ -4145,20 +4169,26 @@ function App() {
       }
     } catch {
       interviewListenDesiredRef.current = false
+      interviewListenActiveRef.current = false
+      interviewRecognitionRef.current = null
       setIsInterviewListening(false)
       setInterviewNotice('Couldn’t start the microphone — tap Talk to try again, or type your reply.')
     }
   }
 
   /**
-   * Prefer reusing the live SpeechRecognition session. Fresh recognition.start() calls are what
-   * make Chrome re-show “Microphone access allowed” after every Genie follow-up.
+   * Reuse a live SpeechRecognition session when it’s actually running. If Genie’s TTS killed
+   * the session, start fresh so “Listening…” means the mic can hear again.
    */
   const ensureInterviewListening = (options?: { announce?: boolean }) => {
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
     }
-    if (interviewRecognitionRef.current && interviewListenDesiredRef.current) {
+    if (
+      interviewRecognitionRef.current &&
+      interviewListenDesiredRef.current &&
+      interviewListenActiveRef.current
+    ) {
       interviewListenDesiredRef.current = true
       setIsInterviewListening(true)
       armInterviewListenWatchdog()
@@ -4171,6 +4201,9 @@ function App() {
       }
       return
     }
+    // Dead or missing session — must call start() (may show Chrome’s mic toast once).
+    interviewRecognitionRef.current = null
+    interviewListenActiveRef.current = false
     startInterviewListening(options)
   }
 
@@ -4183,8 +4216,8 @@ function App() {
       return false
     }
     clearInterviewAutoSend()
-    // Do NOT stop SpeechRecognition here on Chrome — stopping/restarting re-triggers the mic toast.
-    // Keep the session alive and ignore transcripts while Genie talks (plus a short echo cooldown).
+    // Prefer keeping SpeechRecognition alive on Chrome to avoid mid-chat mic toasts.
+    // If Chrome kills the session during TTS playback, ensureInterviewListening restarts it.
     const keepMicSession = preferContinuousInterviewListen()
     if (!keepMicSession) {
       stopInterviewListening()
@@ -4206,7 +4239,7 @@ function App() {
     } finally {
       interviewSpeakingRef.current = false
       setIsInterviewSpeaking(false)
-      interviewMicIgnoreUntilRef.current = Date.now() + 900
+      interviewMicIgnoreUntilRef.current = Date.now() + 700
     }
     if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
       return played
@@ -4225,7 +4258,7 @@ function App() {
     setPendingHearGenieText(null)
     if (thenListen && interviewSpeechSupported) {
       await new Promise((resolve) => {
-        window.setTimeout(resolve, keepMicSession ? 120 : 280)
+        window.setTimeout(resolve, keepMicSession ? 180 : 280)
       })
       if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
         return true
@@ -8494,9 +8527,8 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  Chrome may show “Microphone access allowed” once when listening starts — tap the page to
-                  dismiss it. We keep one mic session for the whole chat so that banner shouldn’t keep coming
-                  back. Low Power Mode can still dim the screen; turn it off for longer sessions.
+                  Chrome may show “Microphone access allowed” when the mic starts — tap the page to dismiss it.
+                  If Listening is on but nothing appears, tap Talk once. Low Power Mode can still dim the screen.
                 </p>
               )}
             </div>
