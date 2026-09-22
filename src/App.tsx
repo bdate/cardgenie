@@ -408,10 +408,19 @@ const persistLampGenieVoice = (voice: LampGenieVoiceId) => {
 const lampGenieVoiceLabel = (voice: LampGenieVoiceId) =>
   lampGenieVoiceOptions.find((entry) => entry.id === voice)?.label || voice
 
+const hasFreshUserActivation = () => {
+  const activation = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation
+  if (activation && typeof activation.isActive === 'boolean') {
+    return activation.isActive
+  }
+  // Older browsers: assume the current gesture is still usable.
+  return true
+}
+
 const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void) =>
-  new Promise<void>((resolve) => {
+  new Promise<boolean>((resolve) => {
     if (!window.speechSynthesis) {
-      resolve()
+      resolve(false)
       return
     }
 
@@ -432,6 +441,7 @@ const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void)
     }
 
     let settled = false
+    let started = false
     let keepAlive = 0
     let safety = 0
     const finish = () => {
@@ -441,9 +451,10 @@ const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void)
       settled = true
       window.clearInterval(keepAlive)
       window.clearTimeout(safety)
-      resolve()
+      resolve(started)
     }
     utterance.onstart = () => {
+      started = true
       onSpeakingStart?.()
     }
     utterance.onend = finish
@@ -456,17 +467,21 @@ const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void)
       window.speechSynthesis.resume()
     }, 4000)
     safety = window.setTimeout(finish, Math.min(30000, 2500 + spoken.length * 70))
-    window.speechSynthesis.speak(utterance)
+    try {
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      finish()
+    }
   })
 
 const speakGenieAloud = async (
   text: string,
   voiceOverride?: LampGenieVoiceId,
   onSpeakingStart?: () => void,
-) => {
+): Promise<boolean> => {
   const spoken = text.replace(/\s+/g, ' ').trim()
   if (!spoken || typeof window === 'undefined') {
-    return
+    return false
   }
 
   stopGenieSpeech()
@@ -483,10 +498,11 @@ const speakGenieAloud = async (
       const contentType = response.headers.get('content-type') || blob.type || ''
       if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
         const objectUrl = URL.createObjectURL(blob)
-        await new Promise<void>((resolve) => {
+        return await new Promise<boolean>((resolve) => {
           const audio = new Audio(objectUrl)
           genieSpeechAudio = audio
           let started = false
+          let settled = false
           const markStarted = () => {
             if (started) {
               return
@@ -494,34 +510,37 @@ const speakGenieAloud = async (
             started = true
             onSpeakingStart?.()
           }
-          const finish = () => {
+          const finish = (played: boolean) => {
+            if (settled) {
+              return
+            }
+            settled = true
             if (genieSpeechAudio === audio) {
               genieSpeechAudio = null
             }
             URL.revokeObjectURL(objectUrl)
-            resolve()
+            resolve(played)
           }
           audio.onplay = markStarted
           audio.onplaying = markStarted
-          audio.onended = finish
-          audio.onerror = finish
+          audio.onended = () => finish(true)
+          audio.onerror = () => finish(started)
           void audio
             .play()
             .then(() => {
               markStarted()
             })
             .catch(() => {
-              finish()
+              finish(false)
             })
         })
-        return
       }
     }
   } catch {
     // Fall back to browser speech below.
   }
 
-  await speakGenieBrowserFallback(spoken, onSpeakingStart)
+  return speakGenieBrowserFallback(spoken, onSpeakingStart)
 }
 
 const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
@@ -2348,6 +2367,7 @@ function App() {
   const [isInterviewing, setIsInterviewing] = useState(false)
   const [isInterviewListening, setIsInterviewListening] = useState(false)
   const [interviewComplete, setInterviewComplete] = useState(false)
+  const [pendingHearGenieText, setPendingHearGenieText] = useState<string | null>(null)
   const [showLampVoicePicker, setShowLampVoicePicker] = useState(false)
   const [lampGenieVoice, setLampGenieVoice] = useState<LampGenieVoiceId>(() => readStoredLampGenieVoice())
   const [previewingLampVoice, setPreviewingLampVoice] = useState<LampGenieVoiceId | null>(null)
@@ -3782,15 +3802,17 @@ function App() {
 
   const runGenieVoiceTurn = async (text: string, thenListen: boolean) => {
     if (!interviewVoiceLoopRef.current) {
-      return
+      return false
     }
     clearInterviewAutoSend()
     stopInterviewListening()
+    setPendingHearGenieText(null)
     interviewSpeakingRef.current = true
     setIsInterviewSpeaking(true)
     setInterviewNotice('Genie is getting ready…')
+    let played = false
     try {
-      await speakGenieAloud(text, undefined, () => {
+      played = await speakGenieAloud(text, undefined, () => {
         if (interviewSpeakingRef.current && showCardInterviewRef.current) {
           setInterviewNotice('Genie is speaking…')
         }
@@ -3800,18 +3822,48 @@ function App() {
       setIsInterviewSpeaking(false)
     }
     if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
-      return
+      return played
+    }
+    if (!played) {
+      // iOS often drops the original tap while the mic dialog is open — require a fresh tap.
+      setPendingHearGenieText(text)
+      setInterviewNotice('Microphone is ready. Tap Hear Genie to begin.')
+      return false
     }
     if (thenListen && interviewSpeechSupported) {
       await new Promise((resolve) => {
         window.setTimeout(resolve, 350)
       })
       if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
-        return
+        return true
       }
       setInterviewNotice('Listening… just pause when you’re finished.')
       startInterviewListening({ announce: false })
     }
+    return true
+  }
+
+  const beginLampGenieAfterMic = (greeting: string) => {
+    interviewVoiceLoopRef.current = true
+    setInterviewVoiceLoop(true)
+    void acquireScreenStayAwake()
+    // After a delayed Allow, the original logo tap is usually stale — wait for Hear Genie.
+    if (!hasFreshUserActivation()) {
+      setPendingHearGenieText(greeting)
+      setIsInterviewSpeaking(false)
+      setInterviewNotice('Microphone is ready. Tap Hear Genie to begin.')
+      return
+    }
+    void runGenieVoiceTurn(greeting, true)
+  }
+
+  const hearPendingGenie = () => {
+    const text = pendingHearGenieText || greetingForInterviewMode(interviewMode)
+    setPendingHearGenieText(null)
+    interviewVoiceLoopRef.current = true
+    setInterviewVoiceLoop(true)
+    void acquireScreenStayAwake()
+    void runGenieVoiceTurn(text, true)
   }
 
   const previewLampGenieVoice = async (voice: LampGenieVoiceId) => {
@@ -3853,6 +3905,7 @@ function App() {
     interviewLatestDraftRef.current = ''
     setInterviewComplete(false)
     stopGenieSpeech()
+    setPendingHearGenieText(null)
     window.speechSynthesis?.getVoices()
     window.setTimeout(() => {
       document.querySelector('.card-interview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -3879,18 +3932,15 @@ function App() {
         setInterviewVoiceLoop(false)
         setIsInterviewSpeaking(false)
         setIsInterviewListening(false)
+        setPendingHearGenieText(null)
         setInterviewNotice(
           'Microphone permission is needed to talk to Genie. You can still type your reply.',
         )
         return
       }
 
-      void acquireScreenStayAwake()
-
       if (mode === 'chat') {
-        interviewVoiceLoopRef.current = true
-        setInterviewVoiceLoop(true)
-        void runGenieVoiceTurn(greetingForInterviewMode('chat'), true)
+        beginLampGenieAfterMic(greetingForInterviewMode('chat'))
         return
       }
 
@@ -3898,6 +3948,7 @@ function App() {
       setInterviewVoiceLoop(false)
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
+      void acquireScreenStayAwake()
       startInterviewListening()
     })()
   }
@@ -3905,6 +3956,7 @@ function App() {
   const resetCardInterview = () => {
     stopInterviewListening()
     stopGenieSpeech()
+    setPendingHearGenieText(null)
     setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(interviewMode) }])
     setInterviewDraft('')
     interviewBaseDraftRef.current = ''
@@ -3933,12 +3985,13 @@ function App() {
         )
         return
       }
-      if (interviewVoiceLoopRef.current) {
-        void runGenieVoiceTurn(greetingForInterviewMode(interviewMode), true)
+      if (interviewVoiceLoopRef.current || interviewMode === 'chat') {
+        beginLampGenieAfterMic(greetingForInterviewMode(interviewMode))
         return
       }
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
+      void acquireScreenStayAwake()
       startInterviewListening()
     })()
   }
@@ -3952,6 +4005,7 @@ function App() {
     setInterviewVoiceLoop(false)
     showCardInterviewRef.current = false
     setShowCardInterview(false)
+    setPendingHearGenieText(null)
     setInterviewNotice('')
     clearInterviewSession()
   }
@@ -7828,7 +7882,16 @@ function App() {
                 />
               </label>
               <div className="card-interview-actions">
-                {interviewSpeechSupported && !interviewComplete && interviewMode === 'chat' && (
+                {pendingHearGenieText && interviewMode === 'chat' && !interviewComplete && (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={hearPendingGenie}
+                  >
+                    Hear Genie
+                  </button>
+                )}
+                {interviewSpeechSupported && !interviewComplete && interviewMode === 'chat' && !pendingHearGenieText && (
                   <button
                     className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
                     type="button"
@@ -7850,6 +7913,7 @@ function App() {
                           }
                           interviewVoiceLoopRef.current = true
                           setInterviewVoiceLoop(true)
+                          void acquireScreenStayAwake()
                           startInterviewListening({ announce: true })
                         })()
                       }
