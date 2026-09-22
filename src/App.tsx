@@ -71,6 +71,7 @@ type InterviewSpeechRecognition = {
   continuous: boolean
   interimResults: boolean
   lang: string
+  maxAlternatives?: number
   start: () => void
   stop: () => void
   abort: () => void
@@ -109,22 +110,6 @@ let genieSpeechPlayer: HTMLAudioElement | null = null
 const genieSpeechPlaybackRate = 1.1
 /** Session cache so we don’t re-call getUserMedia (Chrome’s “Microphone access allowed” toast). */
 let microphoneAccessKnown: 'granted' | 'denied' | null = null
-/** Quiet hold after first grant — avoids re-prompt banners without capturing usable audio. */
-let interviewMicHoldStream: MediaStream | null = null
-
-const releaseInterviewMicHold = () => {
-  if (!interviewMicHoldStream) {
-    return
-  }
-  for (const track of interviewMicHoldStream.getTracks()) {
-    try {
-      track.stop()
-    } catch {
-      // Ignore.
-    }
-  }
-  interviewMicHoldStream = null
-}
 
 const queryMicrophonePermission = async (): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> => {
   try {
@@ -145,6 +130,7 @@ const queryMicrophonePermission = async (): Promise<'granted' | 'denied' | 'prom
 /**
  * Prefer Permissions API / session cache so we only call getUserMedia when Chrome still needs
  * a prompt. Re-calling getUserMedia after grant is what keeps flashing “Microphone access allowed”.
+ * Do NOT keep a hold stream open — it steals the mic from SpeechRecognition on mobile Chrome.
  */
 const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsupported'> => {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -170,17 +156,17 @@ const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsuppo
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    // Hold a muted stream for this interview so later Talk taps don’t re-trigger Chrome’s toast.
     for (const track of stream.getTracks()) {
-      track.enabled = false
+      try {
+        track.stop()
+      } catch {
+        // Ignore.
+      }
     }
-    releaseInterviewMicHold()
-    interviewMicHoldStream = stream
     microphoneAccessKnown = 'granted'
     return 'granted'
   } catch {
     microphoneAccessKnown = 'denied'
-    releaseInterviewMicHold()
     return 'denied'
   }
 }
@@ -3087,7 +3073,7 @@ function App() {
       })
     }
 
-    const resumeListeningIfNeeded = (announceWelcome: boolean) => {
+    const resumeListeningIfNeeded = () => {
       if (document.visibilityState !== 'visible') {
         return
       }
@@ -3097,21 +3083,12 @@ function App() {
       if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
         return
       }
-      // Chrome’s “Microphone access allowed” banner often freezes SpeechRecognition without
-      // firing visibilitychange — window focus is the reliable recovery signal.
-      if (!interviewListenDesiredRef.current && !announceWelcome) {
-        return
-      }
       const savedDraft = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '').trim()
-      if (announceWelcome) {
-        setInterviewNotice(
-          savedDraft
-            ? 'Welcome back — your notes are still here. Listening again…'
-            : 'Welcome back — listening again. Pause when you’re finished.',
-        )
-      } else {
-        setInterviewNotice('Mic refreshed — keep talking, or type your reply.')
-      }
+      setInterviewNotice(
+        savedDraft
+          ? 'Welcome back — your notes are still here. Listening again…'
+          : 'Welcome back — listening again. Pause when you’re finished.',
+      )
       interviewListenDesiredRef.current = true
       startInterviewListening({ announce: false })
     }
@@ -3121,28 +3098,17 @@ function App() {
         flushInterviewSession()
         return
       }
-      resumeListeningIfNeeded(true)
+      resumeListeningIfNeeded()
     }
 
-    const resumeAfterFocus = () => {
-      if (!interviewListenDesiredRef.current) {
-        return
-      }
-      const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
-      // Ignore routine focus events while recognition is still producing results.
-      if (quietForMs < 4500) {
-        return
-      }
-      resumeListeningIfNeeded(false)
-    }
+    // Do not restart on window focus — Chrome’s mic toast / URL bar focus was causing
+    // constant “Mic paused / refreshed” churn and killing live recognition mid-sentence.
 
     document.addEventListener('visibilitychange', resumeAfterLock)
-    window.addEventListener('focus', resumeAfterFocus)
     window.addEventListener('pagehide', flushInterviewSession)
 
     return () => {
       document.removeEventListener('visibilitychange', resumeAfterLock)
-      window.removeEventListener('focus', resumeAfterFocus)
       window.removeEventListener('pagehide', flushInterviewSession)
     }
   }, [
@@ -3916,6 +3882,8 @@ function App() {
     if (interviewListenWatchdogRef.current) {
       window.clearTimeout(interviewListenWatchdogRef.current)
     }
+    // Soft safety net only. Mobile recognition ends often (continuous:false); onend restarts it.
+    // Aggressive reconnects were flashing “Mic paused” and killing live sessions.
     interviewListenWatchdogRef.current = window.setTimeout(() => {
       interviewListenWatchdogRef.current = 0
       if (
@@ -3926,32 +3894,24 @@ function App() {
       ) {
         return
       }
+      // Recognition object gone but we still want to listen — quiet revive.
+      if (!interviewRecognitionRef.current) {
+        startInterviewListening({ announce: false })
+        return
+      }
       const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
-      // Zombie "Listening…" with no speech results — common when Chrome's mic banner steals focus.
-      if (quietForMs < 10000) {
+      if (quietForMs < 22000) {
         armInterviewListenWatchdog()
         return
       }
       interviewListenRestartCountRef.current += 1
-      if (interviewListenRestartCountRef.current <= 2) {
-        setInterviewNotice('Mic paused — reconnecting…')
+      if (interviewListenRestartCountRef.current <= 1) {
         startInterviewListening({ announce: false })
         return
       }
-      const hasDraft = Boolean(
-        (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim(),
-      )
-      if (hasDraft) {
-        interviewListenRestartCountRef.current = 0
-        startInterviewListening({ announce: false })
-        return
-      }
-      interviewListenDesiredRef.current = false
-      stopInterviewListening()
-      setInterviewNotice(
-        'Not hearing you. Tap Talk to reconnect the mic.',
-      )
-    }, 10000)
+      // Keep the Listening UI; don’t nag. User can tap Talk if needed.
+      armInterviewListenWatchdog()
+    }, 12000)
   }
 
   const startInterviewListening = (options?: { announce?: boolean }) => {
@@ -3968,12 +3928,17 @@ function App() {
 
     const mobileMic = isMobileDevice()
     interviewListenDesiredRef.current = true
-    interviewBaseDraftRef.current = interviewDraft.trim()
+    interviewBaseDraftRef.current = (
+      interviewLatestDraftRef.current ||
+      interviewBaseDraftRef.current ||
+      interviewDraft
+    ).trim()
     interviewLastSpeechResultAtRef.current = Date.now()
     // continuous:true often dies silently on iPhone Chrome/Safari (“Listening…” but no audio).
     recognition.continuous = !mobileMic
     recognition.interimResults = true
     recognition.lang = 'en-US'
+    recognition.maxAlternatives = 1
     recognition.onresult = (event) => {
       interviewLastSpeechResultAtRef.current = Date.now()
       interviewListenRestartCountRef.current = 0
@@ -4357,7 +4322,6 @@ function App() {
   const closeCardInterview = () => {
     stopInterviewListening()
     stopGenieSpeech()
-    releaseInterviewMicHold()
     interviewSpeakingRef.current = false
     setIsInterviewSpeaking(false)
     interviewVoiceLoopRef.current = false
