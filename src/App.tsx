@@ -1732,6 +1732,7 @@ const isMobileDevice = () =>
 type ScreenWakeLock = {
   released: boolean
   release: () => Promise<void>
+  addEventListener?: (type: 'release', listener: () => void, options?: { once?: boolean }) => void
 }
 
 const requestScreenWakeLock = async () => {
@@ -1746,6 +1747,37 @@ const requestScreenWakeLock = async () => {
   }
 
   return nav.wakeLock.request('screen')
+}
+
+/** iOS Low Power Mode often blocks Wake Lock; a near-silent loop can help keep the page active. */
+const silentStayAwakeAudioSrc =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
+const startSilentStayAwakeAudio = async (audio: HTMLAudioElement | null, setAudio: (next: HTMLAudioElement) => void) => {
+  try {
+    let element = audio
+    if (!element) {
+      element = new Audio(silentStayAwakeAudioSrc)
+      element.loop = true
+      element.volume = 0.01
+      element.setAttribute('playsinline', 'true')
+      setAudio(element)
+    }
+    if (element.paused) {
+      await element.play()
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+const stopSilentStayAwakeAudio = (audio: HTMLAudioElement | null) => {
+  if (!audio) {
+    return
+  }
+  audio.pause()
+  audio.currentTime = 0
 }
 
 const formatEmailAddress = (email: string) => email.trim().toLowerCase()
@@ -2466,6 +2498,8 @@ function App() {
   const [startingInterviewMode, setStartingInterviewMode] = useState<InterviewMode | null>(null)
   const actionFeedbackClearRef = useRef<number | null>(null)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
+  const screenStayAwakeAudioRef = useRef<HTMLAudioElement | null>(null)
+  const keepScreenAwakeRef = useRef(false)
   const generationPollIdRef = useRef(0)
   const draftCardRestoreAttemptedRef = useRef(false)
   const previewPanelRef = useRef<HTMLElement | null>(null)
@@ -2620,6 +2654,50 @@ function App() {
     isDelivering ||
     (showCardInterview &&
       (isInterviewListening || isInterviewSpeaking || isInterviewing || interviewVoiceLoop))
+
+  keepScreenAwakeRef.current = keepScreenAwake
+
+  const acquireScreenStayAwake = async () => {
+    if (document.visibilityState !== 'visible') {
+      return
+    }
+
+    try {
+      if (!screenWakeLockRef.current || screenWakeLockRef.current.released) {
+        const wakeLock = await requestScreenWakeLock()
+        if (wakeLock) {
+          screenWakeLockRef.current = wakeLock
+          wakeLock.addEventListener?.(
+            'release',
+            () => {
+              if (keepScreenAwakeRef.current) {
+                void acquireScreenStayAwake()
+              }
+            },
+            { once: true },
+          )
+        }
+      }
+    } catch {
+      // Unsupported, denied, or battery saver.
+    }
+
+    if (isMobileDevice()) {
+      await startSilentStayAwakeAudio(screenStayAwakeAudioRef.current, (next) => {
+        screenStayAwakeAudioRef.current = next
+      })
+    }
+  }
+
+  const releaseScreenStayAwake = async () => {
+    try {
+      await screenWakeLockRef.current?.release()
+    } catch {
+      // Already released by the browser.
+    }
+    screenWakeLockRef.current = null
+    stopSilentStayAwakeAudio(screenStayAwakeAudioRef.current)
+  }
 
   useEffect(() => {
     const restoreAccount = async () => {
@@ -3255,49 +3333,24 @@ function App() {
 
   useEffect(() => {
     if (!keepScreenAwake) {
+      void releaseScreenStayAwake()
       return
     }
 
     let cancelled = false
 
-    const acquire = async () => {
-      if (cancelled || document.visibilityState !== 'visible') {
+    const run = async () => {
+      if (cancelled) {
         return
       }
-
-      try {
-        if (screenWakeLockRef.current && !screenWakeLockRef.current.released) {
-          return
-        }
-
-        const wakeLock = await requestScreenWakeLock()
-
-        if (cancelled) {
-          await wakeLock?.release()
-          return
-        }
-
-        screenWakeLockRef.current = wakeLock
-      } catch {
-        // Unsupported, denied, or battery saver — card generation can still continue.
-      }
+      await acquireScreenStayAwake()
     }
 
-    const release = async () => {
-      try {
-        await screenWakeLockRef.current?.release()
-      } catch {
-        // Already released by the browser.
-      }
-
-      screenWakeLockRef.current = null
-    }
-
-    void acquire()
+    void run()
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void acquire()
+      if (document.visibilityState === 'visible' && keepScreenAwakeRef.current) {
+        void acquireScreenStayAwake()
       }
     }
 
@@ -3306,7 +3359,7 @@ function App() {
     return () => {
       cancelled = true
       document.removeEventListener('visibilitychange', handleVisibility)
-      void release()
+      void releaseScreenStayAwake()
     }
   }, [keepScreenAwake])
 
@@ -3831,6 +3884,8 @@ function App() {
         )
         return
       }
+
+      void acquireScreenStayAwake()
 
       if (mode === 'chat') {
         interviewVoiceLoopRef.current = true
@@ -7918,6 +7973,12 @@ function App() {
                   }`}
                 >
                   {interviewNotice}
+                </p>
+              )}
+              {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
+                <p className="card-interview-stay-awake-hint">
+                  Low Power Mode can still dim the screen while you talk. Your notes save as you go — turn off Low
+                  Power for the longest sessions.
                 </p>
               )}
             </div>

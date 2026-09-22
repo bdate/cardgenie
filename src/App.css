@@ -627,6 +627,13 @@
   font-weight: 700;
 }
 
+.card-interview-stay-awake-hint {
+  margin: 8px 0 0;
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .card-interview-voice {
   display: grid;
   gap: 10px;
