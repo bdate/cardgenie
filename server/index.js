@@ -3677,8 +3677,9 @@ app.post('/api/card-interview-speak', async (req, res) => {
         model,
         voice,
         input: text,
+        speed: 1.1,
         instructions:
-          'Speak warmly and naturally, like a friendly conversational helper named Genie. Clear, calm, and human — not robotic or overly theatrical.',
+          'Speak warmly and naturally, like a friendly conversational helper named Genie. Clear, calm, and human — not robotic or overly theatrical. Speak about 10% faster than a natural conversational pace.',
       })
     } catch (primaryError) {
       console.warn('Primary TTS model failed, falling back to tts-1-hd', primaryError)
@@ -3687,6 +3688,7 @@ app.post('/api/card-interview-speak', async (req, res) => {
         model: 'tts-1-hd',
         voice: fallbackVoice,
         input: text,
+        speed: 1.1,
       })
     }
 

@@ -4794,8 +4794,9 @@ const handleCardInterviewSpeak = async (request, env) => {
         model,
         voice,
         input: text,
+        speed: 1.1,
         instructions:
-          'Speak warmly and naturally, like a friendly conversational helper named Genie. Clear, calm, and human — not robotic or overly theatrical.',
+          'Speak warmly and naturally, like a friendly conversational helper named Genie. Clear, calm, and human — not robotic or overly theatrical. Speak about 10% faster than a natural conversational pace.',
       })
     } catch (primaryError) {
       // Older accounts may not have gpt-4o-mini-tts yet.
@@ -4805,6 +4806,7 @@ const handleCardInterviewSpeak = async (request, env) => {
         model: 'tts-1-hd',
         voice: fallbackVoice,
         input: text,
+        speed: 1.1,
       })
     }
 

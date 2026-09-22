@@ -105,6 +105,85 @@ const interviewInterimFinalizeMs = 2800
 let genieSpeechAudio: HTMLAudioElement | null = null
 /** Kept across plays so iOS can reuse an unlocked audio element mid-conversation. */
 let genieSpeechPlayer: HTMLAudioElement | null = null
+/** ~10% faster than default Genie TTS playback. */
+const genieSpeechPlaybackRate = 1.1
+/** Session cache so we don’t re-call getUserMedia (Chrome’s “Microphone access allowed” toast). */
+let microphoneAccessKnown: 'granted' | 'denied' | null = null
+/** Quiet hold after first grant — avoids re-prompt banners without capturing usable audio. */
+let interviewMicHoldStream: MediaStream | null = null
+
+const releaseInterviewMicHold = () => {
+  if (!interviewMicHoldStream) {
+    return
+  }
+  for (const track of interviewMicHoldStream.getTracks()) {
+    try {
+      track.stop()
+    } catch {
+      // Ignore.
+    }
+  }
+  interviewMicHoldStream = null
+}
+
+const queryMicrophonePermission = async (): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> => {
+  try {
+    const permissions = navigator.permissions
+    if (!permissions?.query) {
+      return 'unknown'
+    }
+    const status = await permissions.query({ name: 'microphone' as PermissionName })
+    if (status.state === 'granted' || status.state === 'denied' || status.state === 'prompt') {
+      return status.state
+    }
+  } catch {
+    // Safari and some browsers reject microphone permission queries.
+  }
+  return 'unknown'
+}
+
+/**
+ * Prefer Permissions API / session cache so we only call getUserMedia when Chrome still needs
+ * a prompt. Re-calling getUserMedia after grant is what keeps flashing “Microphone access allowed”.
+ */
+const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsupported'> => {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    return 'unsupported'
+  }
+
+  if (microphoneAccessKnown === 'granted') {
+    return 'granted'
+  }
+  if (microphoneAccessKnown === 'denied') {
+    return 'denied'
+  }
+
+  const permission = await queryMicrophonePermission()
+  if (permission === 'granted') {
+    microphoneAccessKnown = 'granted'
+    return 'granted'
+  }
+  if (permission === 'denied') {
+    microphoneAccessKnown = 'denied'
+    return 'denied'
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    // Hold a muted stream for this interview so later Talk taps don’t re-trigger Chrome’s toast.
+    for (const track of stream.getTracks()) {
+      track.enabled = false
+    }
+    releaseInterviewMicHold()
+    interviewMicHoldStream = stream
+    microphoneAccessKnown = 'granted'
+    return 'granted'
+  } catch {
+    microphoneAccessKnown = 'denied'
+    releaseInterviewMicHold()
+    return 'denied'
+  }
+}
 
 const getInterviewSpeechRecognition = () => {
   const speechWindow = window as Window & {
@@ -113,23 +192,6 @@ const getInterviewSpeechRecognition = () => {
   }
   const SpeechRecognitionCtor = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
   return SpeechRecognitionCtor ? new SpeechRecognitionCtor() : null
-}
-
-/** Ask for mic access immediately (while the tap gesture is still fresh), then release the stream. */
-const ensureMicrophoneAccess = async (): Promise<'granted' | 'denied' | 'unsupported'> => {
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-    return 'unsupported'
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    for (const track of stream.getTracks()) {
-      track.stop()
-    }
-    return 'granted'
-  } catch {
-    return 'denied'
-  }
 }
 
 const initialDetails: CardDetails = {
@@ -354,17 +416,21 @@ const stopGenieSpeech = () => {
   if (genieSpeechAudio) {
     genieSpeechAudio.pause()
     try {
-      genieSpeechAudio.removeAttribute('src')
-      genieSpeechAudio.load()
+      genieSpeechAudio.currentTime = 0
     } catch {
       // Ignore.
     }
-    // Keep the unlocked player instance for the next Genie reply.
+    // Never removeAttribute/load on the shared unlocked player — that re-locks autoplay
+    // after a delayed mic Allow and forces the Hear Genie fallback.
     if (genieSpeechAudio !== genieSpeechPlayer) {
-      genieSpeechAudio = null
-    } else {
-      genieSpeechAudio = null
+      try {
+        genieSpeechAudio.removeAttribute('src')
+        genieSpeechAudio.load()
+      } catch {
+        // Ignore.
+      }
     }
+    genieSpeechAudio = null
   }
 }
 
@@ -440,7 +506,7 @@ const speakGenieBrowserFallback = (spoken: string, onSpeakingStart?: () => void)
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(spoken)
     utterance.lang = 'en-US'
-    utterance.rate = 1.02
+    utterance.rate = 1.02 * genieSpeechPlaybackRate
     utterance.pitch = 1.05
     const voices = window.speechSynthesis.getVoices()
     const voice =
@@ -491,6 +557,7 @@ const speakGenieAloud = async (
   text: string,
   voiceOverride?: LampGenieVoiceId,
   onSpeakingStart?: () => void,
+  prefetchedBlob?: Blob | null,
 ): Promise<boolean> => {
   const spoken = text.replace(/\s+/g, ' ').trim()
   if (!spoken || typeof window === 'undefined') {
@@ -499,6 +566,61 @@ const speakGenieAloud = async (
 
   stopGenieSpeech()
   const voice = voiceOverride && isLampGenieVoiceId(voiceOverride) ? voiceOverride : readStoredLampGenieVoice()
+
+  const playBlob = (blob: Blob) =>
+    new Promise<boolean>((resolve) => {
+      const objectUrl = URL.createObjectURL(blob)
+      const audio = ensureGenieSpeechPlayer() || new Audio()
+      genieSpeechAudio = audio
+      let started = false
+      let settled = false
+      const markStarted = () => {
+        if (started) {
+          return
+        }
+        started = true
+        onSpeakingStart?.()
+      }
+      const finish = (played: boolean) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        if (genieSpeechAudio === audio) {
+          genieSpeechAudio = null
+        }
+        URL.revokeObjectURL(objectUrl)
+        resolve(played)
+      }
+      audio.onplay = markStarted
+      audio.onplaying = markStarted
+      audio.onended = () => finish(true)
+      audio.onerror = () => finish(started)
+      try {
+        audio.playbackRate = genieSpeechPlaybackRate
+      } catch {
+        // Ignore browsers that reject playbackRate before load.
+      }
+      audio.src = objectUrl
+      void audio
+        .play()
+        .then(() => {
+          try {
+            audio.playbackRate = genieSpeechPlaybackRate
+          } catch {
+            // Ignore.
+          }
+          markStarted()
+        })
+        .catch(async () => {
+          const fallbackPlayed = await speakGenieBrowserFallback(spoken, onSpeakingStart)
+          finish(fallbackPlayed)
+        })
+    })
+
+  if (prefetchedBlob && prefetchedBlob.size > 0) {
+    return playBlob(prefetchedBlob)
+  }
 
   try {
     const response = await fetch(apiUrl('/api/card-interview-speak'), {
@@ -510,45 +632,7 @@ const speakGenieAloud = async (
       const blob = await response.blob()
       const contentType = response.headers.get('content-type') || blob.type || ''
       if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
-        const objectUrl = URL.createObjectURL(blob)
-        return await new Promise<boolean>((resolve) => {
-          const audio = ensureGenieSpeechPlayer() || new Audio()
-          genieSpeechAudio = audio
-          let started = false
-          let settled = false
-          const markStarted = () => {
-            if (started) {
-              return
-            }
-            started = true
-            onSpeakingStart?.()
-          }
-          const finish = (played: boolean) => {
-            if (settled) {
-              return
-            }
-            settled = true
-            if (genieSpeechAudio === audio) {
-              genieSpeechAudio = null
-            }
-            URL.revokeObjectURL(objectUrl)
-            resolve(played)
-          }
-          audio.onplay = markStarted
-          audio.onplaying = markStarted
-          audio.onended = () => finish(true)
-          audio.onerror = () => finish(started)
-          audio.src = objectUrl
-          void audio
-            .play()
-            .then(() => {
-              markStarted()
-            })
-            .catch(async () => {
-              const fallbackPlayed = await speakGenieBrowserFallback(spoken, onSpeakingStart)
-              finish(fallbackPlayed)
-            })
-        })
+        return playBlob(blob)
       }
     }
   } catch {
@@ -556,6 +640,36 @@ const speakGenieAloud = async (
   }
 
   return speakGenieBrowserFallback(spoken, onSpeakingStart)
+}
+
+/** Start TTS fetch during the mic prompt so Genie can talk as soon as Allow lands. */
+const prefetchGenieSpeechBlob = async (
+  text: string,
+  voiceOverride?: LampGenieVoiceId,
+): Promise<Blob | null> => {
+  const spoken = text.replace(/\s+/g, ' ').trim()
+  if (!spoken || typeof window === 'undefined') {
+    return null
+  }
+  const voice = voiceOverride && isLampGenieVoiceId(voiceOverride) ? voiceOverride : readStoredLampGenieVoice()
+  try {
+    const response = await fetch(apiUrl('/api/card-interview-speak'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: spoken, voice }),
+    })
+    if (!response.ok) {
+      return null
+    }
+    const blob = await response.blob()
+    const contentType = response.headers.get('content-type') || blob.type || ''
+    if (blob.size > 0 && (/audio\//i.test(contentType) || !contentType.includes('json'))) {
+      return blob
+    }
+  } catch {
+    // Prefetch is best-effort.
+  }
+  return null
 }
 
 const isLocalApiDev = import.meta.env.DEV && !apiBaseUrl
@@ -1839,8 +1953,7 @@ const unlockGenieSpeechAudio = async () => {
     player.pause()
     player.currentTime = 0
     player.muted = false
-    player.removeAttribute('src')
-    player.load()
+    // Keep the silent clip loaded — clearing src/load() re-locks autoplay on iOS/Chrome.
     return true
   } catch {
     try {
@@ -3836,7 +3949,7 @@ function App() {
       interviewListenDesiredRef.current = false
       stopInterviewListening()
       setInterviewNotice(
-        'Not hearing you. Dismiss any “Microphone access allowed” banner, then tap Talk.',
+        'Not hearing you. Tap Talk to reconnect the mic.',
       )
     }, 10000)
   }
@@ -3993,7 +4106,11 @@ function App() {
     }
   }
 
-  const runGenieVoiceTurn = async (text: string, thenListen: boolean) => {
+  const runGenieVoiceTurn = async (
+    text: string,
+    thenListen: boolean,
+    prefetchedBlob?: Blob | null,
+  ) => {
     if (!interviewVoiceLoopRef.current) {
       return false
     }
@@ -4008,7 +4125,7 @@ function App() {
         if (interviewSpeakingRef.current && showCardInterviewRef.current) {
           setInterviewNotice('Genie is speaking…')
         }
-      })
+      }, prefetchedBlob)
     } finally {
       interviewSpeakingRef.current = false
       setIsInterviewSpeaking(false)
@@ -4041,25 +4158,32 @@ function App() {
     return true
   }
 
-  const beginLampGenieAfterMic = (greeting: string) => {
+  const beginLampGenieAfterMic = (
+    greeting: string,
+    prefetchedBlob?: Blob | null,
+  ) => {
     interviewVoiceLoopRef.current = true
     setInterviewVoiceLoop(true)
-    void unlockGenieSpeechAudio()
-    void acquireScreenStayAwake()
-    // After a delayed Allow, the original logo tap is usually stale — wait for Hear Genie.
-    if (!hasFreshUserActivation()) {
-      setPendingHearGenieText(greeting)
-      setIsInterviewSpeaking(false)
-      setInterviewNotice('Microphone is ready. Tap Hear Genie to begin.')
-      window.setTimeout(() => {
-        document.querySelector('.card-interview-actions .primary-button')?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        })
-      }, 80)
-      return
+    // Audio should already be unlocked from the logo tap. Retry only if gesture is still alive.
+    if (hasFreshUserActivation()) {
+      void unlockGenieSpeechAudio()
     }
-    void runGenieVoiceTurn(greeting, true)
+    void acquireScreenStayAwake()
+    // Always attempt playback — the unlocked player survives a delayed mic Allow.
+    // Only fall back to Hear Genie if play() actually fails.
+    void (async () => {
+      const played = await runGenieVoiceTurn(greeting, true, prefetchedBlob)
+      if (!played && showCardInterviewRef.current && interviewVoiceLoopRef.current) {
+        setPendingHearGenieText(greeting)
+        setInterviewNotice('Tap Hear Genie to start — then talk when you’re ready.')
+        window.setTimeout(() => {
+          document.querySelector('.card-interview-actions .primary-button')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        }, 80)
+      }
+    })()
   }
 
   const hearPendingGenie = () => {
@@ -4125,9 +4249,20 @@ function App() {
       return
     }
 
-    // Mic permission must come from this tap — before Genie speaks — or iOS asks after the greeting.
-    setInterviewNotice('Allow the microphone so Genie can hear you…')
+    // Unlock audio in THIS tap — before awaiting mic — so Genie can speak after a slow Allow.
+    void unlockGenieSpeechAudio()
+    void acquireScreenStayAwake()
+
+    const greeting = greetingForInterviewMode(mode)
+    setInterviewNotice(
+      microphoneAccessKnown === 'granted'
+        ? 'Genie is getting ready…'
+        : 'Allow the microphone so Genie can hear you…',
+    )
     void (async () => {
+      // Prefetch greeting TTS while the mic dialog is open.
+      const prefetchPromise =
+        mode === 'chat' ? prefetchGenieSpeechBlob(greeting) : Promise.resolve(null)
       const micAccess = await ensureMicrophoneAccess()
       if (!showCardInterviewRef.current) {
         return
@@ -4146,7 +4281,11 @@ function App() {
       }
 
       if (mode === 'chat') {
-        beginLampGenieAfterMic(greetingForInterviewMode('chat'))
+        const prefetched = await prefetchPromise
+        if (!showCardInterviewRef.current) {
+          return
+        }
+        beginLampGenieAfterMic(greeting, prefetched)
         return
       }
 
@@ -4154,8 +4293,6 @@ function App() {
       setInterviewVoiceLoop(false)
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
-      void unlockGenieSpeechAudio()
-      void acquireScreenStayAwake()
       startInterviewListening()
     })()
   }
@@ -4177,8 +4314,19 @@ function App() {
       return
     }
 
-    setInterviewNotice('Allow the microphone so Genie can hear you…')
+    setInterviewNotice(
+      microphoneAccessKnown === 'granted'
+        ? 'Genie is getting ready…'
+        : 'Allow the microphone so Genie can hear you…',
+    )
+    void unlockGenieSpeechAudio()
+    void acquireScreenStayAwake()
     void (async () => {
+      const greeting = greetingForInterviewMode(interviewMode)
+      const prefetchPromise =
+        interviewVoiceLoopRef.current || interviewMode === 'chat'
+          ? prefetchGenieSpeechBlob(greeting)
+          : Promise.resolve(null)
       const micAccess = await ensureMicrophoneAccess()
       if (!showCardInterviewRef.current) {
         return
@@ -4193,12 +4341,15 @@ function App() {
         return
       }
       if (interviewVoiceLoopRef.current || interviewMode === 'chat') {
-        beginLampGenieAfterMic(greetingForInterviewMode(interviewMode))
+        const prefetched = await prefetchPromise
+        if (!showCardInterviewRef.current) {
+          return
+        }
+        beginLampGenieAfterMic(greeting, prefetched)
         return
       }
       setIsInterviewSpeaking(false)
       setInterviewNotice('')
-      void acquireScreenStayAwake()
       startInterviewListening()
     })()
   }
@@ -4206,6 +4357,7 @@ function App() {
   const closeCardInterview = () => {
     stopInterviewListening()
     stopGenieSpeech()
+    releaseInterviewMicHold()
     interviewSpeakingRef.current = false
     setIsInterviewSpeaking(false)
     interviewVoiceLoopRef.current = false
@@ -8110,7 +8262,9 @@ function App() {
                         setInterviewNotice('Mic paused. Tap Talk when you’re ready again.')
                       } else {
                         void (async () => {
-                          setInterviewNotice('Allow the microphone so Genie can hear you…')
+                          if (microphoneAccessKnown !== 'granted') {
+                            setInterviewNotice('Allow the microphone so Genie can hear you…')
+                          }
                           const micAccess = await ensureMicrophoneAccess()
                           if (micAccess === 'denied') {
                             setInterviewNotice(
@@ -8249,8 +8403,8 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  If Chrome shows “Microphone access allowed,” tap elsewhere to dismiss it — that banner can freeze
-                  listening. Low Power Mode can still dim the screen; turn it off for the longest sessions.
+                  Low Power Mode can still dim the screen while you talk. Your notes save as you go — turn off Low
+                  Power for the longest sessions.
                 </p>
               )}
             </div>
