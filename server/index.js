@@ -3729,6 +3729,9 @@ app.post('/api/card-interview-transcribe', async (req, res) => {
 
   try {
     const binary = Buffer.from(audioBase64, 'base64')
+    if (binary.byteLength < 256) {
+      return res.json({ ok: true, text: '' })
+    }
     const extension = /mp4|m4a|aac/i.test(mimeType)
       ? 'mp4'
       : /ogg/i.test(mimeType)
@@ -3738,7 +3741,9 @@ app.post('/api/card-interview-transcribe', async (req, res) => {
           : 'webm'
     const openai = getOpenAI()
     const model = process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1'
-    const file = await toFile(binary, `interview-chunk.${extension}`, { type: mimeType })
+    const file = await toFile(binary, `interview-chunk.${extension}`, {
+      type: mimeType.includes('/') ? mimeType : `audio/${extension}`,
+    })
     const transcription = await openai.audio.transcriptions.create({
       file,
       model,
@@ -3751,6 +3756,10 @@ app.post('/api/card-interview-transcribe', async (req, res) => {
     return res.json({ ok: true, text })
   } catch (error) {
     console.error(error)
+    const message = error instanceof Error ? error.message : String(error || '')
+    if (/invalid file format|unsupported|corrupt|empty|could not be decoded/i.test(message)) {
+      return res.json({ ok: true, text: '', skipped: true })
+    }
     return res.status(isSafetyRejection(error) ? 400 : 500).json({
       error: publicGenerationError(error, 'Unable to transcribe that audio.'),
     })

@@ -5216,6 +5216,9 @@ const handleCardInterviewTranscribe = async (request, env) => {
 
   try {
     const binary = Uint8Array.from(atob(audioBase64), (char) => char.charCodeAt(0))
+    if (binary.byteLength < 256) {
+      return jsonResponse(request, env, { ok: true, text: '' })
+    }
     const extension = /mp4|m4a|aac/i.test(mimeType)
       ? 'mp4'
       : /ogg/i.test(mimeType)
@@ -5223,7 +5226,9 @@ const handleCardInterviewTranscribe = async (request, env) => {
         : /wav/i.test(mimeType)
           ? 'wav'
           : 'webm'
-    const file = new File([binary], `interview-chunk.${extension}`, { type: mimeType })
+    const file = new File([binary], `interview-chunk.${extension}`, {
+      type: mimeType.includes('/') ? mimeType : `audio/${extension}`,
+    })
     const openai = getOpenAI(env)
     const model = env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1'
     const transcription = await openai.audio.transcriptions.create({
@@ -5238,6 +5243,11 @@ const handleCardInterviewTranscribe = async (request, env) => {
     return jsonResponse(request, env, { ok: true, text })
   } catch (error) {
     console.error(error)
+    const message = error instanceof Error ? error.message : String(error || '')
+    // MediaRecorder often sends incomplete slices; treat as empty rather than alarming the UI.
+    if (/invalid file format|unsupported|corrupt|empty|could not be decoded/i.test(message)) {
+      return jsonResponse(request, env, { ok: true, text: '', skipped: true })
+    }
     return jsonResponse(
       request,
       env,

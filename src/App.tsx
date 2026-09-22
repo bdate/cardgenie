@@ -274,7 +274,12 @@ const transcribeInterviewAudioChunk = async (blob: Blob, prompt = '') => {
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(String((data as { error?: string }).error || 'Unable to transcribe that audio.'))
+    const message = String((data as { error?: string }).error || 'Unable to transcribe that audio.')
+    // Incomplete MediaRecorder slices often trigger OpenAI “Invalid file format” — skip quietly.
+    if (/invalid file format|unsupported|corrupt|empty/i.test(message)) {
+      return ''
+    }
+    throw new Error(message)
   }
   return String((data as { text?: string }).text || '')
     .replace(/\s+/g, ' ')
@@ -1951,8 +1956,12 @@ const isMobileSafariBrowser = () => {
 const preferContinuousInterviewListen = () => !isMobileDevice() || !isMobileSafariBrowser()
 
 /** Chrome/Android: durable MediaRecorder+Whisper session. Safari keeps SpeechRecognition. */
-const preferStreamInterviewListen = () =>
-  typeof MediaRecorder !== 'undefined' && preferContinuousInterviewListen()
+/**
+ * Chrome previously used MediaRecorder→Whisper for continuous Lamp Genie chat.
+ * Lamp Genie chat now uses OpenAI Realtime WebRTC, so this stream path is off.
+ * Ask Genie (quick) uses SpeechRecognition (+ type fallback) instead.
+ */
+const preferStreamInterviewListen = () => false
 
 type ScreenWakeLock = {
   released: boolean
@@ -2655,6 +2664,41 @@ function App() {
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const lampGenieRealtimeRef = useRef<LampGenieRealtimeSession | null>(null)
   const lampGenieRealtimeGenerationRef = useRef(0)
+  const askGenieLogSessionIdRef = useRef('')
+
+  const logAskGenieTurns = (
+    turns: Array<{ role: string; text: string }>,
+    ended = false,
+    modeOverride?: InterviewMode,
+  ) => {
+    if ((modeOverride || interviewMode) !== 'quick') {
+      return
+    }
+    if (!askGenieLogSessionIdRef.current) {
+      askGenieLogSessionIdRef.current =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? `ask-${crypto.randomUUID()}`
+          : `ask-${Date.now()}`
+    }
+    void fetch(apiUrl('/api/realtime/session-log'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: askGenieLogSessionIdRef.current,
+        ended,
+        shopperFirstName: accountFirstName || undefined,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+        turns: turns.map((turn) => ({
+          role: turn.role,
+          text: turn.text,
+          at: new Date().toISOString(),
+        })),
+      }),
+      keepalive: ended,
+    }).catch(() => {
+      // Best-effort test logging.
+    })
+  }
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
@@ -4919,7 +4963,10 @@ function App() {
       return
     }
 
+    askGenieLogSessionIdRef.current = ''
     setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(mode) }])
+    logAskGenieTurns([{ role: 'system', text: 'ask_genie_session_start' }], false, 'quick')
+    logAskGenieTurns([{ role: 'assistant', text: greetingForInterviewMode(mode) }], false, 'quick')
 
     if (!interviewMicSupported) {
       interviewVoiceLoopRef.current = false
@@ -5175,6 +5222,7 @@ function App() {
     setInterviewNotice('Genie is working on that…')
     isInterviewingRef.current = true
     setIsInterviewing(true)
+    logAskGenieTurns([{ role: 'user', text: message }])
 
     try {
       const userTurns = nextMessages.filter((entry) => entry.role === 'user').length
@@ -5207,6 +5255,13 @@ function App() {
             ? 'I filled in the form below. Tweak anything you want, then create your card.'
             : 'Tell me a bit more so I can fill in the form.'
       setInterviewMessages((current) => [...current, { role: 'assistant', content: assistantMessage }])
+      logAskGenieTurns(
+        [
+          { role: 'assistant', text: assistantMessage },
+          ...(isReady ? [{ role: 'system', text: 'ask_genie_complete' }] : []),
+        ],
+        Boolean(isReady),
+      )
 
       if (details) {
         applyInterviewDetails(details)
@@ -5258,6 +5313,7 @@ function App() {
           ? 'Local Genie API is not running. Start it with npm run dev:server (port 8787), then try again.'
           : friendly
       setInterviewNotice(interviewVoiceLoopRef.current ? `${message} Listening again.` : message)
+      logAskGenieTurns([{ role: 'system', text: `error: ${message}` }])
       interviewMicIgnoreUntilRef.current = Date.now()
       ensureInterviewListening({ announce: false })
     } finally {
