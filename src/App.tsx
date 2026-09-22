@@ -2565,6 +2565,8 @@ function App() {
   const interviewListenRestartCountRef = useRef(0)
   const interviewListenStartAtRef = useRef(0)
   const interviewListenRecoverAtRef = useRef(0)
+  /** Ignore mic transcripts while Genie speaks (and briefly after) so we can keep the session alive. */
+  const interviewMicIgnoreUntilRef = useRef(0)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -3999,6 +4001,15 @@ function App() {
       interviewListenRestartCountRef.current = 0
       armInterviewListenWatchdog()
 
+      // Keep the Chrome mic session alive across Genie turns — ignore echo / self-speech.
+      if (
+        isInterviewingRef.current ||
+        interviewSpeakingRef.current ||
+        Date.now() < interviewMicIgnoreUntilRef.current
+      ) {
+        return
+      }
+
       let finalChunk = ''
       let interimChunk = ''
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -4035,6 +4046,9 @@ function App() {
         interviewInterimFinalizeTimerRef.current = window.setTimeout(() => {
           interviewInterimFinalizeTimerRef.current = 0
           if (!interviewVoiceLoopRef.current || isInterviewingRef.current || interviewSpeakingRef.current) {
+            return
+          }
+          if (Date.now() < interviewMicIgnoreUntilRef.current) {
             return
           }
           const text = (interviewLatestDraftRef.current || '').trim()
@@ -4136,6 +4150,30 @@ function App() {
     }
   }
 
+  /**
+   * Prefer reusing the live SpeechRecognition session. Fresh recognition.start() calls are what
+   * make Chrome re-show “Microphone access allowed” after every Genie follow-up.
+   */
+  const ensureInterviewListening = (options?: { announce?: boolean }) => {
+    if (!interviewSpeechSupported || isInterviewingRef.current) {
+      return
+    }
+    if (interviewRecognitionRef.current && interviewListenDesiredRef.current) {
+      interviewListenDesiredRef.current = true
+      setIsInterviewListening(true)
+      armInterviewListenWatchdog()
+      if (options?.announce !== false) {
+        setInterviewNotice(
+          interviewVoiceLoopRef.current
+            ? 'Listening… just pause when you’re finished.'
+            : 'Listening… tell Genie about the card, then tap I’m done.',
+        )
+      }
+      return
+    }
+    startInterviewListening(options)
+  }
+
   const runGenieVoiceTurn = async (
     text: string,
     thenListen: boolean,
@@ -4145,7 +4183,16 @@ function App() {
       return false
     }
     clearInterviewAutoSend()
-    stopInterviewListening()
+    // Do NOT stop SpeechRecognition here on Chrome — stopping/restarting re-triggers the mic toast.
+    // Keep the session alive and ignore transcripts while Genie talks (plus a short echo cooldown).
+    const keepMicSession = preferContinuousInterviewListen()
+    if (!keepMicSession) {
+      stopInterviewListening()
+    } else {
+      interviewListenDesiredRef.current = true
+      interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
+      setIsInterviewListening(false)
+    }
     interviewSpeakingRef.current = true
     setIsInterviewSpeaking(true)
     setInterviewNotice('Genie is getting ready…')
@@ -4159,6 +4206,7 @@ function App() {
     } finally {
       interviewSpeakingRef.current = false
       setIsInterviewSpeaking(false)
+      interviewMicIgnoreUntilRef.current = Date.now() + 900
     }
     if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
       return played
@@ -4168,7 +4216,7 @@ function App() {
       setPendingHearGenieText(text)
       if (thenListen && interviewSpeechSupported) {
         setInterviewNotice('Couldn’t play audio — tap Hear Genie, or just keep talking.')
-        startInterviewListening({ announce: false })
+        ensureInterviewListening({ announce: false })
       } else {
         setInterviewNotice('Couldn’t play audio — tap Hear Genie to hear that aloud.')
       }
@@ -4177,13 +4225,15 @@ function App() {
     setPendingHearGenieText(null)
     if (thenListen && interviewSpeechSupported) {
       await new Promise((resolve) => {
-        window.setTimeout(resolve, 280)
+        window.setTimeout(resolve, keepMicSession ? 120 : 280)
       })
       if (!interviewVoiceLoopRef.current || !showCardInterviewRef.current || isInterviewingRef.current) {
         return true
       }
-      setInterviewNotice('Listening… just pause when you’re finished.')
-      startInterviewListening({ announce: false })
+      ensureInterviewListening({ announce: true })
+    } else if (keepMicSession) {
+      // Conversation finished — release the mic so Chrome can drop the indicator.
+      stopInterviewListening()
     }
     return true
   }
@@ -4487,7 +4537,17 @@ function App() {
     clearInterviewAutoSend()
     isInterviewingRef.current = true
 
-    if (isInterviewListening || interviewRecognitionRef.current) {
+    // Chrome: keep the live mic session across turns so “Microphone access allowed” doesn’t
+    // reappear after every Genie follow-up. Safari still pauses to flush final words.
+    const keepMicSession = preferContinuousInterviewListen() && interviewVoiceLoopRef.current
+    if (keepMicSession) {
+      interviewListenDesiredRef.current = true
+      interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
+      setIsInterviewListening(false)
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 320)
+      })
+    } else if (isInterviewListening || interviewRecognitionRef.current) {
       await pauseInterviewListeningForFinalWords()
     } else {
       stopInterviewListening()
@@ -4501,12 +4561,13 @@ function App() {
     ).trim()
     if (!message) {
       isInterviewingRef.current = false
+      interviewMicIgnoreUntilRef.current = Date.now()
       if (interviewVoiceLoopRef.current) {
         setInterviewNotice('Listening… just pause when you’re finished.')
-        startInterviewListening({ announce: false })
+        ensureInterviewListening({ announce: false })
       } else {
         setInterviewNotice('Say or type a bit about the card first, then tap I’m done.')
-        startInterviewListening({ announce: false })
+        ensureInterviewListening({ announce: false })
       }
       return
     }
@@ -4591,7 +4652,7 @@ function App() {
               ? 'I filled in what I know below — answer the follow-up, then tap I’m done again.'
               : 'Genie has a quick follow-up — answer it, then tap I’m done again.',
         )
-        startInterviewListening({ announce: false })
+        ensureInterviewListening({ announce: false })
       }
     } catch (caughtError) {
       setInterviewComplete(false)
@@ -4603,7 +4664,8 @@ function App() {
           ? 'Local Genie API is not running. Start it with npm run dev:server (port 8787), then try again.'
           : friendly
       setInterviewNotice(interviewVoiceLoopRef.current ? `${message} Listening again.` : message)
-      startInterviewListening({ announce: false })
+      interviewMicIgnoreUntilRef.current = Date.now()
+      ensureInterviewListening({ announce: false })
     } finally {
       isInterviewingRef.current = false
       setIsInterviewing(false)
@@ -8432,8 +8494,9 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  If Chrome shows “Microphone access allowed,” tap the page to dismiss it — listening will
-                  reconnect. Low Power Mode can still dim the screen; turn it off for the longest sessions.
+                  Chrome may show “Microphone access allowed” once when listening starts — tap the page to
+                  dismiss it. We keep one mic session for the whole chat so that banner shouldn’t keep coming
+                  back. Low Power Mode can still dim the screen; turn it off for longer sessions.
                 </p>
               )}
             </div>
