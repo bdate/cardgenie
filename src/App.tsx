@@ -2445,6 +2445,9 @@ function App() {
   const interviewSpeakingRef = useRef(false)
   const interviewAutoSendTimerRef = useRef(0)
   const interviewInterimFinalizeTimerRef = useRef(0)
+  const interviewListenWatchdogRef = useRef(0)
+  const interviewLastSpeechResultAtRef = useRef(0)
+  const interviewListenRestartCountRef = useRef(0)
   const sendCardInterviewRef = useRef<() => Promise<void>>(async () => {})
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
@@ -2971,9 +2974,8 @@ function App() {
       })
     }
 
-    const resumeAfterLock = () => {
+    const resumeListeningIfNeeded = (announceWelcome: boolean) => {
       if (document.visibilityState !== 'visible') {
-        flushInterviewSession()
         return
       }
       if (!showCardInterviewRef.current || !interviewVoiceLoopRef.current) {
@@ -2982,20 +2984,52 @@ function App() {
       if (isInterviewingRef.current || interviewSpeakingRef.current || !interviewSpeechSupported) {
         return
       }
+      // Chrome’s “Microphone access allowed” banner often freezes SpeechRecognition without
+      // firing visibilitychange — window focus is the reliable recovery signal.
+      if (!interviewListenDesiredRef.current && !announceWelcome) {
+        return
+      }
       const savedDraft = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '').trim()
-      setInterviewNotice(
-        savedDraft
-          ? 'Welcome back — your notes are still here. Listening again…'
-          : 'Welcome back — listening again. Pause when you’re finished.',
-      )
+      if (announceWelcome) {
+        setInterviewNotice(
+          savedDraft
+            ? 'Welcome back — your notes are still here. Listening again…'
+            : 'Welcome back — listening again. Pause when you’re finished.',
+        )
+      } else {
+        setInterviewNotice('Mic refreshed — keep talking, or type your reply.')
+      }
+      interviewListenDesiredRef.current = true
       startInterviewListening({ announce: false })
     }
 
+    const resumeAfterLock = () => {
+      if (document.visibilityState !== 'visible') {
+        flushInterviewSession()
+        return
+      }
+      resumeListeningIfNeeded(true)
+    }
+
+    const resumeAfterFocus = () => {
+      if (!interviewListenDesiredRef.current) {
+        return
+      }
+      const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
+      // Ignore routine focus events while recognition is still producing results.
+      if (quietForMs < 4500) {
+        return
+      }
+      resumeListeningIfNeeded(false)
+    }
+
     document.addEventListener('visibilitychange', resumeAfterLock)
+    window.addEventListener('focus', resumeAfterFocus)
     window.addEventListener('pagehide', flushInterviewSession)
 
     return () => {
       document.removeEventListener('visibilitychange', resumeAfterLock)
+      window.removeEventListener('focus', resumeAfterFocus)
       window.removeEventListener('pagehide', flushInterviewSession)
     }
   }, [
@@ -3661,6 +3695,10 @@ function App() {
       window.clearTimeout(interviewInterimFinalizeTimerRef.current)
       interviewInterimFinalizeTimerRef.current = 0
     }
+    if (interviewListenWatchdogRef.current) {
+      window.clearTimeout(interviewListenWatchdogRef.current)
+      interviewListenWatchdogRef.current = 0
+    }
     const recognition = interviewRecognitionRef.current
     interviewRecognitionRef.current = null
     if (recognition) {
@@ -3761,6 +3799,48 @@ function App() {
     }, delayMs)
   }
 
+  const armInterviewListenWatchdog = () => {
+    if (interviewListenWatchdogRef.current) {
+      window.clearTimeout(interviewListenWatchdogRef.current)
+    }
+    interviewListenWatchdogRef.current = window.setTimeout(() => {
+      interviewListenWatchdogRef.current = 0
+      if (
+        !interviewListenDesiredRef.current ||
+        isInterviewingRef.current ||
+        interviewSpeakingRef.current ||
+        !showCardInterviewRef.current
+      ) {
+        return
+      }
+      const quietForMs = Date.now() - interviewLastSpeechResultAtRef.current
+      // Zombie "Listening…" with no speech results — common when Chrome's mic banner steals focus.
+      if (quietForMs < 10000) {
+        armInterviewListenWatchdog()
+        return
+      }
+      interviewListenRestartCountRef.current += 1
+      if (interviewListenRestartCountRef.current <= 2) {
+        setInterviewNotice('Mic paused — reconnecting…')
+        startInterviewListening({ announce: false })
+        return
+      }
+      const hasDraft = Boolean(
+        (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim(),
+      )
+      if (hasDraft) {
+        interviewListenRestartCountRef.current = 0
+        startInterviewListening({ announce: false })
+        return
+      }
+      interviewListenDesiredRef.current = false
+      stopInterviewListening()
+      setInterviewNotice(
+        'Not hearing you. Dismiss any “Microphone access allowed” banner, then tap Talk.',
+      )
+    }, 10000)
+  }
+
   const startInterviewListening = (options?: { announce?: boolean }) => {
     if (!interviewSpeechSupported || isInterviewingRef.current) {
       return
@@ -3773,12 +3853,19 @@ function App() {
       return
     }
 
+    const mobileMic = isMobileDevice()
     interviewListenDesiredRef.current = true
     interviewBaseDraftRef.current = interviewDraft.trim()
-    recognition.continuous = true
+    interviewLastSpeechResultAtRef.current = Date.now()
+    // continuous:true often dies silently on iPhone Chrome/Safari (“Listening…” but no audio).
+    recognition.continuous = !mobileMic
     recognition.interimResults = true
     recognition.lang = 'en-US'
     recognition.onresult = (event) => {
+      interviewLastSpeechResultAtRef.current = Date.now()
+      interviewListenRestartCountRef.current = 0
+      armInterviewListenWatchdog()
+
       let finalChunk = ''
       let interimChunk = ''
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -3800,7 +3887,6 @@ function App() {
         interviewBaseDraftRef.current = merged
         interviewLatestDraftRef.current = merged
         setInterviewDraft(merged)
-        // Only finals start the “I’m done talking” timer — interim noise was resetting it forever.
         scheduleVoiceAutoSend(interviewVoicePauseMs)
       } else if (interimChunk) {
         const merged = `${interviewBaseDraftRef.current} ${interimChunk}`.replace(/\s+/g, ' ').trim()
@@ -3822,7 +3908,6 @@ function App() {
           if (text.length < 2) {
             return
           }
-          // Promote lasting interim text into the base draft, then send after a short beat.
           interviewBaseDraftRef.current = text
           scheduleVoiceAutoSend(900)
         }, interviewInterimFinalizeMs)
@@ -3838,17 +3923,22 @@ function App() {
         setInterviewNotice('Microphone permission is needed to talk to Genie. You can still type your reply.')
         return
       }
-      // Common on mobile Chrome/Safari while restarting recognition — ignore quietly.
-      if (
-        code === 'aborted' ||
-        code === 'no-speech' ||
-        code === 'network' ||
-        code === 'audio-capture' ||
-        code === 'interrupted'
-      ) {
+      if (code === 'aborted' || code === 'no-speech' || code === 'interrupted') {
         return
       }
       if (isInterviewingRef.current || interviewSpeakingRef.current) {
+        return
+      }
+      if (code === 'network' || code === 'audio-capture') {
+        window.setTimeout(() => {
+          if (
+            interviewListenDesiredRef.current &&
+            !isInterviewingRef.current &&
+            !interviewSpeakingRef.current
+          ) {
+            startInterviewListening({ announce: false })
+          }
+        }, 350)
         return
       }
       setInterviewNotice('Still listening… keep talking, or type your reply.')
@@ -3862,7 +3952,6 @@ function App() {
       ) {
         return
       }
-      // If we already have words and recognition dropped, finish the turn instead of hanging.
       const pendingText = (interviewLatestDraftRef.current || interviewBaseDraftRef.current).trim()
       if (pendingText.length >= 2 && interviewVoiceLoopRef.current && !interviewAutoSendTimerRef.current) {
         scheduleVoiceAutoSend(700)
@@ -3878,16 +3967,18 @@ function App() {
         try {
           recognition.start()
           setIsInterviewListening(true)
+          armInterviewListenWatchdog()
         } catch {
           startInterviewListening({ announce: false })
         }
-      }, 220)
+      }, mobileMic ? 160 : 220)
     }
 
     interviewRecognitionRef.current = recognition
     try {
       recognition.start()
       setIsInterviewListening(true)
+      armInterviewListenWatchdog()
       if (options?.announce !== false) {
         setInterviewNotice(
           interviewVoiceLoopRef.current
@@ -3898,7 +3989,7 @@ function App() {
     } catch {
       interviewListenDesiredRef.current = false
       setIsInterviewListening(false)
-      setInterviewNotice('Couldn’t start the microphone — type your reply instead.')
+      setInterviewNotice('Couldn’t start the microphone — tap Talk to try again, or type your reply.')
     }
   }
 
@@ -3960,6 +4051,12 @@ function App() {
       setPendingHearGenieText(greeting)
       setIsInterviewSpeaking(false)
       setInterviewNotice('Microphone is ready. Tap Hear Genie to begin.')
+      window.setTimeout(() => {
+        document.querySelector('.card-interview-actions .primary-button')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }, 80)
       return
     }
     void runGenieVoiceTurn(greeting, true)
@@ -8152,8 +8249,8 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  Low Power Mode can still dim the screen while you talk. Your notes save as you go — turn off Low
-                  Power for the longest sessions.
+                  If Chrome shows “Microphone access allowed,” tap elsewhere to dismiss it — that banner can freeze
+                  listening. Low Power Mode can still dim the screen; turn it off for the longest sessions.
                 </p>
               )}
             </div>
