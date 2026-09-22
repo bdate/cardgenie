@@ -3887,10 +3887,10 @@ app.post('/api/realtime/session', async (req, res) => {
               },
               turn_detection: {
                 type: 'server_vad',
-                threshold: 0.65,
+                threshold: 0.7,
                 prefix_padding_ms: 300,
-                silence_duration_ms: 700,
-                create_response: true,
+                silence_duration_ms: 1400,
+                create_response: false,
                 interrupt_response: false,
               },
             },

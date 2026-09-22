@@ -129,6 +129,8 @@ export const connectLampGenieRealtime = async (options: {
   let userBuffer = ''
   let genieSpeaking = false
   let interviewComplete = false
+  let responseInFlight = false
+  let pendingReplyAfterGenie = false
   let unmuteTimer = 0
   let endSessionTimer = 0
   let logFlushTimer = 0
@@ -180,6 +182,26 @@ export const connectLampGenieRealtime = async (options: {
     }
   }
 
+  const micIsEnabled = () => Boolean(localStream?.getAudioTracks().some((track) => track.enabled))
+
+  const requestAssistantResponse = (extra?: Record<string, unknown>) => {
+    if (cleanedUp) {
+      return
+    }
+    if (interviewComplete && !extra) {
+      return
+    }
+    if (responseInFlight || genieSpeaking) {
+      pendingReplyAfterGenie = true
+      return
+    }
+    responseInFlight = true
+    sendEvent({
+      type: 'response.create',
+      ...(extra ? { response: extra } : {}),
+    })
+  }
+
   const muteForGenieSpeech = () => {
     genieSpeaking = true
     if (unmuteTimer) {
@@ -193,25 +215,35 @@ export const connectLampGenieRealtime = async (options: {
 
   const scheduleUnmuteAfterGenie = () => {
     genieSpeaking = false
+    responseInFlight = false
     handlers.onSpeaking?.(false)
     if (interviewComplete) {
       setMicEnabled(false)
       return
     }
+    if (pendingReplyAfterGenie) {
+      pendingReplyAfterGenie = false
+      // Respond to anything the shopper said while Genie was finishing — after a beat.
+      window.setTimeout(() => {
+        if (!cleanedUp && !interviewComplete) {
+          requestAssistantResponse()
+        }
+      }, 350)
+    }
     if (unmuteTimer) {
       window.clearTimeout(unmuteTimer)
     }
-    // Brief settle so Genie's last audio / room echo isn't treated as shopper speech.
+    // Longer settle so Genie never talks over the next shopper sentence.
     unmuteTimer = window.setTimeout(() => {
       unmuteTimer = 0
-      if (!interviewComplete && !cleanedUp) {
+      if (!interviewComplete && !cleanedUp && !genieSpeaking) {
         setMicEnabled(true)
+        handlers.onNotice?.('Listening… take your time — Genie waits until you finish.')
       }
-    }, 550)
+    }, 900)
   }
 
-  const rejectPhantomUserAudio = () => {
-    sendEvent({ type: 'response.cancel' })
+  const clearPhantomAudio = () => {
     sendEvent({ type: 'input_audio_buffer.clear' })
   }
 
@@ -320,7 +352,8 @@ export const connectLampGenieRealtime = async (options: {
           output: JSON.stringify({ ok: true, saved: details }),
         },
       })
-      sendEvent({ type: 'response.create' })
+      responseInFlight = false
+      requestAssistantResponse()
       return
     }
 
@@ -338,13 +371,10 @@ export const connectLampGenieRealtime = async (options: {
           output: JSON.stringify({ ok: true, complete: true }),
         },
       })
-      // One short closing line, then end the voice session so it can't keep chatting alone.
-      sendEvent({
-        type: 'response.create',
-        response: {
-          instructions:
-            'Say one short closing sentence: the form is filled — review it below and create the card. Then stop.',
-        },
+      responseInFlight = false
+      requestAssistantResponse({
+        instructions:
+          'Say one short closing sentence: the form is filled — review it below and create the card. Then stop.',
       })
       if (endSessionTimer) {
         window.clearTimeout(endSessionTimer)
@@ -364,7 +394,8 @@ export const connectLampGenieRealtime = async (options: {
         output: JSON.stringify({ ok: false, error: `Unknown tool: ${name}` }),
       },
     })
-    sendEvent({ type: 'response.create' })
+    responseInFlight = false
+    requestAssistantResponse()
   }
 
   const handleServerEvent = (raw: string) => {
@@ -377,9 +408,9 @@ export const connectLampGenieRealtime = async (options: {
     const type = String(event.type || '')
 
     if (type === 'input_audio_buffer.speech_started') {
-      // Ignore VAD while Genie is talking or after the interview is done.
-      if (genieSpeaking || interviewComplete || !localStream?.getAudioTracks().some((t) => t.enabled)) {
-        rejectPhantomUserAudio()
+      // Ignore VAD while Genie is talking, mic is muted, or interview is done.
+      if (genieSpeaking || interviewComplete || !micIsEnabled()) {
+        clearPhantomAudio()
         return
       }
       handlers.onListening?.(true)
@@ -388,6 +419,7 @@ export const connectLampGenieRealtime = async (options: {
     }
     if (type === 'input_audio_buffer.speech_stopped') {
       handlers.onListening?.(false)
+      handlers.onNotice?.('Got it — waiting until you finish…')
       return
     }
     if (type === 'output_audio_buffer.started' || type === 'response.output_audio.delta') {
@@ -398,12 +430,19 @@ export const connectLampGenieRealtime = async (options: {
       scheduleUnmuteAfterGenie()
       return
     }
+    if (type === 'response.created') {
+      responseInFlight = true
+      return
+    }
     if (type === 'response.done') {
       scheduleUnmuteAfterGenie()
       // Prefer output_audio_transcript.done for chat text; here only handle tools.
       assistantBuffer = ''
       const response = event.response as
-        | { output?: Array<{ type?: string; name?: string; call_id?: string; arguments?: string }> }
+        | {
+            status?: string
+            output?: Array<{ type?: string; name?: string; call_id?: string; arguments?: string }>
+          }
         | undefined
       for (const item of response?.output || []) {
         if (item?.type === 'function_call' && item.name && item.call_id) {
@@ -413,7 +452,7 @@ export const connectLampGenieRealtime = async (options: {
       return
     }
     if (type === 'conversation.item.input_audio_transcription.delta') {
-      if (genieSpeaking || interviewComplete) {
+      if (interviewComplete || !micIsEnabled()) {
         return
       }
       const delta = String(event.delta || '')
@@ -428,17 +467,19 @@ export const connectLampGenieRealtime = async (options: {
     if (type === 'conversation.item.input_audio_transcription.completed') {
       const transcript = String(event.transcript || userBuffer || '').trim()
       userBuffer = ''
-      if (!transcript) {
+      if (!transcript || interviewComplete) {
         return
       }
-      if (genieSpeaking || interviewComplete || isJunkRealtimeTranscript(transcript)) {
+      if (isJunkRealtimeTranscript(transcript)) {
         recordTurn('junk', transcript)
-        rejectPhantomUserAudio()
-        handlers.onNotice?.('Still listening… say that again a bit clearer.')
+        clearPhantomAudio()
         return
       }
+      // Real English from the shopper — always keep it (never mark as junk because Genie was mid-sentence).
       recordTurn('user', transcript)
       handlers.onUserTranscript?.(transcript, true)
+      // Only reply after a finished transcript. VAD no longer auto-starts Genie.
+      requestAssistantResponse()
       return
     }
     if (type === 'response.output_audio_transcript.delta') {
@@ -465,8 +506,9 @@ export const connectLampGenieRealtime = async (options: {
     if (type === 'error') {
       const error = event.error as { message?: string } | undefined
       const message = error?.message || 'Realtime session error.'
-      // Cancels while clearing phantom audio are expected — don't alarm the shopper.
-      if (/cancel/i.test(message)) {
+      // Cancels / overlapping response races are expected during turn-taking — don't alarm.
+      if (/cancel|active response|already has an active response/i.test(message)) {
+        responseInFlight = false
         return
       }
       recordTurn('system', `error: ${message}`)
@@ -532,14 +574,11 @@ export const connectLampGenieRealtime = async (options: {
     connected = true
     handlers.onConnected?.()
     handlers.onNotice?.('Listening… talk naturally — Genie will reply by voice.')
-    // Mute briefly while Genie greets so the greeting can't re-enter the mic.
-    muteForGenieSpeech()
-    sendEvent({
-      type: 'response.create',
-      response: {
-        instructions:
-          'Greet the shopper warmly in one short English sentence, then ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style.',
-      },
+    // Mute before the greeting so Genie's voice can't re-enter the mic.
+    setMicEnabled(false)
+    requestAssistantResponse({
+      instructions:
+        'Greet the shopper warmly in one short English sentence, then ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.',
     })
     logFlushTimer = window.setInterval(() => {
       void flushSessionLog(false)
