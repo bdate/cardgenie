@@ -3952,7 +3952,7 @@ app.post('/api/realtime/session-log', (req, res) => {
     return res.status(400).json({ error: 'Missing sessionId.' })
   }
   const incomingTurns = Array.isArray(req.body?.turns) ? req.body.turns : []
-  const turns = incomingTurns
+  const normalizedIncoming = incomingTurns
     .map((entry) => ({
       role: ['user', 'assistant', 'system', 'junk'].includes(entry?.role) ? entry.role : 'system',
       text: String(entry?.text || '')
@@ -3962,11 +3962,24 @@ app.post('/api/realtime/session-log', (req, res) => {
       at: String(entry?.at || new Date().toISOString()).slice(0, 40),
     }))
     .filter((entry) => entry.text)
-    .slice(-80)
   const existing = localLampSessions.get(sessionId) || null
   const now = new Date().toISOString()
+  const mode =
+    String(req.body?.mode || existing?.mode || '').toLowerCase() === 'ask' || sessionId.startsWith('ask')
+      ? 'ask'
+      : 'lamp'
+  const merged = [...(Array.isArray(existing?.turns) ? existing.turns : [])]
+  for (const turn of normalizedIncoming) {
+    const already = merged.some(
+      (entry) => entry.role === turn.role && entry.text === turn.text && entry.at === turn.at,
+    )
+    if (!already) {
+      merged.push(turn)
+    }
+  }
   const record = {
     id: sessionId,
+    mode,
     startedAt: existing?.startedAt || now,
     updatedAt: now,
     endedAt: req.body?.ended ? now : existing?.endedAt || null,
@@ -3976,10 +3989,10 @@ app.post('/api/realtime/session-log', (req, res) => {
     userAgent: String(req.body?.userAgent || existing?.userAgent || '')
       .trim()
       .slice(0, 240),
-    turns: turns.length > 0 ? turns : existing?.turns || [],
+    turns: merged.slice(-120),
   }
   localLampSessions.set(sessionId, record)
-  return res.json({ ok: true, sessionId, turnCount: record.turns.length })
+  return res.json({ ok: true, sessionId, mode, turnCount: record.turns.length })
 })
 
 app.get('/api/admin/lamp-sessions', (req, res) => {

@@ -214,6 +214,7 @@ export const connectLampGenieRealtime = async (options: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
+          mode: 'lamp',
           ended,
           shopperFirstName: options.shopperFirstName || undefined,
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,

@@ -2665,6 +2665,7 @@ function App() {
   const lampGenieRealtimeRef = useRef<LampGenieRealtimeSession | null>(null)
   const lampGenieRealtimeGenerationRef = useRef(0)
   const askGenieLogSessionIdRef = useRef('')
+  const askGenieLogTurnsRef = useRef<Array<{ role: string; text: string; at: string }>>([])
 
   const logAskGenieTurns = (
     turns: Array<{ role: string; text: string }>,
@@ -2679,20 +2680,29 @@ function App() {
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? `ask-${crypto.randomUUID()}`
           : `ask-${Date.now()}`
+      askGenieLogTurnsRef.current = []
     }
+    const stamped = turns
+      .map((turn) => ({
+        role: turn.role,
+        text: String(turn.text || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 2000),
+        at: new Date().toISOString(),
+      }))
+      .filter((turn) => turn.text)
+    askGenieLogTurnsRef.current = [...askGenieLogTurnsRef.current, ...stamped].slice(-120)
     void fetch(apiUrl('/api/realtime/session-log'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sessionId: askGenieLogSessionIdRef.current,
+        mode: 'ask',
         ended,
         shopperFirstName: accountFirstName || undefined,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-        turns: turns.map((turn) => ({
-          role: turn.role,
-          text: turn.text,
-          at: new Date().toISOString(),
-        })),
+        turns: askGenieLogTurnsRef.current,
       }),
       keepalive: ended,
     }).catch(() => {
@@ -4964,6 +4974,7 @@ function App() {
     }
 
     askGenieLogSessionIdRef.current = ''
+    askGenieLogTurnsRef.current = []
     setInterviewMessages([{ role: 'assistant', content: greetingForInterviewMode(mode) }])
     logAskGenieTurns([{ role: 'system', text: 'ask_genie_session_start' }], false, 'quick')
     logAskGenieTurns([{ role: 'assistant', text: greetingForInterviewMode(mode) }], false, 'quick')

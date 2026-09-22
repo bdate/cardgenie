@@ -5107,7 +5107,7 @@ const handleRealtimeSessionLog = async (request, env) => {
   }
 
   const incomingTurns = Array.isArray(body.turns) ? body.turns : []
-  const turns = incomingTurns
+  const normalizedIncoming = incomingTurns
     .map((entry) => ({
       role: ['user', 'assistant', 'system', 'junk'].includes(entry?.role) ? entry.role : 'system',
       text: String(entry?.text || '')
@@ -5117,13 +5117,33 @@ const handleRealtimeSessionLog = async (request, env) => {
       at: String(entry?.at || new Date().toISOString()).slice(0, 40),
     }))
     .filter((entry) => entry.text)
-    .slice(-80)
 
   const key = `${LAMP_SESSION_LOG_PREFIX}${sessionId}`
   const existing = (await env.CARD_STORE.get(key, 'json')) || null
   const now = new Date().toISOString()
+  const mode =
+    String(body.mode || existing?.mode || '').toLowerCase() === 'ask' || sessionId.startsWith('ask')
+      ? 'ask'
+      : String(body.mode || existing?.mode || '').toLowerCase() === 'lamp' || sessionId.startsWith('lamp')
+        ? 'lamp'
+        : existing?.mode || (sessionId.startsWith('ask') ? 'ask' : 'lamp')
+
+  // Append + dedupe so Ask Genie incremental posts don't wipe earlier turns.
+  // Lamp Genie may resend the full transcript; keep the longer merged history.
+  const merged = [...(Array.isArray(existing?.turns) ? existing.turns : [])]
+  for (const turn of normalizedIncoming) {
+    const already = merged.some(
+      (entry) => entry.role === turn.role && entry.text === turn.text && entry.at === turn.at,
+    )
+    if (!already) {
+      merged.push(turn)
+    }
+  }
+  const turns = merged.slice(-120)
+
   const record = {
     id: sessionId,
+    mode,
     startedAt: existing?.startedAt || now,
     updatedAt: now,
     endedAt: body.ended ? now : existing?.endedAt || null,
@@ -5133,7 +5153,7 @@ const handleRealtimeSessionLog = async (request, env) => {
     userAgent: String(body.userAgent || existing?.userAgent || '')
       .trim()
       .slice(0, 240),
-    turns: turns.length > 0 ? turns : existing?.turns || [],
+    turns,
   }
 
   await env.CARD_STORE.put(key, JSON.stringify(record), {
@@ -5142,14 +5162,20 @@ const handleRealtimeSessionLog = async (request, env) => {
 
   const index = (await env.CARD_STORE.get(LAMP_SESSION_INDEX_KEY, 'json')) || []
   const nextIndex = [
-    { id: sessionId, updatedAt: now, endedAt: record.endedAt, turnCount: record.turns.length },
+    {
+      id: sessionId,
+      mode,
+      updatedAt: now,
+      endedAt: record.endedAt,
+      turnCount: record.turns.length,
+    },
     ...(Array.isArray(index) ? index.filter((entry) => entry?.id !== sessionId) : []),
-  ].slice(0, 40)
+  ].slice(0, 60)
   await env.CARD_STORE.put(LAMP_SESSION_INDEX_KEY, JSON.stringify(nextIndex), {
     expirationTtl: LAMP_SESSION_TTL_SECONDS,
   })
 
-  return jsonResponse(request, env, { ok: true, sessionId, turnCount: record.turns.length })
+  return jsonResponse(request, env, { ok: true, sessionId, mode, turnCount: record.turns.length })
 }
 
 const requireDeployOrAdminSecret = async (request, env) => {
