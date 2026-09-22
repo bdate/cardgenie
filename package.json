@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "deploy:worker": "wrangler deploy",
     "notify:deploy": "node scripts/notify-deploy.mjs",
+    "lamp:sessions": "node scripts/pull-lamp-sessions.mjs",
     "dev:worker": "wrangler dev",
     "lint": "eslint .",
     "preview": "vite preview"

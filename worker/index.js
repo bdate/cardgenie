@@ -4925,11 +4925,16 @@ const buildLampGenieRealtimeInstructions = (shopperFirstName = '') => {
   const shopperNote = shopperFirstName
     ? `The shopper’s first name on their account is "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself".`
     : ''
-  return `You are Genie, the friendly Lamp Genie voice helper for Card Genie. Speak warmly, briefly, and naturally — about 10% faster than a casual chat pace. Never sound robotic.
+  return `You are Genie, the friendly Lamp Genie voice helper for Card Genie. Speak warmly, briefly, and naturally in English — about 10% faster than a casual chat pace. Never sound robotic.
+
+CRITICAL — only respond to clear English speech from the shopper.
+- Ignore echo of your own voice, silence, background noise, music, and any non-English or garbled audio.
+- Never invent names or details from nonsense syllables (examples: random Japanese/Chinese/Russian fragments).
+- If you are unsure you heard real English, ask them to repeat in one short sentence — do not guess.
 
 Your job is to fill a greeting-card form by talking with the shopper.
 Essentials before finishing: senderName, a clear recipientName (not a pronoun), occasion, and keyDetails (memories, inside jokes, what to celebrate).
-Also capture tone and imageStyle when mentioned — never ask for them unless the shopper brings them up.
+Also capture tone and imageStyle WHEN THE SHOPPER MENTIONS THEM — never ask for tone or art style.
 
 Tone must be one of: ${CARD_INTERVIEW_TONES.join(', ')}.
 Image style must be the closest exact option from: ${CARD_INTERVIEW_IMAGE_STYLES.join('; ')}.
@@ -4940,7 +4945,7 @@ Ask for ALL remaining essential gaps in one short question when possible — nev
 ${shopperNote}
 
 As soon as you learn new fields, call update_card_details with whatever you know (partial updates are fine).
-When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card.
+When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card — then stop talking.
 Do not invent facts. Keep replies to 1–2 short sentences.`
 }
 
@@ -5023,11 +5028,17 @@ const handleRealtimeSession = async (request, env) => {
           output_modalities: ['audio'],
           audio: {
             input: {
-              transcription: { model: 'gpt-4o-mini-transcribe' },
+              transcription: {
+                model: 'gpt-4o-mini-transcribe',
+                language: 'en',
+              },
               turn_detection: {
-                type: 'semantic_vad',
+                type: 'server_vad',
+                threshold: 0.65,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 700,
                 create_response: true,
-                interrupt_response: true,
+                interrupt_response: false,
               },
             },
             output: {
@@ -5068,6 +5079,111 @@ const handleRealtimeSession = async (request, env) => {
       isSafetyRejection(error) ? 400 : 500,
     )
   }
+}
+
+const LAMP_SESSION_LOG_PREFIX = 'lamp-session:'
+const LAMP_SESSION_INDEX_KEY = 'lamp-session-index'
+const LAMP_SESSION_TTL_SECONDS = 60 * 60 * 24 * 14
+
+const normalizeLampSessionId = (value) =>
+  String(value || '')
+    .trim()
+    .slice(0, 80)
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+
+const handleRealtimeSessionLog = async (request, env) => {
+  if (!env.CARD_STORE) {
+    return jsonResponse(request, env, { error: 'Session log store unavailable.' }, 503)
+  }
+
+  const body = (await readJson(request)) || {}
+  const sessionId = normalizeLampSessionId(body.sessionId)
+  if (!sessionId || sessionId.length < 8) {
+    return jsonResponse(request, env, { error: 'Missing sessionId.' }, 400)
+  }
+
+  const incomingTurns = Array.isArray(body.turns) ? body.turns : []
+  const turns = incomingTurns
+    .map((entry) => ({
+      role: ['user', 'assistant', 'system', 'junk'].includes(entry?.role) ? entry.role : 'system',
+      text: String(entry?.text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 2000),
+      at: String(entry?.at || new Date().toISOString()).slice(0, 40),
+    }))
+    .filter((entry) => entry.text)
+    .slice(-80)
+
+  const key = `${LAMP_SESSION_LOG_PREFIX}${sessionId}`
+  const existing = (await env.CARD_STORE.get(key, 'json')) || null
+  const now = new Date().toISOString()
+  const record = {
+    id: sessionId,
+    startedAt: existing?.startedAt || now,
+    updatedAt: now,
+    endedAt: body.ended ? now : existing?.endedAt || null,
+    shopperFirstName: String(body.shopperFirstName || existing?.shopperFirstName || '')
+      .trim()
+      .slice(0, 60),
+    userAgent: String(body.userAgent || existing?.userAgent || '')
+      .trim()
+      .slice(0, 240),
+    turns: turns.length > 0 ? turns : existing?.turns || [],
+  }
+
+  await env.CARD_STORE.put(key, JSON.stringify(record), {
+    expirationTtl: LAMP_SESSION_TTL_SECONDS,
+  })
+
+  const index = (await env.CARD_STORE.get(LAMP_SESSION_INDEX_KEY, 'json')) || []
+  const nextIndex = [
+    { id: sessionId, updatedAt: now, endedAt: record.endedAt, turnCount: record.turns.length },
+    ...(Array.isArray(index) ? index.filter((entry) => entry?.id !== sessionId) : []),
+  ].slice(0, 40)
+  await env.CARD_STORE.put(LAMP_SESSION_INDEX_KEY, JSON.stringify(nextIndex), {
+    expirationTtl: LAMP_SESSION_TTL_SECONDS,
+  })
+
+  return jsonResponse(request, env, { ok: true, sessionId, turnCount: record.turns.length })
+}
+
+const requireDeployOrAdminSecret = async (request, env) => {
+  const expected = String(env.DEPLOY_NOTIFY_SECRET || env.ADMIN_SECRET || '').trim()
+  const headerToken = readAccountToken(request)
+  const querySecret = new URL(request.url).searchParams.get('secret') || ''
+  const provided = String(headerToken || querySecret || '').trim()
+  const secretOk = Boolean(expected && provided && provided === expected)
+  if (secretOk || (await isAdminRequest(request, env))) {
+    return null
+  }
+  return jsonResponse(request, env, { error: 'Not found.' }, 404)
+}
+
+const handleAdminLampSessions = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  if (!env.CARD_STORE) {
+    return jsonResponse(request, env, { error: 'Session log store unavailable.' }, 503)
+  }
+
+  const url = new URL(request.url)
+  const sessionId = normalizeLampSessionId(url.searchParams.get('id') || '')
+  if (sessionId) {
+    const record = await env.CARD_STORE.get(`${LAMP_SESSION_LOG_PREFIX}${sessionId}`, 'json')
+    if (!record) {
+      return jsonResponse(request, env, { error: 'Session not found.' }, 404)
+    }
+    return jsonResponse(request, env, { ok: true, session: record })
+  }
+
+  const index = (await env.CARD_STORE.get(LAMP_SESSION_INDEX_KEY, 'json')) || []
+  return jsonResponse(request, env, {
+    ok: true,
+    sessions: Array.isArray(index) ? index.slice(0, 40) : [],
+  })
 }
 
 /** Durable Chrome mic path: MediaRecorder chunks → Whisper (no SpeechRecognition restart). */
@@ -5297,6 +5413,14 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/realtime/session') {
     return handleRealtimeSession(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/realtime/session-log') {
+    return handleRealtimeSessionLog(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/lamp-sessions') {
+    return handleAdminLampSessions(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)

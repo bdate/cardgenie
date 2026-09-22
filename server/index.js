@@ -3779,11 +3779,16 @@ const buildLampGenieRealtimeInstructions = (shopperFirstName = '') => {
   const shopperNote = shopperFirstName
     ? `The shopper’s first name on their account is "${shopperFirstName}". When they say the card is from "me" or "me and …", use this first name for "me"/"myself".`
     : ''
-  return `You are Genie, the friendly Lamp Genie voice helper for Card Genie. Speak warmly, briefly, and naturally — about 10% faster than a casual chat pace. Never sound robotic.
+  return `You are Genie, the friendly Lamp Genie voice helper for Card Genie. Speak warmly, briefly, and naturally in English — about 10% faster than a casual chat pace. Never sound robotic.
+
+CRITICAL — only respond to clear English speech from the shopper.
+- Ignore echo of your own voice, silence, background noise, music, and any non-English or garbled audio.
+- Never invent names or details from nonsense syllables (examples: random Japanese/Chinese/Russian fragments).
+- If you are unsure you heard real English, ask them to repeat in one short sentence — do not guess.
 
 Your job is to fill a greeting-card form by talking with the shopper.
 Essentials before finishing: senderName, a clear recipientName (not a pronoun), occasion, and keyDetails (memories, inside jokes, what to celebrate).
-Also capture tone and imageStyle when mentioned — never ask for them unless the shopper brings them up.
+Also capture tone and imageStyle WHEN THE SHOPPER MENTIONS THEM — never ask for tone or art style.
 
 Tone must be one of: ${localInterviewTones.join(', ')}.
 Image style must be the closest exact option from: ${localInterviewImageStyles.join('; ')}.
@@ -3794,7 +3799,7 @@ Ask for ALL remaining essential gaps in one short question when possible — nev
 ${shopperNote}
 
 As soon as you learn new fields, call update_card_details with whatever you know (partial updates are fine).
-When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card.
+When essentials are complete, call complete_card_interview with the full details, then give one short closing line telling them to review the form and create their card — then stop talking.
 Do not invent facts. Keep replies to 1–2 short sentences.`
 }
 
@@ -3876,11 +3881,17 @@ app.post('/api/realtime/session', async (req, res) => {
           output_modalities: ['audio'],
           audio: {
             input: {
-              transcription: { model: 'gpt-4o-mini-transcribe' },
+              transcription: {
+                model: 'gpt-4o-mini-transcribe',
+                language: 'en',
+              },
               turn_detection: {
-                type: 'semantic_vad',
+                type: 'server_vad',
+                threshold: 0.65,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 700,
                 create_response: true,
-                interrupt_response: true,
+                interrupt_response: false,
               },
             },
             output: {
@@ -3915,6 +3926,75 @@ app.post('/api/realtime/session', async (req, res) => {
       error: publicGenerationError(error, 'Unable to start a secure voice session.'),
     })
   }
+})
+
+const localLampSessions = new Map()
+
+app.post('/api/realtime/session-log', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '')
+    .trim()
+    .slice(0, 80)
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+  if (!sessionId || sessionId.length < 8) {
+    return res.status(400).json({ error: 'Missing sessionId.' })
+  }
+  const incomingTurns = Array.isArray(req.body?.turns) ? req.body.turns : []
+  const turns = incomingTurns
+    .map((entry) => ({
+      role: ['user', 'assistant', 'system', 'junk'].includes(entry?.role) ? entry.role : 'system',
+      text: String(entry?.text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 2000),
+      at: String(entry?.at || new Date().toISOString()).slice(0, 40),
+    }))
+    .filter((entry) => entry.text)
+    .slice(-80)
+  const existing = localLampSessions.get(sessionId) || null
+  const now = new Date().toISOString()
+  const record = {
+    id: sessionId,
+    startedAt: existing?.startedAt || now,
+    updatedAt: now,
+    endedAt: req.body?.ended ? now : existing?.endedAt || null,
+    shopperFirstName: String(req.body?.shopperFirstName || existing?.shopperFirstName || '')
+      .trim()
+      .slice(0, 60),
+    userAgent: String(req.body?.userAgent || existing?.userAgent || '')
+      .trim()
+      .slice(0, 240),
+    turns: turns.length > 0 ? turns : existing?.turns || [],
+  }
+  localLampSessions.set(sessionId, record)
+  return res.json({ ok: true, sessionId, turnCount: record.turns.length })
+})
+
+app.get('/api/admin/lamp-sessions', (req, res) => {
+  const secret = String(process.env.DEPLOY_NOTIFY_SECRET || process.env.ADMIN_SECRET || '').trim()
+  const provided = String(req.query.secret || req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!secret || provided !== secret) {
+    return res.status(404).json({ error: 'Not found.' })
+  }
+  const id = String(req.query.id || '')
+    .trim()
+    .slice(0, 80)
+  if (id) {
+    const session = localLampSessions.get(id)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' })
+    }
+    return res.json({ ok: true, session })
+  }
+  const sessions = [...localLampSessions.values()]
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    .slice(0, 40)
+    .map((entry) => ({
+      id: entry.id,
+      updatedAt: entry.updatedAt,
+      endedAt: entry.endedAt,
+      turnCount: entry.turns.length,
+    }))
+  return res.json({ ok: true, sessions })
 })
 
 app.listen(port, () => {
