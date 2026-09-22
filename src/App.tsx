@@ -3946,7 +3946,7 @@ function App() {
     interviewStreamPausedRef.current = false
     interviewStreamLoopIdRef.current += 1
     if (interviewStreamChunkTimerRef.current) {
-      window.clearTimeout(interviewStreamChunkTimerRef.current)
+      window.clearInterval(interviewStreamChunkTimerRef.current)
       interviewStreamChunkTimerRef.current = 0
     }
     const recorder = interviewMediaRecorderRef.current
@@ -3976,8 +3976,8 @@ function App() {
     scheduleVoiceAutoSend(interviewVoicePauseMs)
   }
 
-  const runInterviewStreamChunkLoop = (loopId: number) => {
-    if (loopId !== interviewStreamLoopIdRef.current) {
+  const handleInterviewStreamChunk = (blob: Blob) => {
+    if (!blob || blob.size < 400) {
       return
     }
     if (
@@ -3985,118 +3985,130 @@ function App() {
       interviewStreamPausedRef.current ||
       isInterviewingRef.current ||
       interviewSpeakingRef.current ||
-      !interviewMicStreamIsLive()
+      Date.now() < interviewMicIgnoreUntilRef.current
     ) {
       return
     }
-
-    const stream = interviewMicStream
-    if (!stream) {
+    if (interviewStreamTranscribingRef.current) {
       return
     }
+    interviewStreamTranscribingRef.current = true
+    interviewLastSpeechResultAtRef.current = Date.now()
+    void (async () => {
+      try {
+        const prompt = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '')
+          .trim()
+          .slice(-180)
+        const text = await transcribeInterviewAudioChunk(blob, prompt)
+        if (
+          !interviewStreamDesiredRef.current ||
+          interviewStreamPausedRef.current ||
+          isInterviewingRef.current ||
+          interviewSpeakingRef.current
+        ) {
+          return
+        }
+        appendStreamTranscript(text)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to transcribe that audio.'
+        if (showCardInterviewRef.current && interviewStreamDesiredRef.current) {
+          setInterviewNotice(`${message} Keep talking — or type your reply.`)
+        }
+      } finally {
+        interviewStreamTranscribingRef.current = false
+      }
+    })()
+  }
 
+  /** One MediaRecorder for the whole Chrome chat — start once, never restart mid-session. */
+  const ensureInterviewMediaRecorder = () => {
+    if (interviewMediaRecorderRef.current) {
+      return interviewMediaRecorderRef.current
+    }
+    if (!interviewMicStreamIsLive() || !interviewMicStream) {
+      return null
+    }
     const mimeType = pickInterviewRecorderMimeType()
     let recorder: MediaRecorder
     try {
-      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      recorder = mimeType
+        ? new MediaRecorder(interviewMicStream, { mimeType })
+        : new MediaRecorder(interviewMicStream)
     } catch {
-      setInterviewNotice('Voice capture isn’t available in this browser — type your reply instead.')
-      interviewStreamDesiredRef.current = false
-      setIsInterviewListening(false)
-      return
+      return null
     }
-
-    interviewMediaRecorderRef.current = recorder
     recorder.ondataavailable = (event) => {
-      const blob = event.data
-      if (!blob || blob.size < 1200) {
+      const raw = event.data
+      if (!raw) {
         return
       }
-      if (
-        !interviewStreamDesiredRef.current ||
-        interviewStreamPausedRef.current ||
-        isInterviewingRef.current ||
-        interviewSpeakingRef.current ||
-        Date.now() < interviewMicIgnoreUntilRef.current
-      ) {
-        return
-      }
-      if (interviewStreamTranscribingRef.current) {
-        return
-      }
-      interviewStreamTranscribingRef.current = true
-      void (async () => {
-        try {
-          const prompt = (interviewLatestDraftRef.current || interviewBaseDraftRef.current || '')
-            .trim()
-            .slice(-180)
-          const text = await transcribeInterviewAudioChunk(blob, prompt)
-          if (
-            !interviewStreamDesiredRef.current ||
-            interviewStreamPausedRef.current ||
-            isInterviewingRef.current ||
-            interviewSpeakingRef.current
-          ) {
-            return
-          }
-          appendStreamTranscript(text)
-        } catch {
-          // Keep the long session alive; a single failed chunk shouldn’t kill listening.
-        } finally {
-          interviewStreamTranscribingRef.current = false
-        }
-      })()
+      const blob =
+        raw.type || !mimeType
+          ? raw
+          : new Blob([raw], { type: mimeType })
+      handleInterviewStreamChunk(blob)
     }
-
-    try {
-      recorder.start()
-      interviewListenActiveRef.current = true
-      setIsInterviewListening(true)
-    } catch {
-      interviewMediaRecorderRef.current = null
-      interviewStreamChunkTimerRef.current = window.setTimeout(() => {
-        runInterviewStreamChunkLoop(loopId)
-      }, 700)
-      return
+    recorder.onerror = () => {
+      if (showCardInterviewRef.current) {
+        setInterviewNotice('Mic capture hit a snag — tap Talk to continue, or type your reply.')
+      }
     }
+    interviewMediaRecorderRef.current = recorder
+    return recorder
+  }
 
-    interviewStreamChunkTimerRef.current = window.setTimeout(() => {
+  const armInterviewStreamDataPump = () => {
+    if (interviewStreamChunkTimerRef.current) {
+      window.clearInterval(interviewStreamChunkTimerRef.current)
       interviewStreamChunkTimerRef.current = 0
-      if (loopId !== interviewStreamLoopIdRef.current) {
+    }
+    // iOS often ignores start(timeslice). requestData() (or stop/start on the same stream)
+    // keeps chunks flowing without a new getUserMedia.
+    interviewStreamChunkTimerRef.current = window.setInterval(() => {
+      const recorder = interviewMediaRecorderRef.current
+      if (!recorder || !interviewStreamDesiredRef.current || interviewStreamPausedRef.current) {
+        return
+      }
+      if (recorder.state !== 'recording') {
         return
       }
       try {
-        if (recorder.state !== 'inactive') {
-          recorder.stop()
+        if (typeof recorder.requestData === 'function') {
+          recorder.requestData()
+          return
         }
       } catch {
-        // Ignore.
+        // Fall through to stop/start on the same stream.
       }
-      interviewMediaRecorderRef.current = null
-      // Same MediaStream — never re-request the mic. Just record the next slice.
-      interviewStreamChunkTimerRef.current = window.setTimeout(() => {
-        runInterviewStreamChunkLoop(loopId)
-      }, 120)
-    }, 2400)
+      try {
+        recorder.stop()
+      } catch {
+        return
+      }
+      window.setTimeout(() => {
+        const current = interviewMediaRecorderRef.current
+        if (
+          !current ||
+          current !== recorder ||
+          !interviewStreamDesiredRef.current ||
+          interviewStreamPausedRef.current ||
+          current.state !== 'inactive'
+        ) {
+          return
+        }
+        try {
+          current.start()
+        } catch {
+          // Ignore — Talk can revive.
+        }
+      }, 60)
+    }, 2200)
   }
 
   const pauseInterviewStreamListening = () => {
     interviewStreamPausedRef.current = true
     interviewMicIgnoreUntilRef.current = Number.POSITIVE_INFINITY
-    if (interviewStreamChunkTimerRef.current) {
-      window.clearTimeout(interviewStreamChunkTimerRef.current)
-      interviewStreamChunkTimerRef.current = 0
-    }
-    const recorder = interviewMediaRecorderRef.current
-    interviewMediaRecorderRef.current = null
-    if (recorder && recorder.state !== 'inactive') {
-      try {
-        recorder.ondataavailable = null
-        recorder.stop()
-      } catch {
-        // Ignore.
-      }
-    }
+    // Keep the recorder running — only ignore chunks — so we never restart mid-chat.
     setIsInterviewListening(false)
   }
 
@@ -4105,22 +4117,30 @@ function App() {
       return
     }
     if (!interviewMicStreamIsLive()) {
-      void (async () => {
-        const access = await ensureMicrophoneAccess({ holdStream: true })
-        if (access !== 'granted' || !interviewMicStreamIsLive()) {
-          setInterviewNotice(
-            'Microphone permission is needed to talk to Genie. You can still type your reply.',
-          )
-          return
-        }
-        resumeInterviewStreamListening(options)
-      })()
+      void startStreamInterviewListening(options)
       return
     }
     interviewListenDesiredRef.current = true
     interviewStreamDesiredRef.current = true
     interviewStreamPausedRef.current = false
-    interviewMicIgnoreUntilRef.current = Date.now() + 500
+    interviewMicIgnoreUntilRef.current = Date.now() + 600
+    const recorder = ensureInterviewMediaRecorder()
+    if (!recorder) {
+      setInterviewNotice('Voice capture isn’t available in this browser — type your reply instead.')
+      return
+    }
+    try {
+      if (recorder.state === 'inactive') {
+        recorder.start()
+        armInterviewStreamDataPump()
+      } else if (recorder.state === 'paused') {
+        recorder.resume()
+        armInterviewStreamDataPump()
+      }
+    } catch {
+      setInterviewNotice('Couldn’t start the microphone — tap Talk to try again, or type your reply.')
+      return
+    }
     interviewListenActiveRef.current = true
     setIsInterviewListening(true)
     if (options?.announce !== false) {
@@ -4130,21 +4150,19 @@ function App() {
           : 'Listening… tell Genie about the card, then tap I’m done.',
       )
     }
-    if (!interviewStreamChunkTimerRef.current && !interviewMediaRecorderRef.current) {
-      if (!interviewStreamLoopIdRef.current) {
-        interviewStreamLoopIdRef.current = 1
-      }
-      runInterviewStreamChunkLoop(interviewStreamLoopIdRef.current)
-    }
   }
 
-  const startStreamInterviewListening = (options?: { announce?: boolean }) => {
+  const startStreamInterviewListening = async (options?: { announce?: boolean }) => {
     if (isInterviewingRef.current) {
       return
     }
 
-    // Already in a long stream session — just unpause (never restart getUserMedia).
-    if (interviewStreamDesiredRef.current && interviewMicStreamIsLive()) {
+    // Already recording on the long session — just un-ignore chunks.
+    if (
+      interviewMediaRecorderRef.current &&
+      interviewMediaRecorderRef.current.state !== 'inactive' &&
+      interviewMicStreamIsLive()
+    ) {
       resumeInterviewStreamListening(options)
       return
     }
@@ -4162,40 +4180,56 @@ function App() {
       }
     }
 
-    void (async () => {
-      const access = await ensureMicrophoneAccess({ holdStream: true })
-      if (access !== 'granted' || !interviewMicStreamIsLive()) {
-        setInterviewNotice(
-          'Microphone permission is needed to talk to Genie. You can still type your reply.',
-        )
-        return
+    const access = await ensureMicrophoneAccess({ holdStream: true })
+    if (access !== 'granted' || !interviewMicStreamIsLive()) {
+      setInterviewNotice(
+        'Microphone permission is needed to talk to Genie. You can still type your reply.',
+      )
+      return
+    }
+    if (!showCardInterviewRef.current) {
+      return
+    }
+
+    interviewListenDesiredRef.current = true
+    interviewStreamDesiredRef.current = true
+    interviewStreamPausedRef.current = false
+    interviewMicIgnoreUntilRef.current = Date.now()
+    interviewBaseDraftRef.current = (
+      interviewLatestDraftRef.current ||
+      interviewBaseDraftRef.current ||
+      interviewDraft
+    ).trim()
+    interviewLastSpeechResultAtRef.current = Date.now()
+
+    const recorder = ensureInterviewMediaRecorder()
+    if (!recorder) {
+      setInterviewNotice('Voice capture isn’t available in this browser — type your reply instead.')
+      return
+    }
+
+    try {
+      if (recorder.state === 'inactive') {
+        recorder.start()
+        armInterviewStreamDataPump()
+      } else if (recorder.state === 'paused') {
+        recorder.resume()
+        armInterviewStreamDataPump()
       }
-      if (isInterviewingRef.current || !showCardInterviewRef.current) {
-        return
-      }
-      interviewListenDesiredRef.current = true
-      interviewStreamDesiredRef.current = true
-      interviewStreamPausedRef.current = false
-      interviewMicIgnoreUntilRef.current = Date.now()
-      interviewBaseDraftRef.current = (
-        interviewLatestDraftRef.current ||
-        interviewBaseDraftRef.current ||
-        interviewDraft
-      ).trim()
-      interviewLastSpeechResultAtRef.current = Date.now()
-      interviewStreamLoopIdRef.current += 1
-      const loopId = interviewStreamLoopIdRef.current
-      setIsInterviewListening(true)
-      interviewListenActiveRef.current = true
-      if (options?.announce !== false) {
-        setInterviewNotice(
-          interviewVoiceLoopRef.current
-            ? 'Listening… just pause when you’re finished.'
-            : 'Listening… tell Genie about the card, then tap I’m done.',
-        )
-      }
-      runInterviewStreamChunkLoop(loopId)
-    })()
+    } catch {
+      setInterviewNotice('Couldn’t start the microphone — tap Talk to try again, or type your reply.')
+      return
+    }
+
+    interviewListenActiveRef.current = true
+    setIsInterviewListening(true)
+    if (options?.announce !== false) {
+      setInterviewNotice(
+        interviewVoiceLoopRef.current
+          ? 'Listening… just pause when you’re finished.'
+          : 'Listening… tell Genie about the card, then tap I’m done.',
+      )
+    }
   }
 
   const stopInterviewListening = () => {
@@ -4352,7 +4386,7 @@ function App() {
 
   const startInterviewListening = (options?: { announce?: boolean }) => {
     if (preferStreamInterviewListen()) {
-      startStreamInterviewListening(options)
+      void startStreamInterviewListening(options)
       return
     }
 
@@ -4570,12 +4604,8 @@ function App() {
    */
   const ensureInterviewListening = (options?: { announce?: boolean }) => {
     if (preferStreamInterviewListen()) {
-      // Never tear down the MediaStream — only pause/resume chunking on the same session.
-      if (interviewMicStreamIsLive() && interviewStreamDesiredRef.current) {
-        resumeInterviewStreamListening(options)
-        return
-      }
-      startStreamInterviewListening(options)
+      // Never tear down the MediaStream/recorder — only stop ignoring chunks.
+      resumeInterviewStreamListening(options)
       return
     }
 
@@ -4778,8 +4808,9 @@ function App() {
       // Prefetch greeting TTS while the mic dialog is open.
       const prefetchPromise =
         mode === 'chat' ? prefetchGenieSpeechBlob(greeting) : Promise.resolve(null)
+      const useStreamMic = preferStreamInterviewListen()
       const micAccess = await ensureMicrophoneAccess({
-        holdStream: preferStreamInterviewListen(),
+        holdStream: useStreamMic,
       })
       if (!showCardInterviewRef.current) {
         return
@@ -4798,6 +4829,16 @@ function App() {
       }
 
       if (mode === 'chat') {
+        // Start the long MediaRecorder immediately after Allow (same gesture window),
+        // then ignore chunks while Genie greets — never wait until after TTS to start().
+        if (useStreamMic) {
+          interviewVoiceLoopRef.current = true
+          setInterviewVoiceLoop(true)
+          await startStreamInterviewListening({ announce: false })
+          pauseInterviewStreamListening()
+          interviewStreamDesiredRef.current = true
+          interviewListenDesiredRef.current = true
+        }
         const prefetched = await prefetchPromise
         if (!showCardInterviewRef.current) {
           return
@@ -4844,8 +4885,9 @@ function App() {
         interviewVoiceLoopRef.current || interviewMode === 'chat'
           ? prefetchGenieSpeechBlob(greeting)
           : Promise.resolve(null)
+      const useStreamMic = preferStreamInterviewListen()
       const micAccess = await ensureMicrophoneAccess({
-        holdStream: preferStreamInterviewListen(),
+        holdStream: useStreamMic,
       })
       if (!showCardInterviewRef.current) {
         return
@@ -4860,6 +4902,14 @@ function App() {
         return
       }
       if (interviewVoiceLoopRef.current || interviewMode === 'chat') {
+        if (useStreamMic) {
+          interviewVoiceLoopRef.current = true
+          setInterviewVoiceLoop(true)
+          await startStreamInterviewListening({ announce: false })
+          pauseInterviewStreamListening()
+          interviewStreamDesiredRef.current = true
+          interviewListenDesiredRef.current = true
+        }
         const prefetched = await prefetchPromise
         if (!showCardInterviewRef.current) {
           return
@@ -8945,9 +8995,8 @@ function App() {
               )}
               {prefersPhotoSave && interviewMode === 'chat' && !interviewComplete && (
                 <p className="card-interview-stay-awake-hint">
-                  On Chrome, Genie keeps one microphone session for the whole chat — it shouldn’t need to
-                  restart after follow-ups. Low Power Mode can still dim the screen; turn it off for longer
-                  sessions.
+                  On Chrome, Genie keeps one mic session for the whole chat. After you talk, wait a couple
+                  seconds for your words to appear. Low Power Mode can still dim the screen.
                 </p>
               )}
             </div>
