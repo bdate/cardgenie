@@ -73,9 +73,53 @@ export const isJunkRealtimeTranscript = (text: string) => {
   ) {
     return true
   }
+  // Genie often hears its own greeting as the shopper (“I'll help you create…”).
+  if (
+    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for)\b/i.test(
+      lower,
+    )
+  ) {
+    return true
+  }
   // Mostly punctuation / symbols.
   const letters = trimmed.replace(/[^a-zA-Z0-9]/g, '')
   if (letters.length < 2) {
+    return true
+  }
+  return false
+}
+
+const significantWords = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s']/g, ' ')
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2)
+
+/** True when the “user” line is mostly Genie hearing himself. */
+export const looksLikeGenieEcho = (userText: string, assistantText: string) => {
+  const user = userText.replace(/\s+/g, ' ').trim()
+  const assistant = assistantText.replace(/\s+/g, ' ').trim()
+  if (!user || !assistant) {
+    return false
+  }
+  const userWords = significantWords(user)
+  const assistantWords = new Set(significantWords(assistant))
+  if (userWords.length === 0) {
+    return true
+  }
+  const overlap = userWords.filter((word) => assistantWords.has(word)).length
+  const ratio = overlap / userWords.length
+  if (userWords.length <= 8 && ratio >= 0.45) {
+    return true
+  }
+  if (ratio >= 0.6) {
+    return true
+  }
+  const compactUser = user.toLowerCase().replace(/[^a-z0-9\s]/g, '')
+  const compactAssistant = assistant.toLowerCase().replace(/[^a-z0-9\s]/g, '')
+  if (compactUser.length >= 10 && compactAssistant.includes(compactUser)) {
     return true
   }
   return false
@@ -131,7 +175,11 @@ export const connectLampGenieRealtime = async (options: {
   let interviewComplete = false
   let responseInFlight = false
   let pendingReplyAfterGenie = false
+  let awaitingOutputAudioEnd = false
+  let lastAssistantTranscript = ''
+  let ignoreUserUntil = 0
   let unmuteTimer = 0
+  let unmuteFallbackTimer = 0
   let endSessionTimer = 0
   let logFlushTimer = 0
   let cleanedUp = false
@@ -180,6 +228,16 @@ export const connectLampGenieRealtime = async (options: {
     for (const track of localStream.getAudioTracks()) {
       track.enabled = enabled
     }
+    // Also hard-mute the WebRTC sender — track.enabled alone is flaky on mobile Chrome.
+    try {
+      pc?.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = enabled
+        }
+      })
+    } catch {
+      // Ignore.
+    }
   }
 
   const micIsEnabled = () => Boolean(localStream?.getAudioTracks().some((track) => track.enabled))
@@ -191,11 +249,13 @@ export const connectLampGenieRealtime = async (options: {
     if (interviewComplete && !extra) {
       return
     }
-    if (responseInFlight || genieSpeaking) {
+    if (responseInFlight || genieSpeaking || awaitingOutputAudioEnd) {
       pendingReplyAfterGenie = true
       return
     }
     responseInFlight = true
+    setMicEnabled(false)
+    clearPhantomAudio()
     sendEvent({
       type: 'response.create',
       ...(extra ? { response: extra } : {}),
@@ -204,43 +264,77 @@ export const connectLampGenieRealtime = async (options: {
 
   const muteForGenieSpeech = () => {
     genieSpeaking = true
+    awaitingOutputAudioEnd = true
     if (unmuteTimer) {
       window.clearTimeout(unmuteTimer)
       unmuteTimer = 0
     }
+    if (unmuteFallbackTimer) {
+      window.clearTimeout(unmuteFallbackTimer)
+      unmuteFallbackTimer = 0
+    }
     setMicEnabled(false)
+    clearPhantomAudio()
     handlers.onSpeaking?.(true)
     handlers.onListening?.(false)
   }
 
-  const scheduleUnmuteAfterGenie = () => {
+  const finishGenieTurnAndUnmute = (reason: 'audio_ended' | 'fallback') => {
     genieSpeaking = false
     responseInFlight = false
+    awaitingOutputAudioEnd = false
     handlers.onSpeaking?.(false)
+    // Ignore mic input briefly after Genie finishes — phone speakers bleed into the mic.
+    ignoreUserUntil = Date.now() + (reason === 'audio_ended' ? 1600 : 2000)
+    clearPhantomAudio()
+
     if (interviewComplete) {
       setMicEnabled(false)
       return
     }
     if (pendingReplyAfterGenie) {
       pendingReplyAfterGenie = false
-      // Respond to anything the shopper said while Genie was finishing — after a beat.
       window.setTimeout(() => {
         if (!cleanedUp && !interviewComplete) {
           requestAssistantResponse()
         }
-      }, 350)
+      }, 400)
     }
     if (unmuteTimer) {
       window.clearTimeout(unmuteTimer)
     }
-    // Longer settle so Genie never talks over the next shopper sentence.
     unmuteTimer = window.setTimeout(() => {
       unmuteTimer = 0
-      if (!interviewComplete && !cleanedUp && !genieSpeaking) {
+      if (!interviewComplete && !cleanedUp && !genieSpeaking && !awaitingOutputAudioEnd) {
         setMicEnabled(true)
-        handlers.onNotice?.('Listening… take your time — Genie waits until you finish.')
+        handlers.onNotice?.('Your turn — talk when you’re ready. Genie will wait.')
       }
-    }, 900)
+    }, reason === 'audio_ended' ? 1600 : 2000)
+  }
+
+  const scheduleUnmuteAfterAudioEnds = () => {
+    if (unmuteFallbackTimer) {
+      window.clearTimeout(unmuteFallbackTimer)
+      unmuteFallbackTimer = 0
+    }
+    finishGenieTurnAndUnmute('audio_ended')
+  }
+
+  const scheduleUnmuteFallbackFromTranscript = (transcript: string) => {
+    // response.done can fire before audio finishes — never unmute on that alone.
+    // Estimate remaining playback, then force-unmute if output_audio_buffer.stopped never arrives.
+    const words = significantWords(transcript).length
+    const estimateMs = Math.min(12000, Math.max(2800, words * 200 + 1800))
+    if (unmuteFallbackTimer) {
+      window.clearTimeout(unmuteFallbackTimer)
+    }
+    unmuteFallbackTimer = window.setTimeout(() => {
+      unmuteFallbackTimer = 0
+      if (awaitingOutputAudioEnd || genieSpeaking) {
+        recordTurn('system', `unmute_fallback after ${estimateMs}ms`)
+        finishGenieTurnAndUnmute('fallback')
+      }
+    }, estimateMs)
   }
 
   const clearPhantomAudio = () => {
@@ -256,6 +350,10 @@ export const connectLampGenieRealtime = async (options: {
     if (unmuteTimer) {
       window.clearTimeout(unmuteTimer)
       unmuteTimer = 0
+    }
+    if (unmuteFallbackTimer) {
+      window.clearTimeout(unmuteFallbackTimer)
+      unmuteFallbackTimer = 0
     }
     if (endSessionTimer) {
       window.clearTimeout(endSessionTimer)
@@ -408,8 +506,14 @@ export const connectLampGenieRealtime = async (options: {
     const type = String(event.type || '')
 
     if (type === 'input_audio_buffer.speech_started') {
-      // Ignore VAD while Genie is talking, mic is muted, or interview is done.
-      if (genieSpeaking || interviewComplete || !micIsEnabled()) {
+      // Ignore VAD while Genie is talking, mic is muted, cooldown, or interview is done.
+      if (
+        genieSpeaking ||
+        awaitingOutputAudioEnd ||
+        interviewComplete ||
+        !micIsEnabled() ||
+        Date.now() < ignoreUserUntil
+      ) {
         clearPhantomAudio()
         return
       }
@@ -418,6 +522,10 @@ export const connectLampGenieRealtime = async (options: {
       return
     }
     if (type === 'input_audio_buffer.speech_stopped') {
+      if (genieSpeaking || awaitingOutputAudioEnd || Date.now() < ignoreUserUntil) {
+        clearPhantomAudio()
+        return
+      }
       handlers.onListening?.(false)
       handlers.onNotice?.('Got it — waiting until you finish…')
       return
@@ -427,17 +535,17 @@ export const connectLampGenieRealtime = async (options: {
       return
     }
     if (type === 'output_audio_buffer.stopped') {
-      scheduleUnmuteAfterGenie()
+      scheduleUnmuteAfterAudioEnds()
       return
     }
     if (type === 'response.created') {
       responseInFlight = true
+      muteForGenieSpeech()
       return
     }
     if (type === 'response.done') {
-      scheduleUnmuteAfterGenie()
-      // Prefer output_audio_transcript.done for chat text; here only handle tools.
-      assistantBuffer = ''
+      // Do NOT unmute here — audio may still be playing. Fallback only.
+      responseInFlight = false
       const response = event.response as
         | {
             status?: string
@@ -449,16 +557,25 @@ export const connectLampGenieRealtime = async (options: {
           handleToolCall(item.name, item.call_id, String(item.arguments || '{}'))
         }
       }
+      if (awaitingOutputAudioEnd || genieSpeaking) {
+        scheduleUnmuteFallbackFromTranscript(lastAssistantTranscript || assistantBuffer)
+      }
       return
     }
     if (type === 'conversation.item.input_audio_transcription.delta') {
-      if (interviewComplete || !micIsEnabled()) {
+      if (
+        interviewComplete ||
+        !micIsEnabled() ||
+        genieSpeaking ||
+        awaitingOutputAudioEnd ||
+        Date.now() < ignoreUserUntil
+      ) {
         return
       }
       const delta = String(event.delta || '')
       if (delta) {
         userBuffer += delta
-        if (!isJunkRealtimeTranscript(userBuffer)) {
+        if (!isJunkRealtimeTranscript(userBuffer) && !looksLikeGenieEcho(userBuffer, lastAssistantTranscript)) {
           handlers.onUserTranscript?.(userBuffer, false)
         }
       }
@@ -470,12 +587,17 @@ export const connectLampGenieRealtime = async (options: {
       if (!transcript || interviewComplete) {
         return
       }
-      if (isJunkRealtimeTranscript(transcript)) {
+      if (
+        genieSpeaking ||
+        awaitingOutputAudioEnd ||
+        Date.now() < ignoreUserUntil ||
+        isJunkRealtimeTranscript(transcript) ||
+        looksLikeGenieEcho(transcript, lastAssistantTranscript)
+      ) {
         recordTurn('junk', transcript)
         clearPhantomAudio()
         return
       }
-      // Real English from the shopper — always keep it (never mark as junk because Genie was mid-sentence).
       recordTurn('user', transcript)
       handlers.onUserTranscript?.(transcript, true)
       // Only reply after a finished transcript. VAD no longer auto-starts Genie.
@@ -494,8 +616,10 @@ export const connectLampGenieRealtime = async (options: {
       const transcript = String(event.transcript || assistantBuffer || '').trim()
       assistantBuffer = ''
       if (transcript) {
+        lastAssistantTranscript = transcript
         recordTurn('assistant', transcript)
         handlers.onAssistantTranscript?.(transcript, true)
+        scheduleUnmuteFallbackFromTranscript(transcript)
       }
       return
     }
