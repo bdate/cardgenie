@@ -1146,7 +1146,7 @@ const getOpenAI = () =>
   })
 
 const validateDetails = (details) => {
-  const requiredFields = ['recipientType', 'senderName', 'occasion', 'tone', 'length', 'keyDetails']
+  const requiredFields = ['senderName', 'occasion', 'tone', 'length', 'keyDetails']
   return requiredFields.filter((field) => !details[field]?.trim())
 }
 

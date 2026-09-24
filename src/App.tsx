@@ -8927,13 +8927,7 @@ function App() {
           <div className="panel-heading">
             <div>
               <h2>Tell us about the card</h2>
-              <p>
-                Fill in the fields, or{' '}
-                <button className="text-action-link" type="button" onClick={() => openCardInterview('quick')}>
-                  ask Genie
-                </button>{' '}
-                to fill in for you.
-              </p>
+              <p>Fill in the fields below, or tap the lamp to chat with Genie.</p>
             </div>
           </div>
 
@@ -9218,7 +9212,6 @@ function App() {
             <label>
               Relation
               <input
-                required
                 value={details.recipientType}
                 onChange={(event) => updateDetails('recipientType', event.target.value)}
                 placeholder="Example: mom, spouse, friend, coworker"
@@ -10570,9 +10563,9 @@ function App() {
         <div className="footer-legal">
           <a href="/privacy/">Privacy</a>
           <a href="/terms/">Terms</a>
-          {(isAdmin || isLocalApiDev) && !isRecipientView && (
+          {!isRecipientView && (
             <button type="button" onClick={clearCreateCardInputs}>
-              Clear
+              Clear all Fields
             </button>
           )}
         </div>

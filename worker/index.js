@@ -686,7 +686,7 @@ const jsonResponse = (request, env, body, status = 200) =>
   })
 
 const validateDetails = (details) => {
-  const requiredFields = ['recipientType', 'senderName', 'occasion', 'tone', 'length', 'keyDetails']
+  const requiredFields = ['senderName', 'occasion', 'tone', 'length', 'keyDetails']
   return requiredFields.filter((field) => !details[field]?.trim())
 }
 
