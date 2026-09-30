@@ -6181,6 +6181,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
         },
         body: JSON.stringify({
           ...details,
@@ -7126,6 +7127,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
         },
         body: JSON.stringify({
           details,
@@ -7214,6 +7216,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
         },
         body: JSON.stringify({
           details,
@@ -7303,6 +7306,7 @@ function App() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
       },
       body: JSON.stringify({
         ...buildCurrentCardPayload(storedCover),

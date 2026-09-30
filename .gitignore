@@ -38,3 +38,5 @@ vite.config.ts.timestamp-*.mjs
 
 # Local Cursor IDE settings
 .cursor/settings.json
+.cursor/card-samples/
+.cursor/card-history/

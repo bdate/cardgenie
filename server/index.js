@@ -1060,6 +1060,35 @@ const buildAiChoosesStyleGuidance = (imageStyle = '', hasReferenceImages = false
   return `- The shopper left style as "${aiChoosesStyleLabel}" and did not provide people photos. You MUST choose exactly one illustrated medium from this list: ${aiChoosesIllustratedStyles.join('; ')}. Do NOT use photorealistic or photographic styles.`
 }
 
+const personAppearancePattern =
+  /\b(hair|haired|blonde?|brunette|redhead|ginger|gr[ae]y-haired|bald|curly|wavy|ponytail|braids?|beard(ed)?|mustache|moustache|goatee|stubble|freckles?|dimples?|eyes?|eyed|glasses|spectacles|skin|complexion|tall|petite|slim|slender|stocky|muscular|athletic build|height|wears?|wearing|dressed|outfit|shirt|dress|tattoos?|piercings?|looks like|resembles?)\b/i
+const peopleRequestPattern =
+  /\b(show|include|add|draw|depict|put)\b[^.]{0,40}\b(people|person|persons|man|men|woman|women|boy|girls?|boys|kids?|children|child|baby|couple|family|portrait|faces?)\b/i
+
+const coverAllowsPeople = (details = {}, refinement = '') => {
+  const context = `${details.keyDetails || ''}\n${refinement || ''}`
+  return personAppearancePattern.test(context) || peopleRequestPattern.test(String(refinement || ''))
+}
+
+const buildPeopleOnCoverGuidance = (details, hasReferenceImages = false, refinement = '') => {
+  const names = `the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}".`
+  const castingLine = `Name and relationship context: ${names} Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.`
+
+  if (hasReferenceImages) {
+    return castingLine
+  }
+
+  if (coverAllowsPeople(details, refinement)) {
+    return `${castingLine}
+
+People on the cover: the sender described how someone looks or asked for people, so show the person or people as described in the personal context and refinement request.`
+  }
+
+  return `Name and relationship context: ${names} Use names and relationship only for the mood and meaning of the card, never to invent or cast people.
+
+People on the cover: the sender provided no photos and did not describe what anyone looks like, so do not depict any people. No faces, heads, human figures, silhouettes, crowds, hands, or body parts. Tell the story through objects, places, food, nature, animals or pets the sender mentioned, and symbolic scenery instead. For example, show a pickleball paddle and ball, skis on a snowy slope, or two lattes and a pastry on a café table rather than people doing those things.`
+}
+
 const buildImagePrompt = (details, refinement = '', imageMode = 'new', hasReferenceImages = false) => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
@@ -1076,7 +1105,7 @@ Physical appearance from personal details:
 - When the sender describes how someone looks (height, eye color, hair, glasses, build, age cues, clothing colors, etc.), use those details to depict people accurately on the cover.
 - Physical adjectives and appearance notes in the personal context are primarily for cover artwork, not for text on the card. Reflect them visually when people appear on the cover.
 
-Name and relationship context: the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}". Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.
+${buildPeopleOnCoverGuidance(details, hasReferenceImages, refinement)}
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
 
 Revision mode:

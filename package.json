@@ -12,6 +12,8 @@
     "deploy:worker": "wrangler deploy",
     "notify:deploy": "node scripts/notify-deploy.mjs",
     "lamp:sessions": "node scripts/pull-lamp-sessions.mjs",
+    "ask:sessions": "node scripts/pull-lamp-sessions.mjs ask",
+    "card:history": "node scripts/pull-card-history.mjs",
     "dev:worker": "wrangler dev",
     "lint": "eslint .",
     "preview": "vite preview"

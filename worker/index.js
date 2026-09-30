@@ -575,6 +575,35 @@ const buildAiChoosesStyleGuidance = (imageStyle = '', hasReferenceImages = false
   return `- The shopper left style as "${aiChoosesStyleLabel}" and did not provide people photos. You MUST choose exactly one illustrated medium from this list: ${aiChoosesIllustratedStyles.join('; ')}. Do NOT use photorealistic or photographic styles.`
 }
 
+const personAppearancePattern =
+  /\b(hair|haired|blonde?|brunette|redhead|ginger|gr[ae]y-haired|bald|curly|wavy|ponytail|braids?|beard(ed)?|mustache|moustache|goatee|stubble|freckles?|dimples?|eyes?|eyed|glasses|spectacles|skin|complexion|tall|petite|slim|slender|stocky|muscular|athletic build|height|wears?|wearing|dressed|outfit|shirt|dress|tattoos?|piercings?|looks like|resembles?)\b/i
+const peopleRequestPattern =
+  /\b(show|include|add|draw|depict|put)\b[^.]{0,40}\b(people|person|persons|man|men|woman|women|boy|girls?|boys|kids?|children|child|baby|couple|family|portrait|faces?)\b/i
+
+const coverAllowsPeople = (details = {}, refinement = '') => {
+  const context = `${details.keyDetails || ''}\n${refinement || ''}`
+  return personAppearancePattern.test(context) || peopleRequestPattern.test(String(refinement || ''))
+}
+
+const buildPeopleOnCoverGuidance = (details, hasReferenceImages = false, refinement = '') => {
+  const names = `the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}".`
+  const castingLine = `Name and relationship context: ${names} Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.`
+
+  if (hasReferenceImages) {
+    return castingLine
+  }
+
+  if (coverAllowsPeople(details, refinement)) {
+    return `${castingLine}
+
+People on the cover: the sender described how someone looks or asked for people, so show the person or people as described in the personal context and refinement request.`
+  }
+
+  return `Name and relationship context: ${names} Use names and relationship only for the mood and meaning of the card, never to invent or cast people.
+
+People on the cover: the sender provided no photos and did not describe what anyone looks like, so do not depict any people. No faces, heads, human figures, silhouettes, crowds, hands, or body parts. Tell the story through objects, places, food, nature, animals or pets the sender mentioned, and symbolic scenery instead. For example, show a pickleball paddle and ball, skis on a snowy slope, or two lattes and a pastry on a café table rather than people doing those things.`
+}
+
 const buildImagePrompt = (details, refinement = '', imageMode = 'new', hasReferenceImages = false) => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
@@ -591,7 +620,7 @@ Physical appearance from personal details:
 - When the sender describes how someone looks (height, eye color, hair, glasses, build, age cues, clothing colors, etc.), use those details to depict people accurately on the cover.
 - Physical adjectives and appearance notes in the personal context are primarily for cover artwork, not for text on the card. Reflect them visually when people appear on the cover.
 
-Name and relationship context: the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}". Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.
+${buildPeopleOnCoverGuidance(details, hasReferenceImages, refinement)}
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
 
 Revision mode:
@@ -1148,6 +1177,16 @@ const failGenerateJob = async (env, job, error, details, photoCount) => {
     result: null,
   }
 
+  await recordCardHistory(env, {
+    kind: 'generate',
+    status: 'failed',
+    ...job?.account,
+    jobId: job?.id,
+    details,
+    photoCount,
+    error: message,
+  })
+
   try {
     return await saveGenerateJob(env, failed)
   } catch (saveError) {
@@ -1253,6 +1292,18 @@ const processGenerateJob = async (env, jobInput) => {
             imageUrl,
           },
         })
+        await recordCardHistory(
+          env,
+          {
+            kind: 'generate',
+            ...job.account,
+            jobId: job.id,
+            details,
+            photoCount: referenceImages.length,
+            message: copy.message,
+          },
+          imageUrl,
+        )
         return
       } catch (saveError) {
         console.error(saveError)
@@ -2205,6 +2256,13 @@ const handleSaveCard = async (request, env) => {
     await saveCardRecord(env, record, {
       coverThumbDataUrl: payload?.coverThumb,
       revisionSource: 'save',
+    })
+    await recordCardHistory(env, {
+      kind: 'save',
+      ...(await getRequestAccount(request, env)),
+      cardId: record.id,
+      details: payload?.details,
+      message: record.card.message,
     })
 
     return jsonResponse(request, env, getCardSummary(record, request, env), existing ? 200 : 201)
@@ -3738,6 +3796,7 @@ const handleGenerateCard = async (request, env, ctx) => {
       id: createCardId(),
       status: 'queued',
       details,
+      account: await getRequestAccount(request, env),
       referenceImages,
       createdAt: Date.now(),
       attempt: 0,
@@ -3855,6 +3914,20 @@ const handleRefineImage = async (request, env) => {
     let responseCardId = typeof cardId === 'string' ? cardId.trim() : ''
     let revisionId = ''
 
+    await recordCardHistory(
+      env,
+      {
+        kind: 'refine-image',
+        ...(await getRequestAccount(request, env)),
+        cardId: responseCardId,
+        details,
+        refinement,
+        imageMode: revisionSource,
+        photoCount: referenceImages.length,
+      },
+      imageUrl,
+    )
+
     if (responseCardId) {
       const updated = await updateCardCoverImage(env, responseCardId, imageUrl, {
         revisionSource,
@@ -3942,6 +4015,15 @@ const handleRefineCopy = async (request, env) => {
       referenceImages,
       likenessBrief,
     )
+
+    await recordCardHistory(env, {
+      kind: 'refine-copy',
+      ...(await getRequestAccount(request, env)),
+      details,
+      refinement,
+      photoCount: referenceImages.length,
+      message: copy.message,
+    })
 
     return jsonResponse(request, env, copy)
   } catch (error) {
@@ -5178,6 +5260,98 @@ const handleRealtimeSessionLog = async (request, env) => {
   return jsonResponse(request, env, { ok: true, sessionId, mode, turnCount: record.turns.length })
 }
 
+const CARD_HISTORY_PREFIX = 'card-history:'
+const CARD_HISTORY_IMAGE_PREFIX = 'card-history-image:'
+const CARD_HISTORY_TTL_SECONDS = 60 * 60 * 24 * 7
+const CARD_HISTORY_DETAIL_FIELDS = [
+  'recipientName',
+  'recipientType',
+  'senderName',
+  'occasion',
+  'tone',
+  'length',
+  'imageStyle',
+  'keyDetails',
+]
+const CARD_HISTORY_IMAGE_KINDS = new Set(['generate', 'refine-image'])
+
+const pickCardHistoryDetails = (details = {}) =>
+  Object.fromEntries(
+    CARD_HISTORY_DETAIL_FIELDS.map((field) => [field, String(details?.[field] ?? '').trim().slice(0, 2000)]),
+  )
+
+// Inverted timestamp so KV's ascending key order lists newest first.
+const cardHistoryKey = (atMs, id) => `${CARD_HISTORY_PREFIX}${String(9_999_999_999_999 - atMs).padStart(13, '0')}:${id}`
+
+const getRequestAccount = async (request, env) => {
+  try {
+    const session = await getAccountSession(env, readAccountToken(request))
+    return { userId: session?.userId || '', phone: session?.phoneE164 || '' }
+  } catch {
+    return { userId: '', phone: '' }
+  }
+}
+
+const recordCardHistory = async (env, entry = {}, imageUrl = '') => {
+  if (!env.CARD_STORE) {
+    return
+  }
+
+  try {
+    const atMs = Date.now()
+    const id = crypto.randomUUID()
+    const details = pickCardHistoryDetails(entry.details)
+    const refinement = String(entry.refinement || '').trim().slice(0, 1000)
+    const photoCount = Number(entry.photoCount) || 0
+    const hasImage = typeof imageUrl === 'string' && /^data:image\//.test(imageUrl)
+    const record = {
+      id,
+      at: new Date(atMs).toISOString(),
+      kind: entry.kind || 'generate',
+      status: entry.status || 'ok',
+      userId: entry.userId || '',
+      phone: entry.phone || '',
+      jobId: entry.jobId || '',
+      cardId: entry.cardId || '',
+      details,
+      refinement,
+      imageMode: entry.imageMode || '',
+      photoCount,
+      peopleOnCover: CARD_HISTORY_IMAGE_KINDS.has(entry.kind)
+        ? photoCount > 0
+          ? 'from-photos'
+          : coverAllowsPeople(details, refinement)
+            ? 'described'
+            : 'none'
+        : '',
+      message: String(entry.message || '').slice(0, 4000),
+      error: String(entry.error || '').slice(0, 500),
+      hasImage,
+    }
+
+    await env.CARD_STORE.put(cardHistoryKey(atMs, id), JSON.stringify(record), {
+      expirationTtl: CARD_HISTORY_TTL_SECONDS,
+      metadata: {
+        id,
+        at: record.at,
+        kind: record.kind,
+        status: record.status,
+        phone: record.phone,
+        recipientName: details.recipientName.slice(0, 80),
+        occasion: details.occasion.slice(0, 80),
+      },
+    })
+
+    if (hasImage) {
+      await env.CARD_STORE.put(`${CARD_HISTORY_IMAGE_PREFIX}${id}`, imageUrl, {
+        expirationTtl: CARD_HISTORY_TTL_SECONDS,
+      })
+    }
+  } catch (error) {
+    console.error('card history write failed', error)
+  }
+}
+
 const requireDeployOrAdminSecret = async (request, env) => {
   const expected = String(env.DEPLOY_NOTIFY_SECRET || env.ADMIN_SECRET || '').trim()
   const headerToken = readAccountToken(request)
@@ -5214,6 +5388,74 @@ const handleAdminLampSessions = async (request, env) => {
     ok: true,
     sessions: Array.isArray(index) ? index.slice(0, 40) : [],
   })
+}
+
+const handleAdminCardHistory = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  if (!env.CARD_STORE) {
+    return jsonResponse(request, env, { error: 'Card history store unavailable.' }, 503)
+  }
+
+  const url = new URL(request.url)
+  const entryId = String(url.searchParams.get('id') || '').trim()
+
+  if (entryId) {
+    if (!/^[0-9a-f-]{36}$/i.test(entryId)) {
+      return jsonResponse(request, env, { error: 'Invalid history id.' }, 400)
+    }
+
+    if (url.searchParams.get('image') === '1') {
+      const dataUrl = await env.CARD_STORE.get(`${CARD_HISTORY_IMAGE_PREFIX}${entryId}`)
+      const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl || '')
+      if (!match) {
+        return jsonResponse(request, env, { error: 'Image not found.' }, 404)
+      }
+      return new Response(base64ToUint8Array(match[2]), {
+        headers: { ...getCorsHeaders(request, env), 'Content-Type': match[1], 'Cache-Control': 'private, max-age=300' },
+      })
+    }
+
+    const page = await env.CARD_STORE.list({ prefix: CARD_HISTORY_PREFIX, limit: 1000 })
+    const key = (page.keys || []).find((item) => item.name.endsWith(`:${entryId}`))
+    const record = key ? await env.CARD_STORE.get(key.name, 'json') : null
+    if (!record) {
+      return jsonResponse(request, env, { error: 'History entry not found.' }, 404)
+    }
+    return jsonResponse(request, env, { ok: true, entry: record })
+  }
+
+  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 200))
+  const kindFilter = String(url.searchParams.get('kind') || '').trim()
+  const phoneFilter = String(url.searchParams.get('phone') || '').replace(/[^\d+]/g, '')
+  const query = String(url.searchParams.get('q') || '').trim().toLowerCase()
+  const matches = []
+  let cursor
+
+  do {
+    const page = await env.CARD_STORE.list({ prefix: CARD_HISTORY_PREFIX, limit: 1000, cursor })
+    for (const key of page.keys || []) {
+      const meta = key.metadata || {}
+      if (kindFilter && meta.kind !== kindFilter) continue
+      if (phoneFilter && !String(meta.phone || '').includes(phoneFilter)) continue
+      if (query && !`${meta.recipientName || ''} ${meta.occasion || ''}`.toLowerCase().includes(query)) continue
+      matches.push(key.name)
+      if (matches.length >= limit) break
+    }
+    cursor = page.list_complete || matches.length >= limit ? undefined : page.cursor
+  } while (cursor)
+
+  const entries = []
+  for (let index = 0; index < matches.length; index += 25) {
+    const batch = await Promise.all(
+      matches.slice(index, index + 25).map((name) => env.CARD_STORE.get(name, 'json')),
+    )
+    entries.push(...batch.filter(Boolean))
+  }
+
+  return jsonResponse(request, env, { ok: true, retentionDays: 7, count: entries.length, entries })
 }
 
 /** Durable Chrome mic path: MediaRecorder chunks → Whisper (no SpeechRecognition restart). */
@@ -5461,6 +5703,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/admin/lamp-sessions') {
     return handleAdminLampSessions(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/card-history') {
+    return handleAdminCardHistory(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)
