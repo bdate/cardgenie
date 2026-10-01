@@ -5112,3 +5112,61 @@ select.is-placeholder option {
   }
 }
 
+
+.mode-toggle.choice-radios {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  width: auto;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mode-toggle.choice-radios button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  border-radius: 0;
+  color: var(--gcu-ink);
+  background: none;
+  box-shadow: none;
+  font-size: 0.92rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.mode-toggle.choice-radios button::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid #b9c9c6;
+  border-radius: 50%;
+  background: #fff;
+  transition: border 140ms ease;
+}
+
+.mode-toggle.choice-radios button.is-selected {
+  color: var(--gcu-ink);
+  background: none;
+  box-shadow: none;
+  font-weight: 750;
+}
+
+.mode-toggle.choice-radios button.is-selected::before {
+  border: 5px solid var(--gcu-dark-teal);
+}
+
+.mode-toggle.choice-radios button:focus-visible {
+  outline: 2px solid rgba(63, 155, 145, 0.45);
+  outline-offset: 3px;
+  border-radius: 6px;
+}

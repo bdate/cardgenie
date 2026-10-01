@@ -9901,12 +9901,14 @@ function App() {
                 card.messageVariants.medium &&
                 card.messageVariants.long && (
                   <div className="message-length-picker" aria-label="Message length">
-                    <div className="mode-toggle message-length-toggle" role="group" aria-label="Choose message length">
+                    <div className="mode-toggle message-length-toggle choice-radios" role="radiogroup" aria-label="Choose message length">
                       {messageLengthChoices.map((choice) => (
                         <button
                           key={choice.id}
                           className={selectedMessageLengthId === choice.id ? 'is-selected' : ''}
                           type="button"
+                          role="radio"
+                          aria-checked={selectedMessageLengthId === choice.id}
                           onClick={(event) => {
                             event.stopPropagation()
                             selectMessageLength(choice.id)
@@ -10062,10 +10064,12 @@ function App() {
                   <span className="delivery-kicker">Ready to send this card</span>
                   <p>Send by email or cellphone after you approve the card.</p>
                 </div>
-                <div className="mode-toggle delivery-methods" aria-label="Delivery method">
+                <div className="mode-toggle delivery-methods choice-radios" role="radiogroup" aria-label="Delivery method">
                   <button
                     className={deliveryMethod === 'email' ? 'is-selected' : ''}
                     type="button"
+                    role="radio"
+                    aria-checked={deliveryMethod === 'email'}
                     onClick={() => {
                       setDeliveryMethod('email')
                       resetDeliveryDestinations()
@@ -10080,6 +10084,8 @@ function App() {
                   <button
                     className={deliveryMethod === 'text' ? 'is-selected' : ''}
                     type="button"
+                    role="radio"
+                    aria-checked={deliveryMethod === 'text'}
                     onClick={() => {
                       setDeliveryMethod('text')
                       resetDeliveryDestinations()
@@ -10690,8 +10696,8 @@ function App() {
                           {card?.messageVariants?.short && card.messageVariants.medium && card.messageVariants.long && (
                             <div className="message-length-picker editor-message-length-picker" aria-label="Message length">
                               <div
-                                className="mode-toggle message-length-toggle"
-                                role="group"
+                                className="mode-toggle message-length-toggle choice-radios"
+                                role="radiogroup"
                                 aria-label="Choose message length"
                               >
                                 {messageLengthChoices.map((choice) => (
@@ -10699,6 +10705,8 @@ function App() {
                                     key={choice.id}
                                     className={(card.selectedLength || 'medium') === choice.id ? 'is-selected' : ''}
                                     type="button"
+                                    role="radio"
+                                    aria-checked={(card.selectedLength || 'medium') === choice.id}
                                     onClick={() => selectMessageLength(choice.id)}
                                   >
                                     {choice.label}
