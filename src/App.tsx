@@ -2519,7 +2519,7 @@ function App() {
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showCreditDetails, setShowCreditDetails] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
-  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | null>(null)
+  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | null>(null)
   const [accountHistory, setAccountHistory] = useState<{
     phoneE164?: string
     account?: {
@@ -2804,6 +2804,30 @@ function App() {
   const [isLoadingPendingReviews, setIsLoadingPendingReviews] = useState(false)
   const [pendingReviewNotice, setPendingReviewNotice] = useState('')
   const [updatingReviewId, setUpdatingReviewId] = useState('')
+  const [cardHistoryEntries, setCardHistoryEntries] = useState<
+    Array<{
+      id: string
+      at: string
+      kind: 'generate' | 'refine-image' | 'refine-copy' | 'save'
+      status: string
+      phone?: string
+      cardId?: string
+      details: Partial<Record<keyof CardDetails, string>>
+      refinement?: string
+      imageMode?: string
+      photoCount?: number
+      peopleOnCover?: string
+      message?: string
+      error?: string
+      hasImage?: boolean
+    }>
+  >([])
+  const [cardHistoryKind, setCardHistoryKind] = useState<'' | 'generate' | 'refine-image' | 'refine-copy' | 'save'>('')
+  const [cardHistoryQuery, setCardHistoryQuery] = useState('')
+  const [isLoadingCardHistory, setIsLoadingCardHistory] = useState(false)
+  const [cardHistoryNotice, setCardHistoryNotice] = useState('')
+  const [expandedCardHistoryId, setExpandedCardHistoryId] = useState('')
+  const [cardHistoryImageUrls, setCardHistoryImageUrls] = useState<Record<string, string>>({})
   const [adminGrantPhone, setAdminGrantPhone] = useState('')
   const [adminGrantCredits, setAdminGrantCredits] = useState('20')
   const [adminGrantNotice, setAdminGrantNotice] = useState('')
@@ -5881,6 +5905,78 @@ function App() {
     await loadAdminReviews(accountSession.token, 'pending')
   }
 
+  const loadCardHistory = async (
+    token: string,
+    kind: typeof cardHistoryKind = cardHistoryKind,
+    query: string = cardHistoryQuery,
+  ) => {
+    setIsLoadingCardHistory(true)
+    setCardHistoryNotice('')
+    try {
+      const params = new URLSearchParams({ limit: '200' })
+      if (kind) params.set('kind', kind)
+      const trimmedQuery = query.trim()
+      if (/^[\d\s()+-]{4,}$/.test(trimmedQuery)) {
+        params.set('phone', trimmedQuery.replace(/[^\d+]/g, ''))
+      } else if (trimmedQuery) {
+        params.set('q', trimmedQuery)
+      }
+      const response = await fetch(apiUrl(`/api/admin/card-history?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load card history.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load card history.')
+      }
+      setCardHistoryEntries(Array.isArray(data.entries) ? data.entries : [])
+    } catch (caughtError) {
+      setCardHistoryEntries([])
+      setCardHistoryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load card history.')
+    } finally {
+      setIsLoadingCardHistory(false)
+    }
+  }
+
+  const openAdminCardHistory = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('history')
+    setShowCreditMenu(false)
+    setExpandedCardHistoryId('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadCardHistory(accountSession.token)
+  }
+
+  const selectCardHistoryKind = async (kind: typeof cardHistoryKind) => {
+    setCardHistoryKind(kind)
+    if (accountSession?.token) {
+      await loadCardHistory(accountSession.token, kind)
+    }
+  }
+
+  const toggleCardHistoryEntry = async (entryId: string, hasImage?: boolean) => {
+    const nextId = expandedCardHistoryId === entryId ? '' : entryId
+    setExpandedCardHistoryId(nextId)
+    if (!nextId || !hasImage || cardHistoryImageUrls[entryId] || !accountSession?.token) {
+      return
+    }
+    try {
+      const response = await fetch(
+        apiUrl(`/api/admin/card-history?id=${encodeURIComponent(entryId)}&image=1`),
+        { headers: { Authorization: `Bearer ${accountSession.token}` } },
+      )
+      if (!response.ok) {
+        return
+      }
+      const objectUrl = URL.createObjectURL(await response.blob())
+      setCardHistoryImageUrls((current) => ({ ...current, [entryId]: objectUrl }))
+    } catch {
+      // Cover stays hidden; the text details are still shown.
+    }
+  }
+
   const closeAdminView = () => {
     setAdminView(null)
     void openAccountPage()
@@ -8240,6 +8336,9 @@ function App() {
                     <button className="text-action-link" type="button" onClick={() => void openAdminReviews()}>
                       Reviews
                     </button>
+                    <button className="text-action-link" type="button" onClick={() => void openAdminCardHistory()}>
+                      Card history
+                    </button>
                   </div>
                   <form
                     className="admin-grant-credits"
@@ -8914,6 +9013,177 @@ function App() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {adminView === 'history' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="Card history">
+          <div className="panel-heading">
+            <div>
+              <h2>Card history</h2>
+              <p>Every card created, revised, or saved in the last 7 days, with the shopper’s inputs.</p>
+            </div>
+            <div className="admin-page-actions">
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={isLoadingCardHistory || !accountSession?.token}
+                onClick={() => accountSession?.token && void loadCardHistory(accountSession.token)}
+              >
+                {isLoadingCardHistory ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          <div className="mode-toggle admin-history-filters" role="tablist" aria-label="Activity type">
+            {(
+              [
+                { id: '', label: 'All' },
+                { id: 'generate', label: 'Created' },
+                { id: 'refine-image', label: 'Cover redo' },
+                { id: 'refine-copy', label: 'Message redo' },
+                { id: 'save', label: 'Saved' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id || 'all'}
+                className={cardHistoryKind === tab.id ? 'is-selected' : ''}
+                type="button"
+                role="tab"
+                aria-selected={cardHistoryKind === tab.id}
+                disabled={isLoadingCardHistory || !accountSession?.token}
+                onClick={() => void selectCardHistoryKind(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <form
+            className="admin-history-search"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (accountSession?.token) {
+                void loadCardHistory(accountSession.token)
+              }
+            }}
+          >
+            <input
+              type="search"
+              value={cardHistoryQuery}
+              onChange={(event) => setCardHistoryQuery(event.target.value)}
+              placeholder="Search recipient, occasion, or phone"
+              aria-label="Search card history"
+            />
+            <button className="secondary-button" type="submit" disabled={isLoadingCardHistory}>
+              Search
+            </button>
+          </form>
+          <div className="account-block admin-reviews">
+            {cardHistoryNotice && <div className="field-notice">{cardHistoryNotice}</div>}
+            {isLoadingCardHistory && cardHistoryEntries.length === 0 ? (
+              <p>Loading card history...</p>
+            ) : cardHistoryEntries.length === 0 ? (
+              <p>No card activity in the last 7 days{cardHistoryQuery.trim() || cardHistoryKind ? ' for this filter' : ''}.</p>
+            ) : (
+              <div className="admin-review-list">
+                {cardHistoryEntries.map((entry) => {
+                  const kindLabel =
+                    entry.kind === 'generate'
+                      ? 'Created'
+                      : entry.kind === 'refine-image'
+                        ? 'Cover redo'
+                        : entry.kind === 'refine-copy'
+                          ? 'Message redo'
+                          : 'Saved'
+                  const peopleLabel =
+                    entry.peopleOnCover === 'from-photos'
+                      ? 'People from photos'
+                      : entry.peopleOnCover === 'described'
+                        ? 'People described'
+                        : entry.peopleOnCover === 'none'
+                          ? 'No people'
+                          : ''
+                  const isExpanded = expandedCardHistoryId === entry.id
+                  const fields: Array<[string, string | undefined]> = [
+                    ['Recipient', entry.details.recipientName],
+                    ['Relation', entry.details.recipientType],
+                    ['From', entry.details.senderName],
+                    ['Occasion', entry.details.occasion],
+                    ['Tone', entry.details.tone],
+                    ['Length', entry.details.length],
+                    ['Image style', entry.details.imageStyle || 'AI chooses'],
+                    ['Personal details', entry.details.keyDetails],
+                    ['Change requested', entry.refinement],
+                    ['Photos uploaded', entry.photoCount ? String(entry.photoCount) : 'None'],
+                    ['Phone', entry.phone],
+                    ['Card ID', entry.cardId],
+                  ]
+                  return (
+                    <div className="admin-review-card admin-history-card" key={entry.id}>
+                      <div className="admin-review-meta">
+                        <strong>
+                          {entry.details.recipientName || 'Unknown recipient'}
+                          {entry.details.occasion ? ` · ${entry.details.occasion}` : ''}
+                        </strong>
+                        <span>
+                          {kindLabel}
+                          {entry.status === 'failed' ? ' (failed)' : ''}
+                          {peopleLabel ? ` · ${peopleLabel}` : ''}
+                          {' · '}
+                          {formatAccountDate(entry.at)}
+                        </span>
+                      </div>
+                      <button
+                        className="text-action-link"
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => void toggleCardHistoryEntry(entry.id, entry.hasImage)}
+                      >
+                        {isExpanded ? 'Hide details' : 'View details'}
+                      </button>
+                      {isExpanded && (
+                        <div className="admin-history-details">
+                          {entry.hasImage && (
+                            <div className="admin-history-cover">
+                              {cardHistoryImageUrls[entry.id] ? (
+                                <img src={cardHistoryImageUrls[entry.id]} alt="Generated cover" />
+                              ) : (
+                                <p>Loading cover...</p>
+                              )}
+                            </div>
+                          )}
+                          <dl>
+                            {fields
+                              .filter(([, value]) => value && value.trim())
+                              .map(([label, value]) => (
+                                <div key={label}>
+                                  <dt>{label}</dt>
+                                  <dd>{value}</dd>
+                                </div>
+                              ))}
+                            {entry.message && (
+                              <div>
+                                <dt>Inside message</dt>
+                                <dd className="admin-history-message">{entry.message}</dd>
+                              </div>
+                            )}
+                            {entry.error && (
+                              <div>
+                                <dt>Error</dt>
+                                <dd>{entry.error}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
