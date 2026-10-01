@@ -3092,6 +3092,33 @@ textarea:focus {
   font-weight: 650;
 }
 
+.field-label-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.account-profile-form label {
+  gap: 0;
+}
+
+.account-profile-form,
+.print-address-fields.is-compact,
+.print-address-fields.is-compact .print-address-city-row {
+  gap: 8px;
+}
+
+select.is-placeholder {
+  color: #b5b5b5;
+}
+
+select.is-placeholder option {
+  color: var(--gcu-ink);
+}
+
 .account-profile-actions {
   display: flex;
   flex-wrap: wrap;
@@ -4679,6 +4706,29 @@ textarea:focus {
 
   .account-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-summary strong {
+    font-size: clamp(0.78rem, 3.8vw, 1.05rem);
+    white-space: nowrap;
+  }
+
+  .account-profile-block {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .account-profile-block .field-help {
+    font-size: 0.82rem;
+  }
+
+  .account-profile-form input,
+  .account-profile-form select {
+    padding: 10px 12px;
+  }
+
+  .print-address-fields.is-compact .print-address-city-row {
+    grid-template-columns: minmax(0, 1fr) 84px 88px;
   }
 
   .account-row {

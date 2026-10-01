@@ -5557,35 +5557,53 @@ function App() {
       return coverThumbUrl
     }
 
-    const deliveries = accountHistory.deliveries || []
-    const cardIdsWithEmailSend = new Set(
-      deliveries
-        .filter((delivery) => !delivery.isSenderCopy && delivery.method === 'email')
-        .map((delivery) => delivery.cardId)
-        .filter(Boolean),
-    )
+    const deliveries = (accountHistory.deliveries || []).filter((delivery) => !delivery.isSenderCopy)
+    const printOrders = accountHistory.printOrders || []
+    const cards = accountHistory.cards || []
+    const cardById = new Map(cards.map((card) => [card.id, card]))
+    const cardIds = new Set<string>([
+      ...cards.map((card) => card.id),
+      ...deliveries.map((delivery) => delivery.cardId || `delivery-${delivery.id}`),
+      ...printOrders.map((order) => order.cardId).filter((cardId): cardId is string => Boolean(cardId)),
+    ])
 
-    const created = (accountHistory.cards || [])
-      .filter((card) => !cardIdsWithEmailSend.has(card.id))
-      .map((card) => ({
-        id: `card-${card.id}`,
-        createdAt: card.createdAt,
-        title: 'Created',
-        detail: [card.recipientName, card.occasion].filter(Boolean).join(' · ') || 'Card',
-        status: card.status,
-        coverThumbUrl: resolveThumbUrl(card.id, card.coverThumbUrl),
-      }))
+    const cardRows = [...cardIds].map((cardId) => {
+      const card = cardById.get(cardId)
+      const cardDeliveries = deliveries.filter(
+        (delivery) => (delivery.cardId || `delivery-${delivery.id}`) === cardId,
+      )
+      const cardPrints = printOrders.filter((order) => order.cardId === cardId)
+      const methods = [...new Set(cardDeliveries.map((delivery) => (delivery.method === 'text' ? 'Text' : 'Email')))]
+      const actions = [
+        ...(methods.length ? [`Sent · ${methods.join(' & ')}`] : []),
+        ...(cardPrints.length ? ['Printed'] : []),
+      ]
+      const latest = [
+        card?.createdAt,
+        ...cardDeliveries.map((delivery) => delivery.createdAt),
+        ...cardPrints.map((order) => order.createdAt),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .pop()
+      const latestDelivery = [...cardDeliveries].sort((left, right) =>
+        String(right.createdAt).localeCompare(String(left.createdAt)),
+      )[0]
+      const destinations = cardDeliveries.map((delivery) => delivery.destination).filter(Boolean)
+      const summary = [card?.recipientName, card?.occasion].filter(Boolean).join(' · ')
 
-    const sent = deliveries
-      .filter((delivery) => !delivery.isSenderCopy)
-      .map((delivery) => ({
-        id: `delivery-${delivery.id}`,
-        createdAt: delivery.createdAt,
-        title: `Sent · ${delivery.method === 'text' ? 'Text' : 'Email'}`,
-        detail: delivery.destination,
-        status: delivery.status,
-        coverThumbUrl: resolveThumbUrl(delivery.cardId, delivery.coverThumbUrl),
-      }))
+      return {
+        id: `card-${cardId}`,
+        createdAt: latest || '',
+        title: actions.length ? actions.join(' + ') : 'Created',
+        detail: [summary, destinations.join(', ')].filter(Boolean).join(' — ') || 'Card',
+        status: latestDelivery?.status || (cardPrints.length ? cardPrints[0].status || 'submitted' : card?.status || ''),
+        coverThumbUrl: resolveThumbUrl(
+          cardId,
+          card?.coverThumbUrl || latestDelivery?.coverThumbUrl || cardPrints[0]?.coverThumbUrl,
+        ),
+      }
+    })
 
     const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
       id: `thanks-${thankYou.id}`,
@@ -5598,7 +5616,7 @@ function App() {
       coverThumbUrl: '',
     }))
 
-    return [...created, ...sent, ...thanks].sort((left, right) =>
+    return [...cardRows, ...thanks].sort((left, right) =>
       String(right.createdAt).localeCompare(String(left.createdAt)),
     )
   }, [accountHistory])
@@ -6872,52 +6890,59 @@ function App() {
     which: 'ship-to' | 'mail-from' | 'account',
     address: MailingAddress,
     nameLabel: string,
-  ) => (
-    <div className="print-address-fields">
+  ) => {
+    const compact = which === 'account'
+    const labelClass = compact ? 'field-label-hidden' : undefined
+    return (
+    <div className={`print-address-fields${compact ? ' is-compact' : ''}`}>
       <label>
-        {nameLabel}
+        <span className={labelClass}>{nameLabel}</span>
         <input
           value={address.name}
           onChange={(event) => updatePrintAddressField(which, 'name', event.target.value)}
           autoComplete={which === 'ship-to' ? 'shipping name' : 'name'}
-          placeholder="Full name"
+          placeholder={compact ? nameLabel : 'Full name'}
         />
       </label>
       <label>
-        Address line 1
+        <span className={labelClass}>Address line 1</span>
         <input
           value={address.line1}
           onChange={(event) => updatePrintAddressField(which, 'line1', event.target.value)}
           autoComplete={which === 'ship-to' ? 'shipping address-line1' : 'street-address'}
-          placeholder="Street address"
+          placeholder={compact ? 'Address line 1' : 'Street address'}
         />
       </label>
       <label>
-        Address line 2 <span className="field-optional">(optional)</span>
+        <span className={labelClass}>
+          Address line 2 <span className="field-optional">(optional)</span>
+        </span>
         <input
           value={address.line2}
           onChange={(event) => updatePrintAddressField(which, 'line2', event.target.value)}
           autoComplete={which === 'ship-to' ? 'shipping address-line2' : 'address-line2'}
-          placeholder="Apt, suite, unit"
+          placeholder={compact ? 'Address line 2 (optional)' : 'Apt, suite, unit'}
         />
       </label>
       <div className="print-address-city-row">
         <label>
-          City
+          <span className={labelClass}>City</span>
           <input
             value={address.city}
             onChange={(event) => updatePrintAddressField(which, 'city', event.target.value)}
             autoComplete={which === 'ship-to' ? 'shipping address-level2' : 'address-level2'}
+            placeholder={compact ? 'City' : undefined}
           />
         </label>
         <label>
-          State
+          <span className={labelClass}>State</span>
           <select
+            className={compact && !address.state ? 'is-placeholder' : undefined}
             value={address.state}
             onChange={(event) => updatePrintAddressField(which, 'state', event.target.value)}
             autoComplete={which === 'ship-to' ? 'shipping address-level1' : 'address-level1'}
           >
-            <option value="">Select</option>
+            <option value="">{compact ? 'State' : 'Select'}</option>
             {usStateOptions.map((state) => (
               <option key={state} value={state}>
                 {state}
@@ -6926,22 +6951,25 @@ function App() {
           </select>
         </label>
         <label>
-          ZIP
+          <span className={labelClass}>ZIP</span>
           <input
             value={address.zip}
             onChange={(event) => updatePrintAddressField(which, 'zip', event.target.value)}
             autoComplete={which === 'ship-to' ? 'shipping postal-code' : 'postal-code'}
             inputMode="numeric"
-            placeholder="94526"
+            placeholder={compact ? 'ZIP' : '94526'}
           />
         </label>
       </div>
-      <label>
-        Country
-        <input value="United States" disabled readOnly />
-      </label>
+      {!compact && (
+        <label>
+          Country
+          <input value="United States" disabled readOnly />
+        </label>
+      )}
     </div>
-  )
+    )
+  }
 
   const acceptEditorChanges = () => {
     setShowEditor(false)
@@ -8432,13 +8460,11 @@ function App() {
               <div className="account-block account-profile-block">
                 <h3>Your details</h3>
                 <p className="field-help">
-                  First name is for greetings like “Hi Mindy.” Email and mailing address are saved for order
-                  confirmations and as the default return address on printed cards. Email is also filled the first time
-                  you use Send me a copy.
+                  Used for greetings, order confirmations, and as the return address on printed cards.
                 </p>
                 <form className="account-profile-form" onSubmit={(event) => void saveAccountProfile(event)}>
                   <label>
-                    First name
+                    <span className="field-label-hidden">First name</span>
                     <input
                       type="text"
                       autoComplete="given-name"
@@ -8447,12 +8473,12 @@ function App() {
                         setAccountPreferredName(event.target.value)
                         setAccountProfileNotice('')
                       }}
-                      placeholder="Example: Mindy"
+                      placeholder="First name"
                       maxLength={60}
                     />
                   </label>
                   <label>
-                    Email
+                    <span className="field-label-hidden">Email</span>
                     <input
                       type="email"
                       inputMode="email"
@@ -8472,7 +8498,7 @@ function App() {
                           setAccountProfileEmail(validated.value)
                         }
                       }}
-                      placeholder="you@example.com"
+                      placeholder="Email"
                     />
                   </label>
                   {renderMailingAddressFields('account', accountProfileMailing, 'Mailing name')}
