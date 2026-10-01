@@ -3639,6 +3639,19 @@ select.is-placeholder option {
   justify-self: start;
 }
 
+.post-send-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.post-send-actions .secondary-button {
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
 .feedback-prompt {
   display: grid;
   gap: 10px;

@@ -333,10 +333,10 @@ const styleOptions = [
 const initialCreditBalance = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
-const formDraftMaxAgeMs = 30 * 24 * 60 * 60 * 1000
+const formDraftMaxAgeMs = 12 * 60 * 60 * 1000
 const formDraftVersion = 1 as const
 const interviewSessionStorageKey = 'cardGenieInterviewSession'
-const interviewSessionMaxAgeMs = 24 * 60 * 60 * 1000
+const interviewSessionMaxAgeMs = 12 * 60 * 60 * 1000
 const interviewSessionVersion = 1 as const
 const sendCreditCostSingle = 3
 const sendCreditCostPerRecipient = 2
@@ -10382,13 +10382,18 @@ function App() {
                       <div className="delivery-notice">
                         <div>{deliveryNotice}</div>
                         {hasSentCurrentCard && !isGenerating && (
-                          <button
-                            className="text-action-link"
-                            type="button"
-                            onClick={() => createFormRef.current?.requestSubmit()}
-                          >
-                            Create another card
-                          </button>
+                          <div className="post-send-actions">
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => createFormRef.current?.requestSubmit()}
+                            >
+                              Make another version
+                            </button>
+                            <button className="secondary-button" type="button" onClick={startNewCard}>
+                              Start a new card
+                            </button>
+                          </div>
                         )}
                         {hasSentCurrentCard && !isGenerating && renderFeedbackPrompt('post_send')}
                       </div>
