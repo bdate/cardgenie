@@ -59,6 +59,11 @@ const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 export const LAMP_GENIE_COMPLETE_LINE =
   'All set — I filled the form below. Review it, then create your card.'
 
+const LAMP_GENIE_IDLE_LIMIT_MS = 90_000
+
+const LAMP_GENIE_STOP_PATTERN =
+  /\b(turn (this|it|the mic|genie) off|turn off (the )?(mic|microphone|genie)|stop (listening|talking|recording)|end (the |this )?(chat|conversation|session)|that'?s all|i'?m done|we'?re done|never ?mind|goodbye|bye genie)\b/i
+
 /** Silence / echo hallucinations often show up as CJK, Cyrillic, or Whisper filler. */
 export const isJunkRealtimeTranscript = (text: string) => {
   const trimmed = text.replace(/\s+/g, ' ').trim()
@@ -110,15 +115,16 @@ export const looksLikeGenieEcho = (userText: string, assistantText: string) => {
   }
   const userWords = significantWords(user)
   const assistantWords = new Set(significantWords(assistant))
-  if (userWords.length === 0) {
-    return true
+  // Short answers ("Card is from me", "No") naturally reuse words from Genie's question.
+  if (userWords.length < 4) {
+    return false
   }
   const overlap = userWords.filter((word) => assistantWords.has(word)).length
   const ratio = overlap / userWords.length
-  if (userWords.length <= 8 && ratio >= 0.45) {
+  if (userWords.length <= 8 && ratio >= 0.6) {
     return true
   }
-  if (ratio >= 0.6) {
+  if (ratio >= 0.7) {
     return true
   }
   const compactUser = user.toLowerCase().replace(/[^a-z0-9\s]/g, '')
@@ -187,6 +193,8 @@ export const connectLampGenieRealtime = async (options: {
   let unmuteFallbackTimer = 0
   let endSessionTimer = 0
   let logFlushTimer = 0
+  let idleTimer = 0
+  let lastActivityAt = Date.now()
   let cleanedUp = false
   const processedToolCalls = new Set<string>()
 
@@ -385,6 +393,10 @@ export const connectLampGenieRealtime = async (options: {
     if (logFlushTimer) {
       window.clearInterval(logFlushTimer)
       logFlushTimer = 0
+    }
+    if (idleTimer) {
+      window.clearInterval(idleTimer)
+      idleTimer = 0
     }
     void flushSessionLog(true)
     try {
@@ -635,7 +647,14 @@ export const connectLampGenieRealtime = async (options: {
         return
       }
       recordTurn('user', transcript)
+      lastActivityAt = Date.now()
       handlers.onUserTranscript?.(transcript, true)
+      if (transcript.split(/\s+/).length <= 8 && LAMP_GENIE_STOP_PATTERN.test(transcript)) {
+        recordTurn('system', 'shopper_asked_to_stop')
+        handlers.onNotice?.('Mic off. Your answers are saved in the form below.')
+        cleanup()
+        return
+      }
       // Only reply after a finished transcript. VAD no longer auto-starts Genie.
       requestAssistantResponse()
       return
@@ -743,6 +762,17 @@ export const connectLampGenieRealtime = async (options: {
     logFlushTimer = window.setInterval(() => {
       void flushSessionLog(false)
     }, 12000)
+    idleTimer = window.setInterval(() => {
+      if (genieSpeaking || awaitingOutputAudioEnd || responseInFlight) {
+        lastActivityAt = Date.now()
+        return
+      }
+      if (Date.now() - lastActivityAt > LAMP_GENIE_IDLE_LIMIT_MS) {
+        recordTurn('system', 'idle_timeout')
+        handlers.onNotice?.('Genie stopped listening after a quiet stretch. Tap the lamp to chat again.')
+        cleanup()
+      }
+    }, 10000)
   })
   dataChannel.addEventListener('message', (event) => {
     handleServerEvent(String(event.data || ''))

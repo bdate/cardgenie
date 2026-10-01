@@ -4968,8 +4968,17 @@ function App() {
     })()
   }
 
+  const turnOffLampGenieMic = () => {
+    disconnectLampGenieRealtime()
+    setInterviewNotice('Mic off. Your answers are saved in the form below.')
+  }
+
   const openCardInterview = (mode: InterviewMode = 'quick') => {
     if (isRecipientView) {
+      return
+    }
+    if (mode === 'chat' && showCardInterviewRef.current && interviewVoiceLoopRef.current) {
+      turnOffLampGenieMic()
       return
     }
     setStartingInterviewMode(mode)
@@ -9329,40 +9338,22 @@ function App() {
                     Hear Genie
                   </button>
                 )}
-                {interviewMicSupported && !interviewComplete && interviewMode === 'chat' && !pendingHearGenieText && (
+                {interviewMode === 'chat' && interviewVoiceLoop && (
                   <button
-                    className={`secondary-button card-interview-mic${isInterviewListening ? ' is-listening' : ''}`}
+                    className="secondary-button card-interview-mic is-listening"
                     type="button"
-                    disabled={isInterviewing || isInterviewSpeaking}
-                    aria-pressed={isInterviewListening}
-                    onClick={() => {
-                      if (isInterviewListening) {
-                        stopInterviewListening()
-                        setInterviewNotice('Mic paused. Tap Talk when you’re ready again.')
-                      } else {
-                        void (async () => {
-                          if (microphoneAccessKnown !== 'granted' && !interviewMicStreamIsLive()) {
-                            setInterviewNotice('Allow the microphone so Genie can hear you…')
-                          }
-                          const micAccess = await ensureMicrophoneAccess({
-                            holdStream: preferStreamInterviewListen(),
-                          })
-                          if (micAccess === 'denied') {
-                            setInterviewNotice(
-                              'Microphone permission is needed to talk to Genie. You can still type your reply.',
-                            )
-                            return
-                          }
-                          interviewVoiceLoopRef.current = true
-                          setInterviewVoiceLoop(true)
-                          void unlockGenieSpeechAudio()
-                          void acquireScreenStayAwake()
-                          startInterviewListening({ announce: true })
-                        })()
-                      }
-                    }}
+                    onClick={turnOffLampGenieMic}
                   >
-                    {isInterviewListening ? 'Listening…' : 'Talk'}
+                    Turn off mic
+                  </button>
+                )}
+                {interviewMicSupported && !interviewComplete && interviewMode === 'chat' && !interviewVoiceLoop && !pendingHearGenieText && (
+                  <button
+                    className="secondary-button card-interview-mic"
+                    type="button"
+                    onClick={startLampGenieRealtimeSession}
+                  >
+                    Talk to Genie again
                   </button>
                 )}
                 {interviewMicSupported && !interviewComplete && !interviewVoiceLoop && interviewMode !== 'chat' && (
