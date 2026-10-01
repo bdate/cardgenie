@@ -3003,8 +3003,8 @@ function App() {
     return `$${amount.toFixed(2)}`
   }
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
-  const showSendActions = (step === 'front' || step === 'inside') && hasViewedInside
-  const showReviseButton = hasViewedFront && hasViewedInside
+  const showSendActions = step === 'front' || step === 'inside'
+  const showReviseButton = showSendActions
   const showCoverWatermark = !isRecipientView && Boolean(card) && !hasSentCurrentCard
   const coverPreviewClass = (baseClass = '') =>
     [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
@@ -6587,7 +6587,20 @@ function App() {
     return isMailingAddressBlank(normalized) ? null : normalized
   }
 
+  const requireInsideViewed = (showNotice: (message: string) => void) => {
+    if (hasViewedInside || step === 'inside') {
+      return true
+    }
+    setStep('inside')
+    showNotice('Take a quick look inside first, then tap again to continue.')
+    previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return false
+  }
+
   const openPrintOrder = () => {
+    if (!requireInsideViewed(setPrintOrderNotice)) {
+      return
+    }
     const knownEmail = resolveKnownShopperEmail()
     if (knownEmail) {
       setPrintShopperEmail(knownEmail)
@@ -7826,6 +7839,9 @@ function App() {
     event.preventDefault()
     setError('')
     setDeliveryNotice('')
+    if (!requireInsideViewed(setDeliveryNotice)) {
+      return
+    }
 
     const rawEntries = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
 
