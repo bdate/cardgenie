@@ -585,6 +585,32 @@ const coverAllowsPeople = (details = {}, refinement = '') => {
   return personAppearancePattern.test(context) || peopleRequestPattern.test(String(refinement || ''))
 }
 
+const coverNameFormalTitlePattern = /^(mr|mrs|ms|miss|mx|dr|prof|rev|the)\.?$/i
+const coverNameKinTitlePattern = /^(aunt|auntie|uncle|grandma|grandpa|granny|nana|papa|gigi|cousin|coach|sister|brother|sis|bro|mom|dad|mama|pastor|father|mother)$/i
+
+const coverRecipientFirstNames = (fullName = '') => {
+  const value = String(fullName || '').trim().replace(/\s+/g, ' ')
+  if (!value) return ''
+  const parts = value.split(/\s*(?:,|&|\band\b)\s*/i).filter(Boolean)
+  const firstNames = parts.map((part) => {
+    const words = part.split(' ')
+    if (words.length < 2 || coverNameFormalTitlePattern.test(words[0])) return part
+    if (coverNameKinTitlePattern.test(words[0])) return words.slice(0, 2).join(' ')
+    return words[0]
+  })
+  if (firstNames.length === 1) return firstNames[0]
+  return `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`
+}
+
+const withCoverRecipientName = (details) =>
+  details?.recipientName?.trim()
+    ? { ...details, recipientName: coverRecipientFirstNames(details.recipientName) }
+    : details
+
+const buildImagePrompt = (details, ...args) => buildCoverImagePrompt(withCoverRecipientName(details), ...args)
+
+const buildImageEditPrompt = (details, ...args) => buildCoverImageEditPrompt(withCoverRecipientName(details), ...args)
+
 const buildPeopleOnCoverGuidance = (details, hasReferenceImages = false, refinement = '') => {
   const names = `the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}".`
   const castingLine = `Name and relationship context: ${names} Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.`
@@ -604,7 +630,7 @@ People on the cover: the sender described how someone looks or asked for people,
 People on the cover: the sender provided no photos and did not describe what anyone looks like, so do not depict any people. No faces, heads, human figures, silhouettes, crowds, hands, or body parts. Tell the story through objects, places, food, nature, animals or pets the sender mentioned, and symbolic scenery instead. For example, show a pickleball paddle and ball, skis on a snowy slope, or two lattes and a pastry on a café table rather than people doing those things.`
 }
 
-const buildImagePrompt = (details, refinement = '', imageMode = 'new', hasReferenceImages = false) => `
+const buildCoverImagePrompt = (details, refinement = '', imageMode = 'new', hasReferenceImages = false) => `
 ${imageMode === 'revise' ? 'Create a revised version of the existing front cover concept for a personalized greeting card.' : 'Create the front cover artwork for a personalized greeting card.'}
 
 The generated image must be portrait artwork at ${COVER_IMAGE_WIDTH}px wide by ${COVER_IMAGE_HEIGHT}px tall, composed for a greeting-card cover in standard 5x7 proportions. The app will place this image inside a separate card frame, so do not add paper edges, borders, shadows, mockups, envelopes, UI, or folded-card effects.
@@ -652,7 +678,7 @@ ${buildAiChoosesStyleGuidance(details.imageStyle, hasReferenceImages)}
 - Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
 ${
   details.recipientName?.trim()
-    ? `- Personalize that phrase with the recipient's name, "${details.recipientName.trim()}", whenever cover text is used and it suits the occasion, for example "Happy Birthday, Joe" or "Thank You, Nellie". For one person with a full name, use the first name. Spell the name exactly as written. Leave the name off only for somber occasions such as sympathy, or if it is too long to stay legible inside the safe area.\n`
+    ? `- Personalize that phrase with the recipient's name, "${details.recipientName.trim()}", whenever cover text is used and it suits the occasion, for example "Happy Birthday, Joe" or "Thank You, Nellie". Use the name exactly as written here — first names only, never add a last name. Leave the name off only for somber occasions such as sympathy, or if it is too long to stay legible inside the safe area.\n`
     : ''
 }- Ages may be included when they fit naturally and remain fully inside the central safe area.
 
@@ -670,7 +696,7 @@ Negative requirements:
 - No cropped-off subject, no text near margins, no layout elements near edges.
 `
 
-const buildImageEditPrompt = (details, refinement = '') => `
+const buildCoverImageEditPrompt = (details, refinement = '') => `
 Edit the provided greeting-card cover image. Use the uploaded image as the source of truth.
 
 User edit request: ${refinement}

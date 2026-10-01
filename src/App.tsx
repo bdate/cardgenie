@@ -6633,6 +6633,10 @@ function App() {
       setPrintShopperEmail(knownEmail)
     }
     applySavedMailingAddressToPrint(resolveSavedMailingAddress())
+    const cardRecipientName = details.recipientName.trim()
+    if (cardRecipientName) {
+      setPrintShipTo((current) => (current.name.trim() ? current : { ...current, name: cardRecipientName }))
+    }
     setPrintOrderStep('ship-to')
     setPrintOrderNotice('')
     window.setTimeout(() => {
