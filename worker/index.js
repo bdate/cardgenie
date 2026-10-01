@@ -586,6 +586,7 @@ const coverAllowsPeople = (details = {}, refinement = '') => {
 }
 
 const coverNameFormalTitlePattern = /^(mr|mrs|ms|miss|mx|dr|prof|rev|the)\.?$/i
+const coverNameCompoundFirstNames = new Set(['mary ann', 'mary anne', 'mary beth', 'mary jo', 'mary lou', 'mary kate', 'mary jane', 'mary ellen', 'mary grace', 'mary claire', 'anna mae', 'ella mae', 'lou ann', 'lee ann', 'jo ann', 'jo anne', 'ann marie', 'anne marie', 'anna marie', 'rose marie', 'betty jo', 'billie jo', 'bobbie jo', 'peggy sue', 'sue ellen', 'sara jane', 'sarah jane', 'billy bob', 'billy ray', 'billy joe', 'jim bob', 'joe bob', 'john paul', 'jean paul', 'jean claude', 'jean luc', 'jean pierre', 'tommy lee', 'bobby joe', 'la toya', 'de andre'])
 const coverNameKinTitlePattern = /^(aunt|auntie|uncle|grandma|grandpa|granny|nana|papa|gigi|cousin|coach|sister|brother|sis|bro|mom|dad|mama|pastor|father|mother)$/i
 
 const coverRecipientFirstNames = (fullName = '') => {
@@ -595,8 +596,9 @@ const coverRecipientFirstNames = (fullName = '') => {
   const firstNames = parts.map((part) => {
     const words = part.split(' ')
     if (words.length < 2 || coverNameFormalTitlePattern.test(words[0])) return part
-    if (coverNameKinTitlePattern.test(words[0])) return words.slice(0, 2).join(' ')
-    return words[0]
+    const start = coverNameKinTitlePattern.test(words[0]) ? 1 : 0
+    const compound = words.length > start + 1 && coverNameCompoundFirstNames.has(`${words[start]} ${words[start + 1]}`.toLowerCase())
+    return words.slice(0, start + (compound ? 2 : 1)).join(' ')
   })
   if (firstNames.length === 1) return firstNames[0]
   return `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`
