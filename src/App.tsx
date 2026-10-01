@@ -32,7 +32,17 @@ type GeneratedCard = {
   closing?: string
   messageVariants?: MessageVariants
   selectedLength?: MessageLengthId
+  coverDetails?: Partial<CardDetails>
 }
+
+const coverDetailFields: Array<[keyof CardDetails, string]> = [
+  ['recipientName', 'Recipient'],
+  ['recipientType', 'Relation'],
+  ['occasion', 'Occasion'],
+  ['tone', 'Tone'],
+  ['imageStyle', 'Image style'],
+  ['keyDetails', 'Personal details'],
+]
 
 type SharedCard = {
   id: string
@@ -3005,6 +3015,11 @@ function App() {
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = step === 'front' || step === 'inside'
   const showReviseButton = showSendActions
+  const coverDetailChanges = card?.coverDetails
+    ? coverDetailFields
+        .filter(([field]) => (card.coverDetails?.[field] || '').trim() !== (details[field] || '').trim())
+        .map(([, label]) => label)
+    : []
   const showCoverWatermark = !isRecipientView && Boolean(card) && !hasSentCurrentCard
   const coverPreviewClass = (baseClass = '') =>
     [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
@@ -6190,6 +6205,7 @@ function App() {
       closing: copy.closing,
       messageVariants: variants,
       selectedLength: variants ? selectedLength : undefined,
+      coverDetails: { ...details },
     })
     setCardGreeting('')
     setCardSignature(signatureName)
@@ -7281,6 +7297,7 @@ function App() {
         },
         body: JSON.stringify({
           details,
+          ...(card.coverDetails ? { previousDetails: card.coverDetails } : {}),
           refinement: imageRefinement,
           imageMode: coverRefinementMode,
           ...(coverRefinementMode === 'revise'
@@ -7303,7 +7320,7 @@ function App() {
         throw new Error('Unable to refine the cover image.')
       }
 
-      setCard((current) => (current ? { ...current, imageUrl: data.imageUrl } : current))
+      setCard((current) => (current ? { ...current, imageUrl: data.imageUrl, coverDetails: { ...details } } : current))
       if (typeof data.cardId === 'string' && data.cardId.trim()) {
         const nextCardId = data.cardId.trim()
         setSharedCard((current) => {
@@ -10748,11 +10765,16 @@ function App() {
                                 : 'Example: create a completely different cover concept with a sunny garden party and elegant birthday text.'
                             }
                           />
+                          {coverDetailChanges.length > 0 && (
+                            <p className="field-notice">
+                              Your form changes will be applied too: {coverDetailChanges.join(', ')}.
+                            </p>
+                          )}
                           <div className="credit-action-block">
                             <button
                               className="primary-button cost-button"
                               type="button"
-                              disabled={isRefiningImage || !imageRefinement.trim()}
+                              disabled={isRefiningImage || (!imageRefinement.trim() && coverDetailChanges.length === 0)}
                               aria-busy={isRefiningImage}
                               onClick={refineImage}
                             >

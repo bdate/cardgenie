@@ -613,6 +613,38 @@ const buildImagePrompt = (details, ...args) => buildCoverImagePrompt(withCoverRe
 
 const buildImageEditPrompt = (details, ...args) => buildCoverImageEditPrompt(withCoverRecipientName(details), ...args)
 
+const coverChangeFields = [
+  ['recipientName', 'Recipient name'],
+  ['recipientType', 'Relationship'],
+  ['occasion', 'Occasion'],
+  ['tone', 'Tone'],
+  ['imageStyle', 'Image style'],
+  ['keyDetails', 'Personal details'],
+]
+
+const describeCoverDetailChanges = (previous, next) => {
+  if (!previous || typeof previous !== 'object') return ''
+  const lines = []
+  for (const [field, label] of coverChangeFields) {
+    let before = String(previous[field] || '').trim()
+    let after = String(next?.[field] || '').trim()
+    if (before === after) continue
+    if (field === 'recipientName') {
+      before = coverRecipientFirstNames(before)
+      after = coverRecipientFirstNames(after)
+    }
+    const show = (value) => (value ? `"${value}"` : field === 'imageStyle' ? 'AI chooses the style' : '(blank)')
+    lines.push(`- ${label}: changed from ${show(before)} to ${show(after)}`)
+  }
+  if (!lines.length) return ''
+  return `The sender updated the card form since this cover was made. Apply these updates to the cover:
+${lines.join('\n')}
+If the image style changed, redraw the whole cover in the new style. If the occasion or recipient name changed, update any cover text to match.`
+}
+
+const combineCoverRefinement = (refinement, previous, next) =>
+  [String(refinement || '').trim(), describeCoverDetailChanges(previous, next)].filter(Boolean).join('\n\n')
+
 const buildPeopleOnCoverGuidance = (details, hasReferenceImages = false, refinement = '') => {
   const names = `the recipient is named "${details.recipientName || 'the recipient'}" and is described by the sender as "${details.recipientType}". The sender is named "${details.senderName || 'the sender'}".`
   const castingLine = `Name and relationship context: ${names} Use these names and relationship clues only as soft visual context for age, relationship, and casting when they are obvious. Do not add gender questions, do not stereotype, and do not force a photorealistic person if a symbolic or illustrative scene would work better.`
@@ -3920,8 +3952,16 @@ const handleRefineImage = async (request, env) => {
     return missingKeyResponse
   }
 
-  const { details, refinement, imageMode, currentImageUrl, cardId, referenceImages: rawReferenceImages } =
-    (await readJson(request)) || {}
+  const {
+    details,
+    previousDetails,
+    refinement: rawRefinement,
+    imageMode,
+    currentImageUrl,
+    cardId,
+    referenceImages: rawReferenceImages,
+  } = (await readJson(request)) || {}
+  const refinement = combineCoverRefinement(rawRefinement, previousDetails, details)
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
   const missingFields = validateDetails(details || {})
 
@@ -3930,7 +3970,7 @@ const handleRefineImage = async (request, env) => {
   }
 
   if (!refinement?.trim()) {
-    return jsonResponse(request, env, { error: 'Tell us what to change about the cover image.' }, 400)
+    return jsonResponse(request, env, { error: 'Tell us what to change about the cover image, or update the card details above.' }, 400)
   }
 
   try {
