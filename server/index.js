@@ -1135,7 +1135,11 @@ ${buildAiChoosesStyleGuidance(details.imageStyle, hasReferenceImages)}
 - Choose font style based on the card: elegant serif or script for heartfelt/elegant cards, playful lettering for funny/playful cards, clean modern type for simple or contemporary cards.
 - Text should be large enough to read but never oversized, never crowded, and never inside the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
 - Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
-- Names and ages are allowed only when they fit naturally and remain fully inside the central safe area.
+${
+  details.recipientName?.trim()
+    ? `- Personalize that phrase with the recipient's name, "${details.recipientName.trim()}", whenever cover text is used and it suits the occasion, for example "Happy Birthday, Joe" or "Thank You, Nellie". For one person with a full name, use the first name. Spell the name exactly as written. Leave the name off only for somber occasions such as sympathy, or if it is too long to stay legible inside the safe area.\n`
+    : ''
+}- Ages may be included when they fit naturally and remain fully inside the central safe area.
 
 Copyright and identity:
 - Do not depict trademarked superheroes, movie characters, logos, brands, or celebrity likenesses even if they are mentioned in the personal context.

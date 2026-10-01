@@ -99,8 +99,8 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  border: 2px solid rgba(63, 155, 145, 0.28);
-  border-top-color: var(--gcu-dark-teal);
+  border: 2px solid rgba(245, 158, 51, 0.28);
+  border-top-color: var(--gcu-orange);
   border-radius: 50%;
   animation: actionFeedbackSpin 700ms linear infinite;
 }
