@@ -515,6 +515,10 @@ const referencePhotoJpegQuality = 0.8
 const maxReferencePhotoDataUrlLength = 480000
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const loaderWishImageUrl = `${import.meta.env.BASE_URL}loader-wish.png`
+if (typeof window !== 'undefined') {
+  new Image().src = loaderWishImageUrl
+}
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
 
 const stopGenieSpeech = () => {
@@ -9781,7 +9785,25 @@ function App() {
             <div className="creative-loader" role="status" aria-live="polite">
               <div className="wish-loader" aria-hidden="true">
                 <div className="wish-halo" />
-                <img className="wish-art" src={`${import.meta.env.BASE_URL}loader-wish.png`} alt="" />
+                <img
+                  className="wish-art"
+                  src={loaderWishImageUrl}
+                  alt=""
+                  onError={(event) => {
+                    const img = event.currentTarget
+                    img.style.visibility = 'hidden'
+                    if (img.dataset.retried) {
+                      return
+                    }
+                    img.dataset.retried = '1'
+                    const retry = new Image()
+                    retry.onload = () => {
+                      img.src = retry.src
+                      img.style.visibility = ''
+                    }
+                    retry.src = `${loaderWishImageUrl}?retry=${Date.now()}`
+                  }}
+                />
                 <svg className="wish-sparks" viewBox="0 0 500 814" fill="none">
                   <defs>
                     <filter id="spark-glow" x="-80%" y="-80%" width="260%" height="260%">
