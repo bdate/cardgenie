@@ -7618,6 +7618,20 @@ function App() {
     if (!accountSession?.token || openingAccountCardId) {
       return
     }
+    const hasCurrentWork =
+      Boolean(card) ||
+      referencePhotos.length > 0 ||
+      (Object.keys(initialDetails) as Array<keyof CardDetails>).some(
+        (field) => details[field].trim() !== initialDetails[field].trim(),
+      )
+    if (
+      hasCurrentWork &&
+      !window.confirm(
+        'Open this card? The information currently in your card fields will be replaced and can’t be recovered.',
+      )
+    ) {
+      return
+    }
     setOpeningAccountCardId(cardId)
     setAccountHistoryError('')
     try {
@@ -9157,6 +9171,13 @@ function App() {
                 </div>
                 <div>
                   <span>
+                    Printed {adminMetricsPeriodLabel}
+                    <small> · Total {adminMetrics.totals?.prints ?? 0}</small>
+                  </span>
+                  <strong>{adminPeriodStats.prints ?? 0}</strong>
+                </div>
+                <div>
+                  <span>
                     Cards {adminMetricsPeriodLabel}
                     <small> · Total {adminMetrics.totals?.cards ?? 0}</small>
                   </span>
@@ -9230,6 +9251,7 @@ function App() {
                       <th>Day</th>
                       <th>Accounts</th>
                       <th>Sends</th>
+                      <th>Printed</th>
                       <th>Logins</th>
                       <th>Thanks</th>
                       <th>Reviews</th>
@@ -9256,6 +9278,7 @@ function App() {
                         <td>{row.day.slice(5)}</td>
                         <td>{adminMetrics.daily?.accounts?.[index]?.count ?? 0}</td>
                         <td>{row.count}</td>
+                        <td>{adminMetrics.daily?.prints?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.logins?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.thankYous?.[index]?.count ?? 0}</td>
                         <td>{adminMetrics.daily?.testimonials?.[index]?.count ?? 0}</td>

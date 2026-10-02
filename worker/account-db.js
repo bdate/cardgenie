@@ -1143,6 +1143,8 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
     creditPurchaseRows,
     creditSpendRows,
     paymentRows,
+    printsTotal,
+    printRows,
   ] = await Promise.all([
     safeCount(db, `SELECT COUNT(*) AS n FROM users`),
     safeCount(db, `SELECT COUNT(*) AS n FROM cards WHERE status != 'created'`),
@@ -1214,6 +1216,8 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
        WHERE status = 'paid' AND COALESCE(paid_at, created_at) >= ?`,
       [since],
     ),
+    safeCount(db, `SELECT COUNT(*) AS n FROM print_orders`),
+    safeAll(db, `SELECT created_at FROM print_orders WHERE created_at >= ?`, [since]),
   ])
 
   const accountsByDay = countByPacificDay(accountRows)
@@ -1225,6 +1229,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
   const creditsPurchasedByDay = countByPacificDay(creditPurchaseRows)
   const creditsSpentByDay = countByPacificDay(creditSpendRows)
   const amountPaidByDay = countByPacificDay(paymentRows)
+  const printsByDay = countByPacificDay(printRows)
 
   return {
     generatedAt: isoNow(),
@@ -1238,6 +1243,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       accounts: accountsTotal,
       cards: cardsTotal,
       sends: sendsTotal,
+      prints: printsTotal,
       failedSends: failedSendsTotal,
       thankYous: thankYousTotal,
       testimonials: testimonialsTotal,
@@ -1253,6 +1259,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       accounts: sumMapDay(accountsByDay, today),
       cards: sumMapDay(cardsByDay, today),
       sends: sumMapDay(sendsByDay, today),
+      prints: sumMapDay(printsByDay, today),
       thankYous: sumMapDay(thankYousByDay, today),
       testimonials: sumMapDay(testimonialsByDay, today),
       logins: sumMapDay(loginsByDay, today),
@@ -1265,6 +1272,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       accounts: sumMapRange(accountsByDay, dayKeysOldestFirst),
       cards: sumMapRange(cardsByDay, dayKeysOldestFirst),
       sends: sumMapRange(sendsByDay, dayKeysOldestFirst),
+      prints: sumMapRange(printsByDay, dayKeysOldestFirst),
       thankYous: sumMapRange(thankYousByDay, dayKeysOldestFirst),
       testimonials: sumMapRange(testimonialsByDay, dayKeysOldestFirst),
       logins: sumMapRange(loginsByDay, dayKeysOldestFirst),
@@ -1277,6 +1285,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
       accounts: seriesFromMap(dayKeys, accountsByDay),
       cards: seriesFromMap(dayKeys, cardsByDay),
       sends: seriesFromMap(dayKeys, sendsByDay),
+      prints: seriesFromMap(dayKeys, printsByDay),
       thankYous: seriesFromMap(dayKeys, thankYousByDay),
       logins: seriesFromMap(dayKeys, loginsByDay),
       testimonials: seriesFromMap(dayKeys, testimonialsByDay),
