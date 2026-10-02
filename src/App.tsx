@@ -9159,7 +9159,7 @@ function App() {
             </div>
           </div>
           {thumbBackfillNotice && <div className="field-notice">{thumbBackfillNotice}</div>}
-          <div className="mode-toggle admin-metrics-periods" role="tablist" aria-label="Analytics period">
+          <div className="mode-toggle choice-radios admin-metrics-periods" role="radiogroup" aria-label="Analytics period">
             {(
               [
                 { id: 'today', label: 'Today' },
@@ -9172,8 +9172,8 @@ function App() {
                 key={tab.id}
                 className={adminMetricsPeriod === tab.id ? 'is-selected' : ''}
                 type="button"
-                role="tab"
-                aria-selected={adminMetricsPeriod === tab.id}
+                role="radio"
+                aria-checked={adminMetricsPeriod === tab.id}
                 disabled={isLoadingAdminMetrics || !accountSession?.token}
                 onClick={() => void selectAdminMetricsPeriod(tab.id)}
               >
@@ -9359,7 +9359,7 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="mode-toggle admin-review-filters" role="tablist" aria-label="Review status">
+          <div className="mode-toggle choice-radios admin-review-filters" role="radiogroup" aria-label="Review status">
             {(
               [
                 { id: 'pending', label: 'Pending' },
@@ -9371,8 +9371,8 @@ function App() {
                 key={tab.id}
                 className={adminReviewStatus === tab.id ? 'is-selected' : ''}
                 type="button"
-                role="tab"
-                aria-selected={adminReviewStatus === tab.id}
+                role="radio"
+                aria-checked={adminReviewStatus === tab.id}
                 disabled={isLoadingPendingReviews || !accountSession?.token}
                 onClick={() => void selectAdminReviewStatus(tab.id)}
               >
@@ -9466,7 +9466,7 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="mode-toggle admin-history-filters" role="tablist" aria-label="Activity type">
+          <div className="mode-toggle choice-radios admin-history-filters" role="radiogroup" aria-label="Activity type">
             {(
               [
                 { id: '', label: 'All' },
@@ -9480,8 +9480,8 @@ function App() {
                 key={tab.id || 'all'}
                 className={cardHistoryKind === tab.id ? 'is-selected' : ''}
                 type="button"
-                role="tab"
-                aria-selected={cardHistoryKind === tab.id}
+                role="radio"
+                aria-checked={cardHistoryKind === tab.id}
                 disabled={isLoadingCardHistory || !accountSession?.token}
                 onClick={() => void selectCardHistoryKind(tab.id)}
               >
