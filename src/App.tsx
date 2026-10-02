@@ -2605,6 +2605,9 @@ function App() {
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
   const [expandCardActivity, setExpandCardActivity] = useState(false)
   const [showSmsConsentDetails, setShowSmsConsentDetails] = useState(false)
+  const pendingCreatedSaveRef = useRef(false)
+  const replaceCreatedCardIdRef = useRef('')
+  const [openingAccountCardId, setOpeningAccountCardId] = useState('')
   const [expandPrintOrders, setExpandPrintOrders] = useState(false)
   const [accountProfileEmail, setAccountProfileEmail] = useState('')
   const [accountPreferredName, setAccountPreferredName] = useState('')
@@ -5680,6 +5683,19 @@ function App() {
           ? `${occasion} card`
           : ''
       const thumbCardId = groupCardIds.find((cardId) => cardById.get(cardId)?.coverThumbUrl) || groupCardIds[0]
+      const realCardIds = groupCardIds.filter((cardId) => !cardId.startsWith('delivery-'))
+      const lastActivityFor = (cardId: string) =>
+        [
+          cardById.get(cardId)?.createdAt,
+          ...cardDeliveries.filter((delivery) => delivery.cardId === cardId).map((delivery) => delivery.createdAt),
+          ...cardPrints.filter((order) => order.cardId === cardId).map((order) => order.createdAt),
+        ]
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .pop() || ''
+      const openCardId = [...realCardIds].sort((left, right) => lastActivityFor(right).localeCompare(lastActivityFor(left)))[0]
+      const canOpen =
+        Boolean(openCardId) && Boolean(latest) && Date.now() - new Date(latest || '').getTime() <= 7 * 24 * 60 * 60 * 1000
 
       return {
         id: `card-${groupKey}`,
@@ -5687,8 +5703,16 @@ function App() {
         title: actions.length ? actions.join(' / ') : 'Created',
         detail: [summary, destinations.join(', ')].filter(Boolean).join(' — ') || 'Card',
         summary: summary || 'Card',
+        cardIds: realCardIds,
+        openCardId: canOpen ? openCardId : '',
         timeline,
-        status: latestDelivery?.status || (cardPrints.length ? cardPrints[0].status || 'submitted' : summaryCard?.status || ''),
+        status:
+          latestDelivery?.status ||
+          (cardPrints.length
+            ? cardPrints[0].status || 'submitted'
+            : summaryCard?.status === 'created'
+              ? ''
+              : summaryCard?.status || ''),
         coverThumbUrl: resolveThumbUrl(
           thumbCardId,
           cardById.get(thumbCardId)?.coverThumbUrl || latestDelivery?.coverThumbUrl || cardPrints[0]?.coverThumbUrl,
@@ -5706,6 +5730,8 @@ function App() {
         : `“${thankYou.message}”`,
       status: thankYou.status || 'Sent',
       summary: '',
+      cardIds: thankYou.cardId ? [thankYou.cardId] : [],
+      openCardId: '',
       timeline: [] as Array<{ at: string; label: string }>,
       coverThumbUrl: '',
     }))
@@ -6277,6 +6303,7 @@ function App() {
       selectedLength: variants ? selectedLength : undefined,
       coverDetails: { ...details },
     })
+    pendingCreatedSaveRef.current = true
     setCardGreeting('')
     setCardSignature(signatureName)
     setStep('envelope')
@@ -6361,6 +6388,7 @@ function App() {
     setError('')
 
     restoreSentAfterFailedGenerateRef.current = hasSentCurrentCard
+    replaceCreatedCardIdRef.current = hasSentCurrentCard || hasPrintedCurrentCard ? '' : sharedCard?.id || ''
     setIsGenerating(true)
     showActionFeedback('Creating your card…')
     setShowCompletionNote(false)
@@ -7523,13 +7551,15 @@ function App() {
         imageUrl: coverImageUrl || card.imageUrl,
         message: cardMessage,
         closing: cardClosing,
+        messageVariants: card.messageVariants,
+        selectedLength: card.selectedLength,
       },
       greeting: insideGreeting,
       signature: cardSignatureLabel,
     }
   }
 
-  const saveCurrentCard = async () => {
+  const saveCurrentCard = async ({ replacesCardId }: { replacesCardId?: string } = {}) => {
     let coverThumb = ''
     let storedCover = card!.imageUrl
     try {
@@ -7552,6 +7582,7 @@ function App() {
       body: JSON.stringify({
         ...buildCurrentCardPayload(storedCover),
         ...(sharedCard?.id ? { cardId: sharedCard.id } : {}),
+        ...(replacesCardId ? { replacesCardId } : {}),
         ...(coverThumb ? { coverThumb } : {}),
       }),
     })
@@ -7567,6 +7598,121 @@ function App() {
       : shared
     setSharedCard(normalized)
     return normalized
+  }
+
+  useEffect(() => {
+    if (!pendingCreatedSaveRef.current || !card || sharedCard || !accountSession?.token || isRecipientView) {
+      return
+    }
+    pendingCreatedSaveRef.current = false
+    const replacesCardId = replaceCreatedCardIdRef.current
+    replaceCreatedCardIdRef.current = ''
+    void saveCurrentCard({ replacesCardId }).catch((saveError) => {
+      console.error('Unable to save the new card to the account.', saveError)
+    })
+    // saveCurrentCard reads the latest card state; only a newly generated card should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card, sharedCard, accountSession?.token, isRecipientView])
+
+  const openAccountCard = async (cardId: string) => {
+    if (!accountSession?.token || openingAccountCardId) {
+      return
+    }
+    setOpeningAccountCardId(cardId)
+    setAccountHistoryError('')
+    try {
+      const response = await fetch(apiUrl(`/api/account/cards/${encodeURIComponent(cardId)}`), {
+        headers: { Authorization: `Bearer ${accountSession.token}` },
+      })
+      const data = await getApiJson(response, 'Unable to open that card.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to open that card.')
+      }
+      const shared = data as SharedCard & {
+        editor?: {
+          details?: Partial<CardDetails>
+          messageVariants?: MessageVariants
+          selectedLength?: MessageLengthId
+        } | null
+      }
+      const nextDetails: CardDetails = {
+        ...initialDetails,
+        ...Object.fromEntries(Object.entries(shared.details || {}).filter(([, value]) => typeof value === 'string')),
+        ...Object.fromEntries(
+          Object.entries(shared.editor?.details || {}).filter(([, value]) => typeof value === 'string' && value),
+        ),
+      }
+      const signatureName = shared.signature || nextDetails.senderName || 'Your Name'
+      const variants = shared.editor?.messageVariants
+      const selectedLength = shared.editor?.selectedLength
+      const copy = normalizeCardCopy(shared.card.message, shared.card.closing, signatureName)
+      const openedCard: GeneratedCard = {
+        imageUrl: shared.card.imageUrl,
+        message: copy.message,
+        closing: copy.closing,
+        messageVariants: variants,
+        selectedLength: variants ? selectedLength || 'medium' : undefined,
+        coverDetails: { ...nextDetails },
+      }
+      setDetails(nextDetails)
+      setReferencePhotos([])
+      setCard(openedCard)
+      setSharedCard({ ...shared, card: openedCard })
+      setCardGreeting(shared.greeting || null)
+      setCardSignature(shared.signature || null)
+      setHasSentCurrentCard(false)
+      setHasPrintedCurrentCard(false)
+      setDeliveryNotice('')
+      setPrintOrderStep('closed')
+      setPrintOrderNotice('')
+      setShowEditor(false)
+      setHasViewedFront(true)
+      setHasViewedInside(false)
+      setStep('front')
+      setShowAccountPage(false)
+      window.setTimeout(() => {
+        previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 120)
+    } catch (caughtError) {
+      setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to open that card.')
+    } finally {
+      setOpeningAccountCardId('')
+    }
+  }
+
+  const removeAccountCardRow = async (cardIds: string[]) => {
+    if (!accountSession?.token || !cardIds.length) {
+      return
+    }
+    if (!window.confirm('Remove this card from your account history?')) {
+      return
+    }
+    setAccountHistoryError('')
+    try {
+      const response = await fetch(apiUrl('/api/account/cards/hide'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountSession.token}` },
+        body: JSON.stringify({ cardIds }),
+      })
+      const data = await getApiJson(response, 'Unable to remove that card.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to remove that card.')
+      }
+      const removed = new Set(cardIds)
+      setAccountHistory((current) =>
+        current
+          ? {
+              ...current,
+              cards: (current.cards || []).filter((entry) => !removed.has(entry.id)),
+              deliveries: (current.deliveries || []).filter((entry) => !entry.cardId || !removed.has(entry.cardId)),
+              printOrders: (current.printOrders || []).filter((entry) => !entry.cardId || !removed.has(entry.cardId)),
+              thankYous: (current.thankYous || []).filter((entry) => !removed.has(entry.cardId)),
+            }
+          : current,
+      )
+    } catch (caughtError) {
+      setAccountHistoryError(caughtError instanceof Error ? caughtError.message : 'Unable to remove that card.')
+    }
   }
 
   const addDeliveryLog = (entry: Omit<DeliveryLog, 'id' | 'createdAt'>) => {
@@ -8676,6 +8822,7 @@ function App() {
                           className={[
                             'account-row',
                             item.coverThumbUrl ? 'has-cover-thumb' : '',
+                            item.cardIds.length > 0 ? 'has-remove' : '',
                             activeCoverThumbId === item.id ? 'is-thumb-open' : '',
                           ]
                             .filter(Boolean)
@@ -8724,6 +8871,37 @@ function App() {
                             <span className="account-row-date">
                               {expandCardActivity ? formatAccountDate(item.createdAt) : formatAccountDay(item.createdAt)}
                             </span>
+                          )}
+                          {item.openCardId && (
+                            <span className="account-row-actions">
+                              <button
+                                className="text-action-link account-row-open"
+                                type="button"
+                                disabled={Boolean(openingAccountCardId)}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void openAccountCard(item.openCardId)
+                                }}
+                              >
+                                {openingAccountCardId === item.openCardId ? 'Opening…' : 'Open & edit'}
+                              </button>
+                            </span>
+                          )}
+                          {item.cardIds.length > 0 && (
+                            <button
+                              className="account-row-remove"
+                              type="button"
+                              aria-label={`Remove ${item.summary || item.title} from your history`}
+                              title="Remove from history"
+                              onKeyDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void removeAccountCardRow(item.cardIds)
+                              }}
+                            >
+                              ×
+                            </button>
                           )}
                           {item.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">

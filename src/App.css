@@ -5239,3 +5239,54 @@ select.is-placeholder option {
   gap: 2px;
   white-space: normal;
 }
+
+.account-row.has-remove {
+  padding-right: 38px;
+}
+
+.account-row-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--gcu-grey);
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.account-row-remove:hover,
+.account-row-remove:focus-visible {
+  background: rgba(63, 155, 145, 0.12);
+  color: var(--gcu-dark-teal);
+}
+
+.account-row-actions {
+  grid-column: 1 / -1;
+}
+
+.account-row-open {
+  font-size: 0.86rem;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb {
+  grid-template-areas:
+    'thumb title status'
+    'thumb detail detail'
+    'thumb date date'
+    'thumb actions actions';
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-actions {
+  grid-area: actions;
+}

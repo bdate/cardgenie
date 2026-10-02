@@ -489,6 +489,13 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
     printOrders = { results: [] }
   }
 
+  const hiddenCardIds = await getHiddenCardIds(env.ACCOUNT_DB, userId)
+  const visible = (cardId) => !cardId || !hiddenCardIds.has(cardId)
+  cards.results = (cards.results || []).filter((row) => visible(row.id))
+  deliveries.results = (deliveries.results || []).filter((row) => visible(row.card_id))
+  thankYous.results = (thankYous.results || []).filter((row) => visible(row.card_id))
+  printOrders.results = (printOrders.results || []).filter((row) => visible(row.card_id))
+
   const parseStoredAddress = (raw) => {
     try {
       const parsed = JSON.parse(raw || '{}')
@@ -1138,7 +1145,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
     paymentRows,
   ] = await Promise.all([
     safeCount(db, `SELECT COUNT(*) AS n FROM users`),
-    safeCount(db, `SELECT COUNT(*) AS n FROM cards`),
+    safeCount(db, `SELECT COUNT(*) AS n FROM cards WHERE status != 'created'`),
     safeCount(
       db,
       `SELECT COUNT(*) AS n FROM deliveries WHERE is_sender_copy = 0 AND status = 'sent'`,
@@ -1177,7 +1184,7 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
        WHERE status = 'paid'`,
     ),
     safeAll(db, `SELECT created_at FROM users WHERE created_at >= ?`, [since]),
-    safeAll(db, `SELECT created_at FROM cards WHERE created_at >= ?`, [since]),
+    safeAll(db, `SELECT created_at FROM cards WHERE status != 'created' AND created_at >= ?`, [since]),
     safeAll(
       db,
       `SELECT created_at FROM deliveries
@@ -1552,4 +1559,141 @@ export const createPrintOrder = async (
     createdAt: now,
     shopperEmail: email || '',
   }
+}
+
+const ensureHiddenCardsTable = async (db) => {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS account_hidden_cards (
+        user_id TEXT NOT NULL,
+        card_id TEXT NOT NULL,
+        hidden_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, card_id)
+      )`,
+    )
+    .run()
+}
+
+const getHiddenCardIds = async (db, userId) => {
+  try {
+    await ensureHiddenCardsTable(db)
+    const rows = await db.prepare('SELECT card_id FROM account_hidden_cards WHERE user_id = ?').bind(userId).all()
+    return new Set((rows.results || []).map((row) => row.card_id))
+  } catch {
+    return new Set()
+  }
+}
+
+const resolveAccountUserIds = async (db, { userId, phoneE164 }) => {
+  const byPhone = phoneE164 ? await getUserByPhone(db, phoneE164) : null
+  return [...new Set([byPhone?.id, userId].filter(Boolean))]
+}
+
+const cardHasActivity = async (db, cardId) => {
+  const delivery = await db.prepare('SELECT 1 AS n FROM deliveries WHERE card_id = ? LIMIT 1').bind(cardId).first()
+  if (delivery) {
+    return true
+  }
+  try {
+    const print = await db.prepare('SELECT 1 AS n FROM print_orders WHERE card_id = ? LIMIT 1').bind(cardId).first()
+    return Boolean(print)
+  } catch {
+    return false
+  }
+}
+
+export const recordCreatedCard = async (env, { userId, phoneE164, record, replacesCardId }) => {
+  if (!env.ACCOUNT_DB || !userId || !record?.id) {
+    return
+  }
+
+  const db = env.ACCOUNT_DB
+  await ensureAccountUser(env, { userId, phoneE164 })
+  const [ownerId] = await resolveAccountUserIds(db, { userId, phoneE164 })
+  const now = isoNow()
+  const details = record.details || {}
+  const existing = await db.prepare('SELECT id, user_id FROM cards WHERE id = ?').bind(record.id).first()
+
+  if (existing) {
+    await db
+      .prepare('UPDATE cards SET updated_at = ?, recipient_name = ?, occasion = ?, sender_name = ? WHERE id = ?')
+      .bind(now, details.recipientName || '', details.occasion || '', details.senderName || record.signature || '', record.id)
+      .run()
+  } else {
+    await db
+      .prepare(
+        `INSERT INTO cards (id, user_id, created_at, updated_at, status, recipient_name, occasion, sender_name)
+         VALUES (?, ?, ?, ?, 'created', ?, ?, ?)`,
+      )
+      .bind(
+        record.id,
+        ownerId,
+        record.createdAt || now,
+        now,
+        details.recipientName || '',
+        details.occasion || '',
+        details.senderName || record.signature || '',
+      )
+      .run()
+  }
+
+  try {
+    await ensureHiddenCardsTable(db)
+    await db.prepare('DELETE FROM account_hidden_cards WHERE card_id = ?').bind(record.id).run()
+  } catch {
+    // Hidden-card cleanup is best effort.
+  }
+
+  const replaced = typeof replacesCardId === 'string' ? replacesCardId.trim() : ''
+  if (replaced && replaced !== record.id && !(await cardHasActivity(db, replaced))) {
+    const ownerIds = await resolveAccountUserIds(db, { userId, phoneE164 })
+    for (const id of ownerIds) {
+      await db.prepare(`DELETE FROM cards WHERE id = ? AND user_id = ? AND status = 'created'`).bind(replaced, id).run()
+    }
+  }
+}
+
+export const userCanAccessCard = async (env, { userId, phoneE164, cardId }) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return false
+  }
+  const db = env.ACCOUNT_DB
+  const ownerIds = await resolveAccountUserIds(db, { userId, phoneE164 })
+  for (const id of ownerIds) {
+    const card = await db.prepare('SELECT 1 AS n FROM cards WHERE id = ? AND user_id = ?').bind(cardId, id).first()
+    if (card) return true
+    const delivery = await db
+      .prepare('SELECT 1 AS n FROM deliveries WHERE card_id = ? AND user_id = ? LIMIT 1')
+      .bind(cardId, id)
+      .first()
+    if (delivery) return true
+    try {
+      const print = await db
+        .prepare('SELECT 1 AS n FROM print_orders WHERE card_id = ? AND user_id = ? LIMIT 1')
+        .bind(cardId, id)
+        .first()
+      if (print) return true
+    } catch {
+      // print_orders may not exist yet.
+    }
+  }
+  return false
+}
+
+export const hideAccountCards = async (env, { userId, phoneE164, cardIds }) => {
+  if (!env.ACCOUNT_DB || !cardIds?.length) {
+    return 0
+  }
+  const db = env.ACCOUNT_DB
+  await ensureHiddenCardsTable(db)
+  const [ownerId] = await resolveAccountUserIds(db, { userId, phoneE164 })
+  const now = isoNow()
+  await db.batch(
+    cardIds.map((cardId) =>
+      db
+        .prepare('INSERT OR REPLACE INTO account_hidden_cards (user_id, card_id, hidden_at) VALUES (?, ?, ?)')
+        .bind(ownerId, cardId, now),
+    ),
+  )
+  return cardIds.length
 }

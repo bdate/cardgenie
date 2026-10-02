@@ -13,7 +13,10 @@ import {
   getThankYouForCard,
   isAdminPhone,
   listTestimonials,
+  recordCreatedCard,
   recordFailedDelivery,
+  hideAccountCards,
+  userCanAccessCard,
   recordStripeCreditPurchase,
   recordSuccessfulDelivery,
   recordThankYou,
@@ -1088,6 +1091,28 @@ const buildCardRecord = (payload) => {
     },
     greeting: payload?.greeting?.trim() || '',
     signature: payload?.signature?.trim() || details.senderName?.trim() || 'Your Name',
+    editor: buildCardEditorState(payload),
+  }
+}
+
+const cardEditorTextLimit = 4000
+
+const buildCardEditorState = (payload) => {
+  const details = payload?.details || {}
+  const clip = (value) => String(value || '').slice(0, cardEditorTextLimit)
+  const variants = payload?.card?.messageVariants
+  const lengths = ['short', 'medium', 'long']
+  return {
+    details: Object.fromEntries(
+      ['recipientName', 'recipientType', 'senderName', 'occasion', 'tone', 'length', 'imageStyle', 'keyDetails'].map(
+        (field) => [field, clip(details[field]).trim()],
+      ),
+    ),
+    messageVariants:
+      variants && lengths.every((length) => typeof variants[length] === 'string')
+        ? Object.fromEntries(lengths.map((length) => [length, clip(variants[length])]))
+        : undefined,
+    selectedLength: lengths.includes(payload?.card?.selectedLength) ? payload.card.selectedLength : undefined,
   }
 }
 
@@ -1143,6 +1168,7 @@ const updateCardCoverImage = async (
           occasion: details.occasion?.trim() || existing.details?.occasion || '',
         }
       : existing.details,
+    editor: details && existing.editor ? { ...existing.editor, details: buildCardEditorState({ details }).details } : existing.editor,
     card: {
       ...existing.card,
       imageUrl,
@@ -1396,10 +1422,13 @@ const processGenerateJob = async (env, jobInput) => {
   }
 }
 
-const getCardSummary = (record, request, env) => ({
-  ...record,
-  shareUrl: getShareUrl(request, env, record.id),
-})
+const getCardSummary = (record, request, env) => {
+  const { editor: _editor, ...publicRecord } = record
+  return {
+    ...publicRecord,
+    shareUrl: getShareUrl(request, env, record.id),
+  }
+}
 
 const getEmailCoverUrl = (request, cardId) =>
   `${new URL(request.url).origin}/c/${encodeURIComponent(cardId)}/cover`
@@ -2321,9 +2350,22 @@ const handleSaveCard = async (request, env) => {
       coverThumbDataUrl: payload?.coverThumb,
       revisionSource: 'save',
     })
+    const saveAccount = await getRequestAccount(request, env)
+    if (saveAccount.userId) {
+      try {
+        await recordCreatedCard(env, {
+          userId: saveAccount.userId,
+          phoneE164: saveAccount.phone,
+          record,
+          replacesCardId: payload?.replacesCardId,
+        })
+      } catch (accountError) {
+        console.error('Unable to record created card for account.', accountError)
+      }
+    }
     await recordCardHistory(env, {
       kind: 'save',
-      ...(await getRequestAccount(request, env)),
+      ...saveAccount,
       cardId: record.id,
       details: payload?.details,
       message: record.card.message,
@@ -3089,6 +3131,42 @@ const handleGetAccountHistory = async (request, env) => {
     printOrders: withThumbUrls(history.printOrders, 'cardId'),
     cardSummaries,
   })
+}
+
+const handleGetAccountCard = async (request, env, cardId) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number to open your cards.' }, 401)
+  }
+  if (!(await userCanAccessCard(env, { userId: session.userId, phoneE164: session.phoneE164, cardId }))) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+  const record = await getCardRecord(env, cardId)
+  if (!record) {
+    return jsonResponse(request, env, { error: 'That card is no longer available.' }, 404)
+  }
+  return jsonResponse(request, env, { ...getCardSummary(record, request, env), editor: record.editor || null })
+}
+
+const handleHideAccountCards = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number to manage your cards.' }, 401)
+  }
+  const body = (await readJson(request)) || {}
+  const requested = Array.isArray(body.cardIds) ? body.cardIds : []
+  const cardIds = [...new Set(requested.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))].slice(0, 20)
+  if (!cardIds.length) {
+    return jsonResponse(request, env, { error: 'No cards to remove.' }, 400)
+  }
+  const allowed = []
+  for (const cardId of cardIds) {
+    if (await userCanAccessCard(env, { userId: session.userId, phoneE164: session.phoneE164, cardId })) {
+      allowed.push(cardId)
+    }
+  }
+  const hidden = await hideAccountCards(env, { userId: session.userId, phoneE164: session.phoneE164, cardIds: allowed })
+  return jsonResponse(request, env, { ok: true, hidden })
 }
 
 const handleGetCoverThumb = async (request, env, cardId) => {
@@ -5701,6 +5779,15 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/account/profile') {
     return handleUpdateAccountProfile(request, env)
+  }
+
+  const accountCardMatch = url.pathname.match(/^\/api\/account\/cards\/([^/]+)$/)
+  if (request.method === 'GET' && accountCardMatch) {
+    return handleGetAccountCard(request, env, decodeURIComponent(accountCardMatch[1]))
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/cards/hide') {
+    return handleHideAccountCards(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/account/history') {
