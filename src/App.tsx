@@ -2588,6 +2588,7 @@ function App() {
       creditCost?: number
       coverThumbUrl?: string
     }>
+    cardSummaries?: Record<string, { recipientName?: string; occasion?: string; groupKey?: string }>
   } | null>(null)
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
@@ -5541,7 +5542,21 @@ function App() {
     if (Number.isNaN(date.getTime())) {
       return value
     }
-    return date.toLocaleString()
+    return date.toLocaleString([], {
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
+
+  const formatAccountDay = (value?: string) => {
+    if (!value) {
+      return ''
+    }
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
   }
 
   const accountActivityPreviewLimit = 5
@@ -5593,45 +5608,73 @@ function App() {
       ...printOrders.map((order) => order.cardId).filter((cardId): cardId is string => Boolean(cardId)),
     ])
 
-    const cardRows = [...cardIds].map((cardId) => {
-      const card = cardById.get(cardId)
-      const cardDeliveries = deliveries.filter(
-        (delivery) => (delivery.cardId || `delivery-${delivery.id}`) === cardId,
-      )
-      const cardPrints = printOrders.filter((order) => order.cardId === cardId)
-      const methods = [...new Set(cardDeliveries.map((delivery) => (delivery.method === 'text' ? 'Text' : 'Email')))]
+    const thankYous = accountHistory.thankYous || []
+    const summaries = accountHistory.cardSummaries || {}
+    const groupKeyFor = (cardId: string) => summaries[cardId]?.groupKey || cardId
+    const groups = new Map<string, string[]>()
+    for (const cardId of cardIds) {
+      const key = groupKeyFor(cardId)
+      groups.set(key, [...(groups.get(key) || []), cardId])
+    }
+
+    const cardRows = [...groups.entries()].map(([groupKey, groupCardIds]) => {
+      const inGroup = new Set(groupCardIds)
+      const groupCards = groupCardIds.map((cardId) => cardById.get(cardId)).filter((card) => Boolean(card))
+      const cardDeliveries = deliveries.filter((delivery) => inGroup.has(delivery.cardId || `delivery-${delivery.id}`))
+      const cardPrints = printOrders.filter((order) => order.cardId && inGroup.has(order.cardId))
+      const cardThanks = thankYous.filter((thankYou) => inGroup.has(thankYou.cardId))
+      const sentMethods = [...new Set(cardDeliveries.map((delivery) => (delivery.method === 'text' ? 'Text' : 'Email')))]
       const actions = [
-        ...(methods.length ? [`Sent · ${methods.join(' & ')}`] : []),
+        ...sentMethods.map((method) => `Sent ${method}`),
         ...(cardPrints.length ? ['Printed'] : []),
+        ...(cardThanks.length ? ['Thank-you received'] : []),
       ]
-      const latest = [
-        card?.createdAt,
-        ...cardDeliveries.map((delivery) => delivery.createdAt),
-        ...cardPrints.map((order) => order.createdAt),
-      ]
+      const createdAt = groupCards
+        .map((card) => card?.createdAt)
         .filter((value): value is string => Boolean(value))
-        .sort()
-        .pop()
+        .sort()[0]
+      const timeline = [
+        ...(createdAt ? [{ at: createdAt, label: 'Created' }] : []),
+        ...cardDeliveries.map((delivery) => ({
+          at: delivery.createdAt,
+          label: `Sent ${delivery.method === 'text' ? 'Text' : 'Email'}${delivery.destination ? ` to ${delivery.destination}` : ''}`,
+        })),
+        ...cardPrints.map((order) => ({ at: order.createdAt, label: `Printed, order ${order.orderCode}` })),
+        ...cardThanks.map((thankYou) => ({ at: thankYou.createdAt, label: `Thank-you received: “${thankYou.message}”` })),
+      ].sort((left, right) => String(left.at).localeCompare(String(right.at)))
+      const latest = timeline.map((entry) => entry.at).filter(Boolean).sort().pop()
       const latestDelivery = [...cardDeliveries].sort((left, right) =>
         String(right.createdAt).localeCompare(String(left.createdAt)),
       )[0]
-      const destinations = cardDeliveries.map((delivery) => delivery.destination).filter(Boolean)
-      const summary = [card?.recipientName, card?.occasion].filter(Boolean).join(' · ')
+      const destinations = [...new Set(cardDeliveries.map((delivery) => delivery.destination).filter(Boolean))]
+      const summaryCard = groupCards[0]
+      const summarySource = groupCardIds.map((cardId) => summaries[cardId]).find(Boolean)
+      const recipientName = summaryCard?.recipientName || summarySource?.recipientName || ''
+      const occasion = summaryCard?.occasion || summarySource?.occasion || ''
+      const summary = recipientName
+        ? `${occasion ? `${occasion} card` : 'Card'} for ${recipientName}`
+        : occasion
+          ? `${occasion} card`
+          : ''
+      const thumbCardId = groupCardIds.find((cardId) => cardById.get(cardId)?.coverThumbUrl) || groupCardIds[0]
 
       return {
-        id: `card-${cardId}`,
+        id: `card-${groupKey}`,
         createdAt: latest || '',
-        title: actions.length ? actions.join(' + ') : 'Created',
+        title: actions.length ? actions.join(' / ') : 'Created',
         detail: [summary, destinations.join(', ')].filter(Boolean).join(' — ') || 'Card',
-        status: latestDelivery?.status || (cardPrints.length ? cardPrints[0].status || 'submitted' : card?.status || ''),
+        summary: summary || 'Card',
+        timeline,
+        status: latestDelivery?.status || (cardPrints.length ? cardPrints[0].status || 'submitted' : summaryCard?.status || ''),
         coverThumbUrl: resolveThumbUrl(
-          cardId,
-          card?.coverThumbUrl || latestDelivery?.coverThumbUrl || cardPrints[0]?.coverThumbUrl,
+          thumbCardId,
+          cardById.get(thumbCardId)?.coverThumbUrl || latestDelivery?.coverThumbUrl || cardPrints[0]?.coverThumbUrl,
         ),
       }
     })
 
-    const thanks = (accountHistory.thankYous || []).map((thankYou) => ({
+    const groupedCardIds = new Set([...groups.values()].flat())
+    const thanks = thankYous.filter((thankYou) => !groupedCardIds.has(thankYou.cardId)).map((thankYou) => ({
       id: `thanks-${thankYou.id}`,
       createdAt: thankYou.createdAt,
       title: 'Thank-you received',
@@ -5639,6 +5682,8 @@ function App() {
         ? `${thankYou.recipientName}: “${thankYou.message}”`
         : `“${thankYou.message}”`,
       status: thankYou.status || 'Sent',
+      summary: '',
+      timeline: [] as Array<{ at: string; label: string }>,
       coverThumbUrl: '',
     }))
 
@@ -8636,9 +8681,23 @@ function App() {
                           }}
                         >
                           <span className="account-row-title">{item.title}</span>
-                          <span className="account-row-detail">{item.detail}</span>
+                          <span className="account-row-detail">
+                            {expandCardActivity && item.timeline.length > 0 ? item.summary : item.detail}
+                          </span>
                           <span className="account-row-status">{item.status}</span>
-                          <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
+                          {expandCardActivity && item.timeline.length > 0 ? (
+                            <span className="account-row-date account-row-timeline">
+                              {item.timeline.map((entry, index) => (
+                                <span key={`${entry.at}-${index}`}>
+                                  {entry.label} — {formatAccountDate(entry.at)}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            <span className="account-row-date">
+                              {expandCardActivity ? formatAccountDate(item.createdAt) : formatAccountDay(item.createdAt)}
+                            </span>
+                          )}
                           {item.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">
                               <img
@@ -8771,7 +8830,9 @@ function App() {
                           <span className="account-row-title">Order {order.orderCode}</span>
                           <span className="account-row-detail">{order.detail}</span>
                           <span className="account-row-status">{order.status}</span>
-                          <span className="account-row-date">{formatAccountDate(order.createdAt)}</span>
+                          <span className="account-row-date">
+                            {expandPrintOrders ? formatAccountDate(order.createdAt) : formatAccountDay(order.createdAt)}
+                          </span>
                           {order.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">
                               <img

@@ -3037,14 +3037,29 @@ const handleGetAccountHistory = async (request, env) => {
   ]
 
   const thumbsAvailable = new Set()
+  const cardSummaries = {}
   await Promise.all(
     cardIds.map(async (cardId) => {
+      const record = await getCardRecord(env, cardId)
+      if (record) {
+        const recipientName = String(record.details?.recipientName || '').trim()
+        const occasion = String(record.details?.occasion || '').trim()
+        const senderName = String(record.details?.senderName || '').trim()
+        const message = String(record.card?.message || '').replace(/\s+/g, ' ').trim()
+        cardSummaries[cardId] = {
+          recipientName,
+          occasion,
+          groupKey: [recipientName, occasion, senderName, message.slice(0, 240)]
+            .map((part) => part.toLowerCase())
+            .join('|'),
+        }
+      }
+
       if (await hasCoverThumb(env, cardId)) {
         thumbsAvailable.add(cardId)
         return
       }
 
-      const record = await getCardRecord(env, cardId)
       if (!record?.card?.imageUrl) {
         return
       }
@@ -3072,6 +3087,7 @@ const handleGetAccountHistory = async (request, env) => {
     cards: withThumbUrls(history.cards, 'id'),
     deliveries: withThumbUrls(history.deliveries, 'cardId'),
     printOrders: withThumbUrls(history.printOrders, 'cardId'),
+    cardSummaries,
   })
 }
 

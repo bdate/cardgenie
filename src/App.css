@@ -5218,3 +5218,9 @@ select.is-placeholder option {
   box-shadow: 0 0 0 1px rgba(63, 155, 145, 0.16);
   border-radius: 8px;
 }
+
+.account-row-timeline {
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+}
