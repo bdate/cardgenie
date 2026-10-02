@@ -5625,7 +5625,14 @@ function App() {
       const cardThanks = thankYous.filter((thankYou) => inGroup.has(thankYou.cardId))
       const sentMethods = [...new Set(cardDeliveries.map((delivery) => (delivery.method === 'text' ? 'Text' : 'Email')))]
       const actions = [
-        ...sentMethods.map((method) => `Sent ${method}`),
+        ...sentMethods.map((method) => {
+          const recipientCount = new Set(
+            cardDeliveries
+              .filter((delivery) => (delivery.method === 'text' ? 'Text' : 'Email') === method)
+              .map((delivery) => delivery.destination || delivery.id),
+          ).size
+          return `Sent ${method}${recipientCount > 1 ? 's' : ''}`
+        }),
         ...(cardPrints.length ? ['Printed'] : []),
         ...(cardThanks.length ? ['Thank-you received'] : []),
       ]
