@@ -369,15 +369,6 @@ const defaultPrintMailFrom = {
   zip: '94526',
   country: 'US' as const,
 }
-const samplePrintShipTo = {
-  name: 'Alex Rivera',
-  line1: '482 Maple Street',
-  line2: 'Apt 3B',
-  city: 'Oakland',
-  state: 'CA',
-  zip: '94610',
-  country: 'US' as const,
-}
 type MailingAddress = {
   name: string
   line1: string
@@ -909,6 +900,13 @@ const normalizeResumeMailingAddress = (
     zip: typeof raw.zip === 'string' ? raw.zip : fallback.zip,
     country: 'US',
   }
+}
+
+const normalizeResumeShipTo = (value: unknown): MailingAddress => {
+  const address = normalizeResumeMailingAddress(value, emptyMailingAddress())
+  const isRetiredSample =
+    address.name.trim() === 'Alex Rivera' && address.line1.trim() === '482 Maple Street' && address.zip.trim() === '94610'
+  return isRetiredSample ? emptyMailingAddress() : address
 }
 
 const isPrintOrderStep = (value: unknown): value is PrintOrderStep =>
@@ -2750,7 +2748,7 @@ function App() {
     isPrintOrderStep(initialFormDraft?.printOrderStep) ? initialFormDraft.printOrderStep : 'closed',
   )
   const [printShipTo, setPrintShipTo] = useState<MailingAddress>(() =>
-    normalizeResumeMailingAddress(initialFormDraft?.printShipTo, emptyMailingAddress()),
+    normalizeResumeShipTo(initialFormDraft?.printShipTo),
   )
   const [printMailFrom, setPrintMailFrom] = useState<MailingAddress>(() =>
     normalizeResumeMailingAddress(initialFormDraft?.printMailFrom, { ...defaultPrintMailFrom }),
@@ -3579,7 +3577,7 @@ function App() {
           setPrintOrderStep(storedResume.printOrderStep)
         }
         if (storedResume.printShipTo) {
-          setPrintShipTo(normalizeResumeMailingAddress(storedResume.printShipTo, emptyMailingAddress()))
+          setPrintShipTo(normalizeResumeShipTo(storedResume.printShipTo))
         }
         if (storedResume.printMailFrom) {
           setPrintMailFrom(
@@ -6768,14 +6766,19 @@ function App() {
       return
     }
 
-    setPrintShipTo({ ...samplePrintShipTo })
-    setPrintMailFrom({ ...defaultPrintMailFrom })
+    applySavedMailingAddressToPrint(resolveSavedMailingAddress())
+    const cardRecipientName = details.recipientName.trim()
+    if (cardRecipientName) {
+      setPrintShipTo((current) => (current.name.trim() ? current : { ...current, name: cardRecipientName }))
+    }
     const knownEmail = resolveKnownShopperEmail()
     if (knownEmail) {
       setPrintShopperEmail(knownEmail)
     }
     setPrintOrderStep('review')
-    setPrintOrderNotice('Preview only — sample addresses. You can still place a real order from here.')
+    setPrintOrderNotice(
+      printShipTo.line1.trim() ? '' : 'Tap Change under the recipient to add their address before ordering.',
+    )
     window.setTimeout(() => {
       document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
@@ -10932,7 +10935,9 @@ function App() {
                             </div>
                             <div className="print-order-to">
                               <span className="print-order-address-block">
-                                {formatMailingAddressLines(printShipTo)}
+                                {printShipTo.line1.trim()
+                                  ? formatMailingAddressLines(printShipTo)
+                                  : `${printShipTo.name.trim() || 'Recipient'}\nAddress not added yet`}
                               </span>
                               <button
                                 className="text-action-link print-order-change"
