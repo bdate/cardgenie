@@ -2600,6 +2600,7 @@ function App() {
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
   const [expandCardActivity, setExpandCardActivity] = useState(false)
+  const [showSmsConsentDetails, setShowSmsConsentDetails] = useState(false)
   const [expandPrintOrders, setExpandPrintOrders] = useState(false)
   const [accountProfileEmail, setAccountProfileEmail] = useState('')
   const [accountPreferredName, setAccountPreferredName] = useState('')
@@ -10347,19 +10348,34 @@ function App() {
                       onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
                     />
                     <span>
-                      Optional SMS delivery: I confirm{' '}
-                      {plannedRecipientCount > 1 ? 'each recipient agreed' : 'this recipient agreed'} to receive a
-                      one-time SMS/text message from Card Genie with a link to this card. Message frequency is one
-                      message per card delivery request. Msg & data rates may apply. Reply STOP to cancel, HELP for
-                      help. SMS consent is optional and is not required to create a card or use email delivery. See our{' '}
+                      I confirm {plannedRecipientCount > 1 ? 'each recipient' : 'the recipient'} agreed to get one text
+                      from Card Genie with a link to this card. Msg & data rates may apply. Reply STOP to opt out, HELP
+                      for help.{' '}
+                      {showSmsConsentDetails && (
+                        <>
+                          Message frequency is one message per card delivery request. SMS consent is optional and is
+                          not required to create a card or use email delivery.{' '}
+                        </>
+                      )}
                       <a href="/privacy/index.html" target="_blank" rel="noreferrer">
-                        Privacy Policy
-                      </a>{' '}
-                      and{' '}
+                        Privacy
+                      </a>
+                      {' · '}
                       <a href="/terms/index.html" target="_blank" rel="noreferrer">
                         Terms
                       </a>
-                      .
+                      {' · '}
+                      <button
+                        className="sms-consent-more"
+                        type="button"
+                        aria-expanded={showSmsConsentDetails}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setShowSmsConsentDetails((current) => !current)
+                        }}
+                      >
+                        {showSmsConsentDetails ? 'Less' : 'More'}
+                      </button>
                     </span>
                   </label>
                 )}

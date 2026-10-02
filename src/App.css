@@ -2920,6 +2920,21 @@ textarea:focus {
   font-weight: 900;
 }
 
+.sms-consent .sms-consent-more {
+  display: inline;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--gcu-dark-teal);
+  font: inherit;
+  font-weight: 900;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .share-link {
   justify-self: start;
   padding: 0;
