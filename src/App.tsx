@@ -2594,6 +2594,8 @@ function App() {
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
+  const [expandCardActivity, setExpandCardActivity] = useState(false)
+  const [expandPrintOrders, setExpandPrintOrders] = useState(false)
   const [accountProfileEmail, setAccountProfileEmail] = useState('')
   const [accountPreferredName, setAccountPreferredName] = useState('')
   const [preferredNamePromptDraft, setPreferredNamePromptDraft] = useState('')
@@ -8201,8 +8203,8 @@ function App() {
               }`.trim()}
             >
               {creditNotice ||
-                (details.senderName.trim()
-                  ? `Welcome back, ${details.senderName.trim()}. Ready to make another card?`
+                (accountFirstName
+                  ? `Welcome back, ${accountFirstName}. Ready to make another card?`
                   : 'Ready to make your next card?')}
             </p>
             <div className="credit-wallet" aria-label="Wish balance">
@@ -8573,15 +8575,27 @@ function App() {
                 </div>
               </div>
               <div className="account-block">
-                <h3>Cards and sends</h3>
-                {cardActivityItems.some((item) => item.coverThumbUrl) && (
+                <div className="account-block-heading">
+                  <h3>Cards and sends</h3>
+                  {cardActivityItems.length > 0 && (
+                    <button
+                      className="text-action-link account-expand-link"
+                      type="button"
+                      aria-pressed={expandCardActivity}
+                      onClick={() => setExpandCardActivity((current) => !current)}
+                    >
+                      {expandCardActivity ? 'Collapse' : 'Expand'}
+                    </button>
+                  )}
+                </div>
+                {!expandCardActivity && cardActivityItems.some((item) => item.coverThumbUrl) && (
                   <p className="account-thumb-hint">Hover or tap a row to preview the cover.</p>
                 )}
                 {cardActivityItems.length === 0 ? (
                   <p>No cards sent yet.</p>
                 ) : (
                   <>
-                    <div className="account-list">
+                    <div className={`account-list${expandCardActivity ? ' is-expanded' : ''}`}>
                       {(showAllCardActivity
                         ? cardActivityItems
                         : cardActivityItems.slice(0, accountActivityPreviewLimit)
@@ -8693,15 +8707,27 @@ function App() {
                 )}
               </div>
               <div className="account-block">
-                <h3>Printed cards</h3>
-                {printOrderItems.some((item) => item.coverThumbUrl) && (
+                <div className="account-block-heading">
+                  <h3>Printed cards</h3>
+                  {printOrderItems.length > 0 && (
+                    <button
+                      className="text-action-link account-expand-link"
+                      type="button"
+                      aria-pressed={expandPrintOrders}
+                      onClick={() => setExpandPrintOrders((current) => !current)}
+                    >
+                      {expandPrintOrders ? 'Collapse' : 'Expand'}
+                    </button>
+                  )}
+                </div>
+                {!expandPrintOrders && printOrderItems.some((item) => item.coverThumbUrl) && (
                   <p className="account-thumb-hint">Hover or tap a row to preview the cover.</p>
                 )}
                 {printOrderItems.length === 0 ? (
                   <p>No printed cards ordered yet.</p>
                 ) : (
                   <>
-                    <div className="account-list">
+                    <div className={`account-list${expandPrintOrders ? ' is-expanded' : ''}`}>
                       {(showAllPrintOrders
                         ? printOrderItems
                         : printOrderItems.slice(0, accountActivityPreviewLimit)

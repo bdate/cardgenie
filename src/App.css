@@ -5170,3 +5170,51 @@ select.is-placeholder option {
   outline-offset: 3px;
   border-radius: 6px;
 }
+
+.account-block-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-expand-link {
+  font-size: 0.9rem;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb {
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'thumb title status'
+    'thumb detail detail'
+    'thumb date date';
+  align-items: start;
+  cursor: default;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-title {
+  grid-area: title;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-status {
+  grid-area: status;
+  justify-self: end;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-detail {
+  grid-area: detail;
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-date {
+  grid-area: date;
+}
+
+.account-list.is-expanded .account-row-thumb {
+  display: block;
+  position: static;
+  grid-area: thumb;
+  width: 72px;
+  padding: 0;
+  box-shadow: 0 0 0 1px rgba(63, 155, 145, 0.16);
+  border-radius: 8px;
+}
