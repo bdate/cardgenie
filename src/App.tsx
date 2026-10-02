@@ -10617,7 +10617,7 @@ function App() {
                           setShowSmsConsentDetails((current) => !current)
                         }}
                       >
-                        {showSmsConsentDetails ? 'Less' : 'More'}
+                        {showSmsConsentDetails ? 'less' : 'more'}
                       </button>{' '}
                       {showSmsConsentDetails && (
                         <>
