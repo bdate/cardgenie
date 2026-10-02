@@ -343,7 +343,8 @@ const styleOptions = [
 const initialCreditBalance = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
-const formDraftMaxAgeMs = 12 * 60 * 60 * 1000
+const formDraftMaxAgeMs = 7 * 24 * 60 * 60 * 1000
+const finishedFormDraftMaxAgeMs = 12 * 60 * 60 * 1000
 const formDraftVersion = 1 as const
 const interviewSessionStorageKey = 'cardGenieInterviewSession'
 const interviewSessionMaxAgeMs = 12 * 60 * 60 * 1000
@@ -1056,6 +1057,7 @@ type FormDraftState = {
   hasViewedFront?: boolean
   hasViewedInside?: boolean
   hasSentCurrentCard?: boolean
+  hasPrintedCurrentCard?: boolean
 }
 
 const isCardDetailsShape = (value: unknown): value is CardDetails => {
@@ -1076,7 +1078,9 @@ const parseFormDraft = (raw: string | null): FormDraftState | null => {
     if (parsed?.version !== formDraftVersion || !isCardDetailsShape(parsed.details)) {
       return null
     }
-    if (parsed.savedAt && Date.now() - parsed.savedAt > formDraftMaxAgeMs) {
+    const maxAgeMs =
+      parsed.hasSentCurrentCard || parsed.hasPrintedCurrentCard ? finishedFormDraftMaxAgeMs : formDraftMaxAgeMs
+    if (parsed.savedAt && Date.now() - parsed.savedAt > maxAgeMs) {
       return null
     }
     return parsed
@@ -2775,6 +2779,9 @@ function App() {
   const [hasSentCurrentCard, setHasSentCurrentCard] = useState(
     () => Boolean(initialFormDraft?.hasSentCurrentCard),
   )
+  const [hasPrintedCurrentCard, setHasPrintedCurrentCard] = useState(
+    () => Boolean(initialFormDraft?.hasPrintedCurrentCard),
+  )
   const [feedbackDismissed, setFeedbackDismissed] = useState(() => {
     try {
       return window.localStorage.getItem(feedbackDismissStorageKey) === '1'
@@ -3206,6 +3213,7 @@ function App() {
         hasViewedFront: hasViewedFront || Boolean(card),
         hasViewedInside: hasViewedInside || Boolean(card),
         hasSentCurrentCard,
+        hasPrintedCurrentCard,
       })
     }, 300)
 
@@ -3232,6 +3240,7 @@ function App() {
     hasViewedFront,
     hasViewedInside,
     hasSentCurrentCard,
+    hasPrintedCurrentCard,
   ])
 
   useEffect(() => {
@@ -3480,6 +3489,7 @@ function App() {
       setHasViewedFront(Boolean(draft?.hasViewedFront))
       setHasViewedInside(Boolean(draft?.hasViewedInside))
       setHasSentCurrentCard(Boolean(draft?.hasSentCurrentCard))
+      setHasPrintedCurrentCard(Boolean(draft?.hasPrintedCurrentCard))
       setStep(
         draft?.hasViewedInside || draft?.step === 'inside'
           ? 'inside'
@@ -5203,6 +5213,7 @@ function App() {
     setDeliveryNotice('')
     setDeliveryLogs([])
     setHasSentCurrentCard(false)
+    setHasPrintedCurrentCard(false)
     setDeliveryMethod('email')
     setDeliveryDestinations([''])
     setShowSenderCopyField(false)
@@ -6271,6 +6282,7 @@ function App() {
     setStep('envelope')
     restoreSentAfterFailedGenerateRef.current = false
     setHasSentCurrentCard(false)
+    setHasPrintedCurrentCard(false)
     setShowCompletionNote(true)
     setCreditNotice('Creating a card is free. Sending uses 3 credits.')
     window.setTimeout(() => setShowCompletionNote(false), 6000)
@@ -6359,6 +6371,7 @@ function App() {
     setSharedCard(null)
     setDeliveryNotice('')
     setHasSentCurrentCard(false)
+    setHasPrintedCurrentCard(false)
     setHasViewedFront(false)
     setHasViewedInside(false)
     setStep('envelope')
@@ -6945,6 +6958,7 @@ function App() {
             : current,
         )
       }
+      setHasPrintedCurrentCard(true)
       setPrintOrderNotice(
         <div className="print-order-success-notice">
           <p>
@@ -7403,6 +7417,7 @@ function App() {
         })
       }
       setHasSentCurrentCard(false)
+      setHasPrintedCurrentCard(false)
       setImageRefinement('')
       setStep('front')
       setEditorHasChanges(true)
