@@ -10608,6 +10608,17 @@ function App() {
                       I confirm {plannedRecipientCount > 1 ? 'each recipient' : 'the recipient'} agreed to get one text
                       from Card Genie with a link to this card. Msg & data rates may apply. Reply STOP to opt out, HELP
                       for help.{' '}
+                      <button
+                        className="sms-consent-more"
+                        type="button"
+                        aria-expanded={showSmsConsentDetails}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setShowSmsConsentDetails((current) => !current)
+                        }}
+                      >
+                        {showSmsConsentDetails ? 'Less' : 'More'}
+                      </button>{' '}
                       {showSmsConsentDetails && (
                         <>
                           Message frequency is one message per card delivery request. SMS consent is optional and is
@@ -10621,18 +10632,6 @@ function App() {
                       <a href="/terms/index.html" target="_blank" rel="noreferrer">
                         Terms
                       </a>
-                      {' · '}
-                      <button
-                        className="sms-consent-more"
-                        type="button"
-                        aria-expanded={showSmsConsentDetails}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setShowSmsConsentDetails((current) => !current)
-                        }}
-                      >
-                        {showSmsConsentDetails ? 'Less' : 'More'}
-                      </button>
                     </span>
                   </label>
                 )}

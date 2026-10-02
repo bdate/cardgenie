@@ -2930,7 +2930,7 @@ textarea:focus {
   box-shadow: none;
   color: var(--gcu-dark-teal);
   font: inherit;
-  font-weight: 900;
+  font-weight: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
