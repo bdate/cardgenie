@@ -2966,8 +2966,8 @@ function App() {
   const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
   const coverSaveLabel = prefersPhotoSave ? 'Save cover to photos' : 'Save cover image'
   const insideSaveLabel = prefersPhotoSave ? 'Save inside to photos' : 'Save inside image'
-  const printCoverSaveLabel = prefersPhotoSave ? 'Save print cover to photos' : 'Save print cover'
-  const printInsideSaveLabel = prefersPhotoSave ? 'Save print inside to photos' : 'Save print inside'
+  const printCoverSaveLabel = 'Save print cover'
+  const printInsideSaveLabel = 'Save print inside'
   const insideDownloadUrl = useMemo(
     () =>
       card && isRecipientView
