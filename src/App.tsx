@@ -11128,10 +11128,12 @@ function App() {
                           <p>
                             Describe what should change. By default, Card Genie keeps the same concept and only revises the cover.
                           </p>
-                          <div className="mode-toggle" aria-label="Cover refinement mode">
+                          <div className="mode-toggle choice-radios" role="radiogroup" aria-label="Cover refinement mode">
                             <button
                               className={coverRefinementMode === 'revise' ? 'is-selected' : ''}
                               type="button"
+                              role="radio"
+                              aria-checked={coverRefinementMode === 'revise'}
                               onClick={() => setCoverRefinementMode('revise')}
                             >
                               Revise current concept
@@ -11139,6 +11141,8 @@ function App() {
                             <button
                               className={coverRefinementMode === 'new' ? 'is-selected' : ''}
                               type="button"
+                              role="radio"
+                              aria-checked={coverRefinementMode === 'new'}
                               onClick={() => setCoverRefinementMode('new')}
                             >
                               Whole new concept
