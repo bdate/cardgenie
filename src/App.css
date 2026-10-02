@@ -5197,6 +5197,35 @@ select.is-placeholder option {
   font-size: 0.9rem;
 }
 
+.account-mailing-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(23, 23, 23, 0.12);
+  border-radius: 10px;
+}
+
+.account-mailing-label {
+  display: block;
+  margin-bottom: 2px;
+  color: #6b6b6b;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.account-mailing-summary p {
+  margin: 0;
+  white-space: pre-line;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.account-mailing-cancel {
+  justify-self: start;
+}
+
 .account-list.is-expanded .account-row.has-cover-thumb {
   grid-template-columns: 72px minmax(0, 1fr) auto;
   grid-template-areas:

@@ -2615,6 +2615,7 @@ function App() {
   const [showPreferredNamePrompt, setShowPreferredNamePrompt] = useState(false)
   const [isSavingPreferredNamePrompt, setIsSavingPreferredNamePrompt] = useState(false)
   const [accountProfileMailing, setAccountProfileMailing] = useState<MailingAddress>(() => emptyMailingAddress())
+  const [isEditingAccountMailing, setIsEditingAccountMailing] = useState(false)
   const [accountProfileNotice, setAccountProfileNotice] = useState('')
   const [isSavingAccountProfile, setIsSavingAccountProfile] = useState(false)
   const [activeCoverThumbId, setActiveCoverThumbId] = useState<string | null>(null)
@@ -7916,6 +7917,7 @@ function App() {
       if (hasMailing) {
         applySavedMailingAddressToPrint(savedMailing)
       }
+      setIsEditingAccountMailing(false)
       setAccountProfileNotice('Saved.')
     } catch (caughtError) {
       setAccountProfileNotice(
@@ -8765,7 +8767,41 @@ function App() {
                       placeholder="Email"
                     />
                   </label>
-                  {renderMailingAddressFields('account', accountProfileMailing, 'Mailing name')}
+                  {!isEditingAccountMailing && resolveSavedMailingAddress() ? (
+                    <div className="account-mailing-summary">
+                      <div>
+                        <span className="account-mailing-label">Mailing address</span>
+                        <p>{formatAccountMailingAddress(resolveSavedMailingAddress())}</p>
+                      </div>
+                      <button
+                        className="text-action-link account-expand-link"
+                        type="button"
+                        onClick={() => {
+                          setIsEditingAccountMailing(true)
+                          setAccountProfileNotice('')
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {renderMailingAddressFields('account', accountProfileMailing, 'Mailing name')}
+                      {isEditingAccountMailing && (
+                        <button
+                          className="text-action-link account-expand-link account-mailing-cancel"
+                          type="button"
+                          onClick={() => {
+                            setAccountProfileMailing(resolveSavedMailingAddress() || emptyMailingAddress())
+                            setIsEditingAccountMailing(false)
+                            setAccountProfileNotice('')
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </>
+                  )}
                   <div className="account-profile-actions">
                     <button
                       className="secondary-button"
