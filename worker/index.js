@@ -1116,7 +1116,11 @@ const buildCardEditorState = (payload) => {
   }
 }
 
-const saveCardRecord = async (env, record, { coverThumbDataUrl, revisionSource = 'save', refinement = '' } = {}) => {
+const saveCardRecord = async (
+  env,
+  record,
+  { coverThumbDataUrl, revisionSource = 'save', refinement = '', replaceThumb = false } = {},
+) => {
   if (env.CARD_STORE) {
     await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
   } else {
@@ -1127,7 +1131,7 @@ const saveCardRecord = async (env, record, { coverThumbDataUrl, revisionSource =
     if (coverThumbDataUrl) {
       await putCoverThumbFromDataUrl(env, record.id, coverThumbDataUrl)
     } else {
-      await ensureCoverThumbForRecord(env, record)
+      await ensureCoverThumbForRecord(env, record, { replace: replaceThumb })
     }
   } catch (error) {
     console.error('Unable to save cover thumbnail.', error)
@@ -1179,6 +1183,7 @@ const updateCardCoverImage = async (
     coverThumbDataUrl,
     revisionSource,
     refinement,
+    replaceThumb: true,
   })
   return next
 }
@@ -3079,11 +3084,16 @@ const handleGetAccountHistory = async (request, env) => {
   ]
 
   const thumbsAvailable = new Set()
+  const thumbVersions = new Map()
   const cardSummaries = {}
   await Promise.all(
     cardIds.map(async (cardId) => {
       const record = await getCardRecord(env, cardId)
       if (record) {
+        const version = Date.parse(record.updatedAt || record.createdAt || '')
+        if (Number.isFinite(version)) {
+          thumbVersions.set(cardId, String(version))
+        }
         const recipientName = String(record.details?.recipientName || '').trim()
         const occasion = String(record.details?.occasion || '').trim()
         const senderName = String(record.details?.senderName || '').trim()
@@ -3118,7 +3128,10 @@ const handleGetAccountHistory = async (request, env) => {
       const cardId = item[idKey] || item.cardId || item.id
       return {
         ...item,
-        coverThumbUrl: cardId && thumbsAvailable.has(cardId) ? getCoverThumbUrl(request, env, cardId) : '',
+        coverThumbUrl:
+          cardId && thumbsAvailable.has(cardId)
+            ? `${getCoverThumbUrl(request, env, cardId)}${thumbVersions.has(cardId) ? `?v=${thumbVersions.get(cardId)}` : ''}`
+            : '',
       }
     })
 

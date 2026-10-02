@@ -145,14 +145,14 @@ export const createCoverThumbJpeg = async (imageUrl) => {
   }
 }
 
-export const ensureCoverThumbForRecord = async (env, record) => {
+export const ensureCoverThumbForRecord = async (env, record, { replace = false } = {}) => {
   const cardId = record?.id
   const imageUrl = record?.card?.imageUrl
   if (!cardId || !imageUrl) {
     return { ok: false, reason: 'missing_card' }
   }
 
-  if (await hasCoverThumb(env, cardId)) {
+  if (!replace && (await hasCoverThumb(env, cardId))) {
     return { ok: true, skipped: true }
   }
 

@@ -5611,7 +5611,8 @@ function App() {
         return ''
       }
       if (cardId && apiBaseUrl) {
-        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb`
+        const version = coverThumbUrl.match(/[?&]v=([^&]+)/)?.[1]
+        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb${version ? `?v=${version}` : ''}`
       }
       return coverThumbUrl
     }
@@ -5750,7 +5751,8 @@ function App() {
         return ''
       }
       if (cardId && apiBaseUrl) {
-        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb`
+        const version = coverThumbUrl.match(/[?&]v=([^&]+)/)?.[1]
+        return `${apiBaseUrl}/c/${encodeURIComponent(cardId)}/thumb${version ? `?v=${version}` : ''}`
       }
       return coverThumbUrl
     }
