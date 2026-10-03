@@ -2625,6 +2625,8 @@ function App() {
   const [selectedThankYouPreset, setSelectedThankYouPreset] = useState<string>(thankYouPresets[0].id)
   const [customThankYouMessage, setCustomThankYouMessage] = useState('')
   const [isSendingThankYou, setIsSendingThankYou] = useState(false)
+  const [sentButtonLabel, setSentButtonLabel] = useState<{ key: 'deliver' | 'print'; label: string } | null>(null)
+  const sentButtonTimerRef = useRef<number | null>(null)
   const [thankYouNotice, setThankYouNotice] = useState('')
   const [creditNotice, setCreditNotice] = useState('')
   const [adminPrintFiles, setAdminPrintFiles] = useState<{ coverUrl: string; insideUrl: string } | null>(null)
@@ -2903,6 +2905,17 @@ function App() {
       actionFeedbackClearRef.current = null
     }
     setActionFeedback('')
+  }
+
+  const flashSentButton = (key: 'deliver' | 'print', label: string) => {
+    if (sentButtonTimerRef.current) {
+      window.clearTimeout(sentButtonTimerRef.current)
+    }
+    setSentButtonLabel({ key, label })
+    sentButtonTimerRef.current = window.setTimeout(() => {
+      setSentButtonLabel(null)
+      sentButtonTimerRef.current = null
+    }, 5000)
   }
 
   const showActionFeedback = (message: string, autoClearMs?: number) => {
@@ -6993,6 +7006,7 @@ function App() {
         )
       }
       setHasPrintedCurrentCard(true)
+      flashSentButton('print', '✓ Print order placed')
       setPrintOrderNotice(
         <div className="print-order-success-notice">
           <p>
@@ -8346,6 +8360,14 @@ function App() {
       setDeliveryNotice(notice)
       resetDeliveryDestinations()
       setHasSentCurrentCard(true)
+      if (deliveredCount > 0) {
+        flashSentButton(
+          'deliver',
+          deliveredCount > 1
+            ? `✓ Sent to ${deliveredCount} recipients`
+            : `✓ Card sent by ${deliveryMethod === 'email' ? 'email' : 'text'}`,
+        )
+      }
       const nextCredits = rememberCredits(credits - chargedCredits)
       setCreditNotice(
         chargedCredits === 1
@@ -10709,12 +10731,19 @@ function App() {
                 )}
                 <div className="credit-action-block">
                   <button
-                    className="primary-button"
+                    className={`primary-button${sentButtonLabel?.key === 'deliver' ? ' is-sent' : ''}`}
                     type="submit"
-                    disabled={isDelivering || !accountSession || (deliveryMethod === 'text' && !smsConsentConfirmed)}
+                    disabled={
+                      isDelivering ||
+                      sentButtonLabel?.key === 'deliver' ||
+                      !accountSession ||
+                      (deliveryMethod === 'text' && !smsConsentConfirmed)
+                    }
                     aria-busy={isDelivering}
                   >
-                    {isDelivering
+                    {sentButtonLabel?.key === 'deliver'
+                      ? sentButtonLabel.label
+                      : isDelivering
                       ? plannedRecipientCount > 1
                         ? 'Sending your cards...'
                         : 'Sending your card...'
@@ -10834,9 +10863,15 @@ function App() {
                   {printOrderStep === 'closed' ? (
                     <div className="print-order-intro">
                       <div className="credit-action-block">
-                        <button className="text-action-link" type="button" onClick={openPrintOrder}>
-                          Mail a printed card ({printCardCreditCost} credits)
-                        </button>
+                        {sentButtonLabel?.key === 'print' ? (
+                          <span className="print-order-sent" role="status">
+                            {sentButtonLabel.label}
+                          </span>
+                        ) : (
+                          <button className="text-action-link" type="button" onClick={openPrintOrder}>
+                            Mail a printed card ({printCardCreditCost} credits)
+                          </button>
+                        )}
                         {renderCreditsLeft()}
                       </div>
                       <p>
