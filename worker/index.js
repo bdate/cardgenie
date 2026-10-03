@@ -781,10 +781,21 @@ const jsonResponse = (request, env, body, status = 200) =>
     },
   })
 
-const validateDetails = (details) => {
-  const requiredFields = ['senderName', 'occasion', 'tone', 'length', 'keyDetails']
-  return requiredFields.filter((field) => !details[field]?.trim())
+const detailFieldLabels = {
+  senderName: 'From',
+  occasion: 'Occasion',
+  tone: 'Tone',
+  length: 'Message length',
+  keyDetails: 'Personal details',
 }
+
+const validateDetails = (details, requiredFields = ['senderName', 'occasion', 'tone', 'length', 'keyDetails']) =>
+  requiredFields.filter((field) => !details[field]?.trim())
+
+const refineRequiredFields = ['occasion']
+
+const missingFieldsMessage = (missingFields) =>
+  `Please fill in: ${missingFields.map((field) => detailFieldLabels[field] || field).join(', ')}.`
 
 const getLengthRange = (length = '') => {
   const match = length.match(/(\d+)\s*-\s*(\d+)\s*words/i)
@@ -3965,7 +3976,7 @@ const handleGenerateCard = async (request, env, ctx) => {
   const missingFields = validateDetails(details || {})
 
   if (missingFields.length > 0) {
-    return jsonResponse(request, env, { error: `Missing required fields: ${missingFields.join(', ')}` }, 400)
+    return jsonResponse(request, env, { error: missingFieldsMessage(missingFields) }, 400)
   }
 
   let job
@@ -4070,10 +4081,10 @@ const handleRefineImage = async (request, env) => {
   } = (await readJson(request)) || {}
   const refinement = combineCoverRefinement(rawRefinement, previousDetails, details)
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
-  const missingFields = validateDetails(details || {})
+  const missingFields = validateDetails(details || {}, refineRequiredFields)
 
   if (missingFields.length > 0) {
-    return jsonResponse(request, env, { error: `Missing required fields: ${missingFields.join(', ')}` }, 400)
+    return jsonResponse(request, env, { error: missingFieldsMessage(missingFields) }, 400)
   }
 
   if (!refinement?.trim()) {
@@ -4178,10 +4189,10 @@ const handleRefineCopy = async (request, env) => {
   const { details, refinement, currentMessage, currentClosing, referenceImages: rawReferenceImages } =
     (await readJson(request)) || {}
   const referenceImages = normalizeReferenceImages(rawReferenceImages)
-  const missingFields = validateDetails(details || {})
+  const missingFields = validateDetails(details || {}, refineRequiredFields)
 
   if (missingFields.length > 0) {
-    return jsonResponse(request, env, { error: `Missing required fields: ${missingFields.join(', ')}` }, 400)
+    return jsonResponse(request, env, { error: missingFieldsMessage(missingFields) }, 400)
   }
 
   if (!refinement?.trim()) {
