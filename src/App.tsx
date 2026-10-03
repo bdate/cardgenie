@@ -399,6 +399,14 @@ const isMailingAddressBlank = (address?: MailingAddress | null) => {
     .some(Boolean)
 }
 
+const isCompleteMailingAddress = (address?: MailingAddress | null): address is MailingAddress =>
+  Boolean(
+    address &&
+      [address.name, address.line1, address.city, address.state, address.zip].every((part) =>
+        String(part || '').trim(),
+      ),
+  )
+
 const normalizeAddressCompareKey = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
 
 const isDefaultPrintMailFromAddress = (address?: MailingAddress | null) => {
@@ -3164,9 +3172,9 @@ function App() {
           setSenderCopyEmail(copyEmail)
           setPrintShopperEmail(copyEmail)
         }
-        if (hasMailing) {
+        if (isCompleteMailingAddress(mailingAddress)) {
           setPrintMailFrom((current) =>
-            isDefaultPrintMailFromAddress(current) ? mailingAddress : current,
+            isDefaultPrintMailFromAddress(current) || !isCompleteMailingAddress(current) ? mailingAddress : current,
           )
         }
         setAccountProfileEmail(copyEmail)
@@ -5844,9 +5852,9 @@ function App() {
         setSenderCopyEmail((current) => current || profileEmail)
         setPrintShopperEmail((current) => current || profileEmail)
       }
-      if (hasMailing) {
+      if (isCompleteMailingAddress(profileMailing)) {
         setPrintMailFrom((current) =>
-          isDefaultPrintMailFromAddress(current) ? profileMailing : current,
+          isDefaultPrintMailFromAddress(current) || !isCompleteMailingAddress(current) ? profileMailing : current,
         )
       }
     } catch (caughtError) {
@@ -7830,10 +7838,12 @@ function App() {
   }
 
   const applySavedMailingAddressToPrint = (address?: MailingAddress | null) => {
-    if (!address || isMailingAddressBlank(address)) {
+    if (!isCompleteMailingAddress(address)) {
       return
     }
-    setPrintMailFrom((current) => (isDefaultPrintMailFromAddress(current) ? address : current))
+    setPrintMailFrom((current) =>
+      isDefaultPrintMailFromAddress(current) || !isCompleteMailingAddress(current) ? { ...address } : current,
+    )
   }
 
   const saveAccountProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -10895,6 +10905,21 @@ function App() {
                           order.
                         </p>
                       </div>
+                      {isCompleteMailingAddress(resolveSavedMailingAddress()) && (
+                        <button
+                          className="text-action-link print-ship-to-self"
+                          type="button"
+                          onClick={() => {
+                            const saved = resolveSavedMailingAddress()
+                            if (saved) {
+                              setPrintShipTo({ ...saved })
+                              setPrintOrderNotice('')
+                            }
+                          }}
+                        >
+                          Send it to myself (use my address)
+                        </button>
+                      )}
                       {renderMailingAddressFields('ship-to', printShipTo, 'Recipient name')}
                       <div className="print-order-actions">
                         <button className="primary-button" type="submit">

@@ -960,6 +960,11 @@ textarea:focus {
   transform: none;
 }
 
+.print-ship-to-self {
+  justify-self: start;
+  font-size: 0.92rem;
+}
+
 .print-order-sent {
   color: var(--gcu-dark-teal);
   font-weight: 900;
