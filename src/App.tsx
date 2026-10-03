@@ -10659,7 +10659,7 @@ function App() {
                 )}
                 {accountSession ? (
                   <p className="account-confirmed">
-                    Your Phone# is Confirmed {formatPhoneNumberDisplay(accountSession.phoneE164)}
+                    ✓ Phone confirmed: {formatPhoneNumberDisplay(accountSession.phoneE164).replace(/^\+1 /, '')}
                   </p>
                 ) : (
                   <>
