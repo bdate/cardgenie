@@ -2962,6 +2962,7 @@ textarea:focus {
   background: none;
   box-shadow: none;
   color: var(--gcu-dark-teal);
+  margin-right: 0.6em;
   font: inherit;
   font-weight: inherit;
   text-decoration: underline;
