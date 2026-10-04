@@ -3513,6 +3513,111 @@ const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
 const feedbackSources = new Set(['post_send', 'account'])
 
+const REVIEW_ALERT_TO = DEPLOY_SUMMARY_TO
+
+const loadReviewSenderDetails = async (env, userId) => {
+  if (!userId || !env.ACCOUNT_DB) {
+    return null
+  }
+  const db = env.ACCOUNT_DB
+  const safeAll = async (sql) => {
+    try {
+      return (await db.prepare(sql).bind(userId).all()).results || []
+    } catch {
+      return []
+    }
+  }
+  const [users, cards, deliveries, prints, credits] = await Promise.all([
+    safeAll(
+      `SELECT phone_e164, email, preferred_name, credit_balance, created_at, last_login_at FROM users WHERE id = ?`,
+    ),
+    safeAll(
+      `SELECT id, created_at, status, recipient_name, occasion FROM cards WHERE user_id = ? ORDER BY created_at DESC LIMIT 5`,
+    ),
+    safeAll(
+      `SELECT card_id, created_at, method, destination, status FROM deliveries
+       WHERE user_id = ? AND is_sender_copy = 0 ORDER BY created_at DESC LIMIT 10`,
+    ),
+    safeAll(`SELECT order_number, card_id, created_at, ship_to_name FROM print_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 5`),
+    safeAll(
+      `SELECT COALESCE(SUM(CASE WHEN kind = 'purchase' THEN credits_delta ELSE 0 END), 0) AS purchased FROM credit_events WHERE user_id = ?`,
+    ),
+  ])
+  return { user: users[0] || null, cards, deliveries, prints, purchased: Number(credits[0]?.purchased || 0) }
+}
+
+const buildReviewAlertText = ({ review, sender, request, env }) => {
+  const stamp = (iso) => (iso ? formatDeploySubjectStamp(new Date(iso)) : '—')
+  const lines = [
+    'New Card Genie review',
+    '',
+    `Name: ${review.name || '(not given)'}`,
+    `Rating: ${review.rating ? `${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)} (${review.rating}/5)` : '(no rating)'}`,
+    `Where: ${review.source}`,
+    `Received: ${stamp(review.createdAt)}`,
+    `Review id: ${review.id}`,
+    '',
+    'Comment:',
+    review.comment,
+    '',
+    '— Sender —',
+  ]
+  const user = sender?.user
+  if (!user) {
+    lines.push('Not signed in (no account details).')
+  } else {
+    lines.push(
+      `Account first name: ${user.preferred_name || '(none)'}`,
+      `Phone: ${user.phone_e164 || review.phoneE164 || '(none)'}`,
+      `Email: ${user.email || '(none)'}`,
+      `Account created: ${stamp(user.created_at)}`,
+      `Last sign-in: ${stamp(user.last_login_at)}`,
+      `Credits left: ${user.credit_balance ?? 0} · Credits purchased: ${sender.purchased}`,
+      '',
+      'Recent cards:',
+      ...(sender.cards.length
+        ? sender.cards.map(
+            (card) =>
+              `- ${stamp(card.created_at)} · ${card.occasion || 'Card'} for ${card.recipient_name || '(no name)'} · ${card.status} · ${getShareUrl(request, env, card.id)}`,
+          )
+        : ['- none']),
+      '',
+      'Recent sends:',
+      ...(sender.deliveries.length
+        ? sender.deliveries.map(
+            (delivery) => `- ${stamp(delivery.created_at)} · ${delivery.method} to ${delivery.destination} · ${delivery.status}`,
+          )
+        : ['- none']),
+      '',
+      'Print orders:',
+      ...(sender.prints.length
+        ? sender.prints.map((order) => `- ${stamp(order.created_at)} · #${order.order_number} to ${order.ship_to_name || '(no name)'}`)
+        : ['- none']),
+    )
+  }
+  return lines.join('\n')
+}
+
+const sendReviewAlert = async (env, request, review) => {
+  try {
+    const sender = await loadReviewSenderDetails(env, review.userId)
+    const text = buildReviewAlertText({ review, sender, request, env })
+    const who = review.name || sender?.user?.preferred_name || 'someone'
+    const subject = `New review from ${who}${review.rating ? ` (${review.rating}★)` : ''}`
+    await sendEmailDelivery({
+      env,
+      to: REVIEW_ALERT_TO,
+      copy: {
+        subject,
+        text,
+        html: `<div style="font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.5; white-space: pre-wrap; color: #1f1a17;">${escapeHtml(text)}</div>`,
+      },
+    })
+  } catch (error) {
+    console.error('review alert email failed', error)
+  }
+}
+
 const handleCreateTestimonial = async (request, env) => {
   if (!accountDbReady(env)) {
     return jsonResponse(request, env, { error: 'Feedback storage is not available right now.' }, 503)
@@ -3566,6 +3671,17 @@ const handleCreateTestimonial = async (request, env) => {
     if (!saved) {
       return jsonResponse(request, env, { error: 'Unable to save your review right now.' }, 500)
     }
+
+    await sendReviewAlert(env, request, {
+      id: saved.id,
+      createdAt: saved.createdAt || new Date().toISOString(),
+      name,
+      rating,
+      comment,
+      source,
+      userId: session?.userId || null,
+      phoneE164: session?.phoneE164 || null,
+    })
 
     return jsonResponse(request, env, {
       ok: true,
