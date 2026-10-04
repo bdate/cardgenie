@@ -1052,7 +1052,6 @@ const buildSharePreviewHtml = (record, request, env) => {
     <meta property="og:description" content="${safeDescription}" />
     <meta property="og:url" content="${escapeHtml(appUrl)}" />
     <meta property="og:image" content="${escapeHtml(imageUrl)}" />
-    <meta property="og:image:type" content="image/png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDescription}" />
