@@ -1446,8 +1446,8 @@ const getCardSummary = (record, request, env) => {
   }
 }
 
-const getEmailCoverUrl = (request, cardId) =>
-  `${new URL(request.url).origin}/c/${encodeURIComponent(cardId)}/cover`
+const getEmailCoverUrl = (request, env, cardId) =>
+  `${String(env.PUBLIC_API_URL || '').replace(/\/$/, '') || new URL(request.url).origin}/c/${encodeURIComponent(cardId)}/cover`
 
 const buildCoverThumbnailHtml = (coverUrl, alt = 'Card cover') => `
         <p style="margin: 0 0 16px;">
@@ -1535,8 +1535,11 @@ const sendSendGridEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
     ],
     tracking_settings: {
       click_tracking: {
-        enable: true,
+        enable: false,
         enable_text: false,
+      },
+      open_tracking: {
+        enable: false,
       },
     },
   }
@@ -1580,6 +1583,8 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
     TextBody: copy.text,
     HtmlBody: copy.html,
     MessageStream: env.POSTMARK_MESSAGE_STREAM || 'outbound',
+    TrackOpens: false,
+    TrackLinks: 'None',
   }
 
   if (attachments.length) {
@@ -3773,7 +3778,7 @@ const handleDeliverCard = async (request, env) => {
   }
 
   const shareUrl = getShareUrl(request, env, record.id)
-  const coverUrl = getEmailCoverUrl(request, record.id)
+  const coverUrl = getEmailCoverUrl(request, env, record.id)
   const copy = buildDeliveryCopy(record, shareUrl, coverUrl)
   const results = []
   const seen = new Set()
