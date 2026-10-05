@@ -11781,13 +11781,9 @@ function App() {
                         </>
                       ) : (
                         <>
-                          <span className="recipient-keepsake-kicker">Love this card?</span>
-                          <h3>Keep it forever</h3>
-                          <p>
-                            We’ll print your card from {senderLabel} on premium cardstock and mail it to you, a
-                            keepsake you can hold onto, display, and treasure.{' '}
-                            <strong>Just $5, shipping included.</strong>
-                          </p>
+                          <span className="recipient-keepsake-kicker">Want this card mailed to you?</span>
+                          <h3>Just $5, shipping included.</h3>
+                          <p>We’ll print your card from {senderLabel} on premium cardstock and mail it to you.</p>
                           {keepsakeResult === 'cancel' && !showKeepsakeForm && (
                             <p className="recipient-keepsake-note" role="status">
                               Checkout canceled. No payment was taken.
