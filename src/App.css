@@ -2358,6 +2358,7 @@ textarea:focus {
 }
 
 .revise-actions {
+  align-items: center;
   margin-bottom: 4px;
 }
 

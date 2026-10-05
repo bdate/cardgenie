@@ -5379,6 +5379,19 @@ function App() {
   }
 
   const startNewCard = () => {
+    if (
+      card &&
+      !isRecipientView &&
+      !hasSentCurrentCard &&
+      !hasPrintedCurrentCard &&
+      !window.confirm('Start over? This card hasn’t been sent or printed yet. Starting a new card clears it.')
+    ) {
+      return
+    }
+    resetToNewCard()
+  }
+
+  const resetToNewCard = () => {
     if (isRecipientView) {
       return
     }
@@ -5872,7 +5885,7 @@ function App() {
     ) {
       return
     }
-    startNewCard()
+    resetToNewCard()
     void applySavedRecipient(recipient, { fresh: true })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -12020,7 +12033,7 @@ function App() {
                       Revise card
                     </button>
                   )}
-                  <button className="secondary-button" type="button" onClick={startNewCard}>
+                  <button className="text-action-link" type="button" onClick={startNewCard}>
                     Start a new card
                   </button>
                 </div>
@@ -12383,7 +12396,7 @@ function App() {
                             >
                               Make another version
                             </button>
-                            <button className="secondary-button" type="button" onClick={startNewCard}>
+                            <button className="text-action-link" type="button" onClick={startNewCard}>
                               Start a new card
                             </button>
                           </div>
