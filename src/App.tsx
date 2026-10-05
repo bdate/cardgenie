@@ -2706,6 +2706,7 @@ function App() {
   const [interviewMode, setInterviewMode] = useState<InterviewMode>('quick')
   const [interviewVoiceLoop, setInterviewVoiceLoop] = useState(false)
   const [isInterviewSpeaking, setIsInterviewSpeaking] = useState(false)
+  const [isInterviewThinking, setIsInterviewThinking] = useState(false)
   const [interviewMessages, setInterviewMessages] = useState<InterviewMessage[]>([
     { role: 'assistant', content: interviewQuickGreeting },
   ])
@@ -4940,6 +4941,7 @@ function App() {
     interviewSpeakingRef.current = false
     setIsInterviewSpeaking(false)
     setIsInterviewListening(false)
+    setIsInterviewThinking(false)
   }
 
   const startLampGenieRealtimeSession = () => {
@@ -4970,6 +4972,7 @@ function App() {
     interviewBaseDraftRef.current = ''
     interviewLatestDraftRef.current = ''
     setInterviewNotice('Allow the microphone once — Genie will keep listening for this chat.')
+    setIsInterviewThinking(true)
     void unlockGenieSpeechAudio()
     void acquireScreenStayAwake()
 
@@ -4999,6 +5002,17 @@ function App() {
               }
               interviewSpeakingRef.current = speaking
               setIsInterviewSpeaking(speaking)
+            },
+            onThinking: (thinking) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setIsInterviewThinking(thinking)
+              if (thinking) {
+                window.requestAnimationFrame(() => {
+                  scrollInterviewThreadToBottom()
+                })
+              }
             },
             onUserTranscript: (text, isFinal) => {
               if (lampGenieRealtimeGenerationRef.current !== generation || !text.trim()) {
@@ -5087,6 +5101,7 @@ function App() {
               setIsInterviewListening(false)
               interviewSpeakingRef.current = false
               setIsInterviewSpeaking(false)
+              setIsInterviewThinking(false)
             },
           },
         })
@@ -5105,6 +5120,7 @@ function App() {
         }
         interviewVoiceLoopRef.current = false
         setInterviewVoiceLoop(false)
+        setIsInterviewThinking(false)
         const friendly = getFriendlyErrorMessage(
           caughtError,
           'Unable to start Genie voice. You can still type your reply.',
@@ -10908,6 +10924,18 @@ function App() {
                     <div className="card-interview-bubble is-user is-live" aria-live="polite">
                       <span className="card-interview-role">You</span>
                       <p>{interviewDraft.trim()}</p>
+                    </div>
+                  )}
+                {((isInterviewing && !isInterviewSpeaking) ||
+                  (interviewMode === 'chat' && isInterviewThinking)) && (
+                    <div className="card-interview-bubble is-assistant is-thinking" role="status">
+                      <span className="card-interview-role">
+                        {interviewMode === 'chat' ? 'Genie' : 'Ask Genie'}
+                      </span>
+                      <p>
+                        <span className="genie-thinking-spinner" aria-hidden="true" />
+                        {interviewMessages.length === 0 ? 'Rubbing the lamp…' : 'Genie is thinking…'}
+                      </p>
                     </div>
                   )}
               </div>

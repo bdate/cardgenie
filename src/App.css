@@ -595,6 +595,36 @@
   white-space: pre-wrap;
 }
 
+.card-interview-bubble.is-thinking p {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gcu-dark-teal);
+  font-weight: 650;
+}
+
+.genie-thinking-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(63, 155, 145, 0.25);
+  border-top-color: var(--gcu-dark-teal);
+  border-radius: 50%;
+  animation: genie-thinking-spin 0.8s linear infinite;
+}
+
+@keyframes genie-thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .genie-thinking-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
 .card-interview-compose {
   display: grid;
   gap: 6px;

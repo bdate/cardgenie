@@ -28,6 +28,8 @@ export type LampGenieRealtimeHandlers = {
   onNotice?: (message: string) => void
   onListening?: (listening: boolean) => void
   onSpeaking?: (speaking: boolean) => void
+  /** True from the moment the shopper stops talking until Genie’s voice starts. */
+  onThinking?: (thinking: boolean) => void
   onUserTranscript?: (text: string, isFinal: boolean) => void
   onAssistantTranscript?: (text: string, isFinal: boolean) => void
   onDetails?: (details: LampGenieCardDetailsPatch) => void
@@ -57,7 +59,9 @@ const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 
 /** Spoken + on-screen line when the interview is done. */
 export const LAMP_GENIE_COMPLETE_LINE =
-  'Your wish is my command! I filled the form below. Review it, then create your card.'
+  'Consider it granted! I filled the form below. Review it, then create your card. Until your next wish… poof!'
+
+export const LAMP_GENIE_OPENING_LINE = 'Your wish is my command!'
 
 const LAMP_GENIE_IDLE_LIMIT_MS = 90_000
 
@@ -84,7 +88,7 @@ export const isJunkRealtimeTranscript = (text: string) => {
   }
   // Genie often hears its own greeting as the shopper (“I'll help you create…”).
   if (
-    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for|wish is my command|free at last|rubbed the lamp|your wish is granted|as you wish)\b/i.test(
+    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for|wish is my command|free at last|rubbed the lamp|your wish is granted|as you wish|consider it granted|until your next wish|i'?m assuming (this|it'?s|the card)( card)? is from)\b/i.test(
       lower,
     )
   ) {
@@ -196,7 +200,16 @@ export const connectLampGenieRealtime = async (options: {
   let idleTimer = 0
   let lastActivityAt = Date.now()
   let cleanedUp = false
+  let thinking = false
   const processedToolCalls = new Set<string>()
+
+  const setThinking = (next: boolean) => {
+    if (thinking === next) {
+      return
+    }
+    thinking = next
+    handlers.onThinking?.(next)
+  }
 
   const recordTurn = (role: LampGenieSessionTurn['role'], text: string) => {
     const cleaned = text.replace(/\s+/g, ' ').trim()
@@ -437,6 +450,7 @@ export const connectLampGenieRealtime = async (options: {
       }
     }
     remoteAudio = null
+    setThinking(false)
     handlers.onListening?.(false)
     handlers.onSpeaking?.(false)
     handlers.onDisconnected?.()
@@ -572,10 +586,12 @@ export const connectLampGenieRealtime = async (options: {
         return
       }
       handlers.onListening?.(false)
-      handlers.onNotice?.('Got it — waiting until you finish…')
+      setThinking(true)
+      handlers.onNotice?.('Got it — Genie is thinking…')
       return
     }
     if (type === 'output_audio_buffer.started' || type === 'response.output_audio.delta') {
+      setThinking(false)
       muteForGenieSpeech()
       return
     }
@@ -633,6 +649,9 @@ export const connectLampGenieRealtime = async (options: {
       const transcript = String(event.transcript || userBuffer || '').trim()
       userBuffer = ''
       if (!transcript || interviewComplete) {
+        if (!transcript && !responseInFlight) {
+          setThinking(false)
+        }
         return
       }
       if (
@@ -643,10 +662,14 @@ export const connectLampGenieRealtime = async (options: {
         looksLikeGenieEcho(transcript, lastAssistantTranscript)
       ) {
         recordTurn('junk', transcript)
+        if (!responseInFlight && !genieSpeaking && !awaitingOutputAudioEnd) {
+          setThinking(false)
+        }
         clearPhantomAudio()
         return
       }
       recordTurn('user', transcript)
+      setThinking(true)
       lastActivityAt = Date.now()
       handlers.onUserTranscript?.(transcript, true)
       if (transcript.split(/\s+/).length <= 8 && LAMP_GENIE_STOP_PATTERN.test(transcript)) {
@@ -691,6 +714,7 @@ export const connectLampGenieRealtime = async (options: {
         return
       }
       recordTurn('system', `error: ${message}`)
+      setThinking(false)
       handlers.onError?.(message)
     }
   }
@@ -755,9 +779,9 @@ export const connectLampGenieRealtime = async (options: {
     handlers.onNotice?.('Listening… talk naturally — Genie will reply by voice.')
     // Mute before the greeting so Genie's voice can't re-enter the mic.
     setMicEnabled(false)
+    setThinking(true)
     requestAssistantResponse({
-      instructions:
-        'Greet the shopper like a cheerful genie who just popped out of the lamp, in one short English sentence (for example: "Ah, free at last! Your wish is my command." or "You rubbed the lamp? Then your wish is my command!"). Then ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.',
+      instructions: `Start with exactly these words, said like a cheerful genie who just popped out of the lamp: "${LAMP_GENIE_OPENING_LINE}" Then, in one short English sentence, ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.`,
     })
     logFlushTimer = window.setInterval(() => {
       void flushSessionLog(false)
