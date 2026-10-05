@@ -1554,17 +1554,6 @@ const sanitizeFilePart = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'card'
 
-const getImageExtension = (imageUrl: string) => {
-  const match = imageUrl.match(/^data:image\/([a-z0-9+.-]+);/i)
-  const extension = match?.[1]?.toLowerCase()
-
-  if (extension === 'jpeg') {
-    return 'jpg'
-  }
-
-  return extension || 'png'
-}
-
 const getImageMimeType = (imageUrl: string) => {
   const match = imageUrl.match(/^data:(image\/[a-z0-9+.-]+);/i)
   return match?.[1] || 'image/png'
@@ -3051,7 +3040,7 @@ function App() {
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
   const [actionFeedback, setActionFeedback] = useState('')
   const [isOpeningCheckout, setIsOpeningCheckout] = useState(false)
-  const [isSavingImage, setIsSavingImage] = useState(false)
+  const [, setIsSavingImage] = useState(false)
   const [startingInterviewMode, setStartingInterviewMode] = useState<InterviewMode | null>(null)
   const actionFeedbackClearRef = useRef<number | null>(null)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
@@ -3139,28 +3128,11 @@ function App() {
     () => sanitizeFilePart(`${recipientLabel}-${details.occasion || 'card'}`),
     [details.occasion, recipientLabel],
   )
-  const coverDownloadName = card ? `${fileNameBase}-cover.${getImageExtension(card.imageUrl)}` : 'card-cover.png'
-  const insideDownloadName = `${fileNameBase}-inside.png`
   const printCoverDownloadName = `${fileNameBase}-print-cover.png`
   const printInsideDownloadName = `${fileNameBase}-print-inside.png`
   const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
-  const coverSaveLabel = prefersPhotoSave ? 'Save cover to photos' : 'Save cover image'
-  const insideSaveLabel = prefersPhotoSave ? 'Save inside to photos' : 'Save inside image'
   const printCoverSaveLabel = 'Save print cover'
   const printInsideSaveLabel = 'Save print inside'
-  const insideDownloadUrl = useMemo(
-    () =>
-      card && isRecipientView
-        ? createInsideImageUrl({
-            greeting: insideGreeting,
-            paragraphs: messageParagraphs,
-            closing: cardClosing,
-            signature: cardSignatureLabel,
-            density: messageDensity,
-          })
-        : '',
-    [card, cardSignatureLabel, cardClosing, insideGreeting, isRecipientView, messageDensity, messageParagraphs],
-  )
   const generationLines = useMemo(
     () => [
       'Designing the card cover.',
@@ -11788,31 +11760,6 @@ function App() {
                   <span>It will not appear on the card sent to your recipient.</span>
                 </p>
               )}
-              {isRecipientView && card && (step === 'front' || step === 'inside') && (
-                <>
-                  <div className="recipient-save-links" aria-label="Save card images">
-                    <button
-                      type="button"
-                      disabled={isSavingImage}
-                      aria-busy={isSavingImage}
-                      onClick={() => void saveImageToDevice(card.imageUrl, coverDownloadName, 'Cover image')}
-                    >
-                      {isSavingImage ? 'Preparing…' : coverSaveLabel}
-                    </button>
-                    <span aria-hidden="true">|</span>
-                    <button
-                      type="button"
-                      disabled={isSavingImage}
-                      aria-busy={isSavingImage}
-                      onClick={() => void saveImageToDevice(insideDownloadUrl, insideDownloadName, 'Inside image')}
-                    >
-                      {isSavingImage ? 'Preparing…' : insideSaveLabel}
-                    </button>
-                  </div>
-                  {saveNotice && <p className="recipient-save-note">{saveNotice}</p>}
-                </>
-              )}
-
               {showSendActions && isRecipientView && (
                 <div className="proof-actions">
                   <button className="secondary-button" type="button" onClick={replayAnimation}>
