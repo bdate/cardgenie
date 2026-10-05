@@ -57,7 +57,7 @@ const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 
 /** Spoken + on-screen line when the interview is done. */
 export const LAMP_GENIE_COMPLETE_LINE =
-  'All set — I filled the form below. Review it, then create your card.'
+  'Your wish is my command! I filled the form below. Review it, then create your card.'
 
 const LAMP_GENIE_IDLE_LIMIT_MS = 90_000
 
@@ -84,7 +84,7 @@ export const isJunkRealtimeTranscript = (text: string) => {
   }
   // Genie often hears its own greeting as the shopper (“I'll help you create…”).
   if (
-    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for)\b/i.test(
+    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for|wish is my command|free at last|rubbed the lamp|your wish is granted|as you wish)\b/i.test(
       lower,
     )
   ) {
@@ -757,7 +757,7 @@ export const connectLampGenieRealtime = async (options: {
     setMicEnabled(false)
     requestAssistantResponse({
       instructions:
-        'Greet the shopper warmly in one short English sentence, then ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.',
+        'Greet the shopper like a cheerful genie who just popped out of the lamp, in one short English sentence (for example: "Ah, free at last! Your wish is my command." or "You rubbed the lamp? Then your wish is my command!"). Then ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.',
     })
     logFlushTimer = window.setInterval(() => {
       void flushSessionLog(false)
