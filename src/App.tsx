@@ -3031,6 +3031,8 @@ function App() {
   const [saveRecipientPhotosOptIn, setSaveRecipientPhotosOptIn] = useState(false)
   const [editingRecipientId, setEditingRecipientId] = useState('')
   const [recipientDraft, setRecipientDraft] = useState<RecipientDraft | null>(null)
+  const [recipientDraftOriginal, setRecipientDraftOriginal] = useState('')
+  const recipientDraftChanged = Boolean(recipientDraft) && JSON.stringify(recipientDraft) !== recipientDraftOriginal
   const [recipientNotice, setRecipientNotice] = useState('')
   const [isSavingRecipient, setIsSavingRecipient] = useState(false)
   const [recipientPhotoUrls, setRecipientPhotoUrls] = useState<Record<string, string>>({})
@@ -5878,7 +5880,7 @@ function App() {
   const startEditingRecipient = async (recipient: SavedRecipient, refreshPhotos = false) => {
     setEditingRecipientId(recipient.id)
     setRecipientNotice('')
-    setRecipientDraft({
+    const draft: RecipientDraft = {
       name: recipient.name,
       relation: recipient.relation,
       email: recipient.email,
@@ -5888,7 +5890,9 @@ function App() {
       birthday: recipient.birthday,
       anniversary: recipient.anniversary,
       notes: recipient.notes,
-    })
+    }
+    setRecipientDraft(draft)
+    setRecipientDraftOriginal(JSON.stringify(draft))
     for (let index = 0; index < recipient.photoCount; index += 1) {
       const key = `${recipient.id}:${index}`
       if (!refreshPhotos && recipientPhotoUrls[key]) {
@@ -9826,7 +9830,11 @@ function App() {
                                     </div>
                                   )}
                                   <div className="recipient-edit-actions">
-                                    <button className="secondary-button" type="submit" disabled={isSavingRecipient}>
+                                    <button
+                                      className={recipientDraftChanged ? 'primary-button' : 'secondary-button'}
+                                      type="submit"
+                                      disabled={isSavingRecipient}
+                                    >
                                       {isSavingRecipient ? 'Saving…' : 'Save'}
                                     </button>
                                     <button
