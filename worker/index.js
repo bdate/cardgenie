@@ -5710,6 +5710,35 @@ const handleAdminLampSessions = async (request, env) => {
   })
 }
 
+const handleAdminResendCardEmail = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+
+  const { cardId, to } = (await readJson(request)) || {}
+  const record = await getCardRecord(env, String(cardId || '').trim())
+  if (!record) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+
+  let normalizedTo = ''
+  try {
+    normalizedTo = normalizeEmailAddress(String(to || ''))
+  } catch (error) {
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Invalid email.' }, 400)
+  }
+
+  try {
+    const copy = buildDeliveryCopy(record, getShareUrl(request, env, record.id), getEmailCoverUrl(request, env, record.id))
+    const deliveredTo = await sendEmailDelivery({ env, to: normalizedTo, copy })
+    return jsonResponse(request, env, { ok: true, deliveredTo, subject: copy.subject })
+  } catch (error) {
+    console.error('admin resend failed', error)
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to send.' }, 502)
+  }
+}
+
 const handleAdminCardHistory = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) {
@@ -5944,6 +5973,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/deploy-summary') {
     return handleAdminDeploySummary(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
+    return handleAdminResendCardEmail(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {
