@@ -9245,7 +9245,9 @@ function App() {
                     </button>
                     {showAdminGrantCredits && (
                       <>
-                        <p className="field-help">Add credits to any confirmed Card Genie phone number.</p>
+                        <p className="field-help">
+                          Add credits to any confirmed Card Genie phone number. We’ll text them to let them know.
+                        </p>
                         <div className="admin-grant-row">
                           <label>
                             Phone number

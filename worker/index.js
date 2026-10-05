@@ -3678,13 +3678,30 @@ const handleAdminGrantCredits = async (request, env) => {
     return jsonResponse(request, env, { error: 'Unable to grant credits for that account.' }, 500)
   }
 
+  const firstName = String(user.preferredName || user.preferred_name || '').trim().split(/\s+/)[0] || ''
+  const creditWord = (count) => `${count} credit${count === 1 ? '' : 's'}`
+  const grantText = [
+    `${firstName ? `Hi ${firstName}! ` : 'Hi! '}Good news from Card Genie: we've added ${creditWord(amount)} to your account, on us.`,
+    `You now have ${creditWord(nextBalance)} to create and send personalized cards.`,
+    `Make one anytime at ${getPublicAppUrl(request, env)}`,
+    'Reply STOP to opt out.',
+  ].join(' ')
+  let textSent = false
+  try {
+    await sendTextDelivery({ env, to: phoneE164, copy: { text: grantText } })
+    textSent = true
+  } catch (textError) {
+    console.error('Credit grant text failed.', textError)
+  }
+
   return jsonResponse(request, env, {
     ok: true,
     phoneE164,
     creditsAdded: amount,
     creditBalance: nextBalance,
     previousBalance: Math.max(0, nextBalance - amount),
-    message: `Added ${amount} credits. New balance: ${nextBalance}.`,
+    textSent,
+    message: `Added ${amount} credits. New balance: ${nextBalance}. ${textSent ? 'We texted them to let them know.' : 'The text notification could not be sent.'}`,
   })
 }
 
