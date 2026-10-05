@@ -3656,6 +3656,122 @@ select.is-placeholder option {
   white-space: pre-line;
 }
 
+.recipient-name-field {
+  position: relative;
+}
+
+.recipient-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow:
+    0 14px 32px rgba(49, 95, 91, 0.2),
+    0 0 0 1px rgba(63, 155, 145, 0.18);
+}
+
+.recipient-suggestions button {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gcu-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recipient-suggestions button:hover,
+.recipient-suggestions button:focus-visible {
+  background: rgba(63, 155, 145, 0.1);
+}
+
+.recipient-suggestions strong {
+  font-size: 0.95rem;
+}
+
+.recipient-suggestions span {
+  color: var(--gcu-grey);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.recipient-photo-optin {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  color: var(--gcu-grey);
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.recipient-photo-optin input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.recipient-row .account-row-detail,
+.admin-recipient-detail {
+  white-space: pre-line;
+}
+
+.recipient-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 16px;
+}
+
+.recipient-edit-form {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(63, 155, 145, 0.2);
+}
+
+.recipient-mailing-fields {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.recipient-mailing-fields legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.recipient-mailing-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(70px, 1fr) minmax(80px, 1fr);
+  gap: 8px;
+}
+
+.recipient-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recipient-delete-link {
+  color: #b4443a !important;
+}
+
 .admin-shopper-row {
   width: 100%;
   font: inherit;

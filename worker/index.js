@@ -40,6 +40,15 @@ import {
   putCoverThumbFromDataUrl,
 } from './cover-thumbs.js'
 import {
+  backfillRecipients,
+  deleteRecipient,
+  deleteRecipientPhoto,
+  getRecipientPhoto,
+  listRecipients,
+  updateRecipient,
+  upsertRecipientFromCard,
+} from './recipients.js'
+import {
   appendCoverRevision,
   getCoverRevisionBytes,
   listCoverRevisions,
@@ -1077,6 +1086,8 @@ const buildSharePreviewHtml = (record, request, env) => {
   </body>
 </html>`
 }
+
+const recipientDetailsFor = (record) => ({ ...(record?.editor?.details || {}), ...(record?.details || {}) })
 
 const buildCardRecord = (payload) => {
   const card = payload?.card || {}
@@ -3225,6 +3236,106 @@ const buildAccountHistoryPayload = async (request, env, history, phoneE164) => {
   }
 }
 
+const requireAccountSession = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  return session
+    ? { session }
+    : { denied: jsonResponse(request, env, { error: 'Confirm your mobile number to see your recipients.' }, 401) }
+}
+
+const handleListRecipients = async (request, env) => {
+  const { session, denied } = await requireAccountSession(request, env)
+  if (denied) {
+    return denied
+  }
+  return jsonResponse(request, env, { ok: true, recipients: await listRecipients(env, session.userId) })
+}
+
+const handleUpdateRecipient = async (request, env) => {
+  const { session, denied } = await requireAccountSession(request, env)
+  if (denied) {
+    return denied
+  }
+  const body = (await readJson(request)) || {}
+  try {
+    const fields = {}
+    for (const key of ['name', 'relation', 'keyDetails', 'notes', 'mailingAddress']) {
+      if (body[key] !== undefined) {
+        fields[key] = body[key]
+      }
+    }
+    for (const key of ['birthday', 'anniversary']) {
+      if (body[key] !== undefined) {
+        const value = String(body[key] || '').trim()
+        if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return jsonResponse(request, env, { error: 'Choose a valid date.' }, 400)
+        }
+        fields[key] = value
+      }
+    }
+    if (body.email !== undefined) {
+      fields.email = String(body.email || '').trim() ? normalizeEmailAddress(body.email) : ''
+    }
+    if (body.phone !== undefined) {
+      fields.phoneE164 = String(body.phone || '').trim() ? normalizePhoneNumber(body.phone) : ''
+    }
+    const recipient = await updateRecipient(env, session.userId, String(body.id || ''), fields)
+    if (!recipient) {
+      return jsonResponse(request, env, { error: 'Recipient not found.' }, 404)
+    }
+    return jsonResponse(request, env, { ok: true, recipient })
+  } catch (error) {
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to save.' }, 400)
+  }
+}
+
+const handleDeleteRecipient = async (request, env) => {
+  const { session, denied } = await requireAccountSession(request, env)
+  if (denied) {
+    return denied
+  }
+  const body = (await readJson(request)) || {}
+  const ok = await deleteRecipient(env, session.userId, String(body.id || ''))
+  return ok
+    ? jsonResponse(request, env, { ok: true })
+    : jsonResponse(request, env, { error: 'Recipient not found.' }, 404)
+}
+
+const handleDeleteRecipientPhoto = async (request, env) => {
+  const { session, denied } = await requireAccountSession(request, env)
+  if (denied) {
+    return denied
+  }
+  const body = (await readJson(request)) || {}
+  const recipient = await deleteRecipientPhoto(env, session.userId, String(body.id || ''), Number(body.index))
+  return recipient
+    ? jsonResponse(request, env, { ok: true, recipient })
+    : jsonResponse(request, env, { error: 'Recipient not found.' }, 404)
+}
+
+const handleGetRecipientPhoto = async (request, env) => {
+  const url = new URL(request.url)
+  const recipientId = url.searchParams.get('id') || ''
+  const index = Number(url.searchParams.get('n') || 0)
+  const session = await getAccountSession(env, readAccountToken(request))
+  const isAdmin = await isAdminRequest(request, env)
+  if (!session && !isAdmin) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+  const dataUrl = await getRecipientPhoto(env, isAdmin ? null : session.userId, recipientId, index)
+  const parsed = parseDataImage(dataUrl)
+  if (!parsed) {
+    return jsonResponse(request, env, { error: 'Photo not found.' }, 404)
+  }
+  return new Response(parsed.bytes, {
+    headers: {
+      ...getCorsHeaders(request, env),
+      'Content-Type': parsed.mimeType,
+      'Cache-Control': 'private, no-store',
+    },
+  })
+}
+
 const handleGetAccountCard = async (request, env, cardId) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -3795,7 +3906,9 @@ const handleDeliverCard = async (request, env) => {
     destinations,
     recipientConsentConfirmed,
     senderCopyEmail: rawSenderCopyEmail,
+    saveRecipientPhotos,
   } = (await readJson(request)) || {}
+  let pendingRecipientPhotos = Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : []
   const record = await getCardRecord(env, cardId)
   const destinationList = collectDeliveryDestinations({ destination, destinations })
   const senderCopyEmail = rawSenderCopyEmail?.trim()
@@ -3901,6 +4014,20 @@ const handleDeliverCard = async (request, env) => {
         console.error(accountError)
       }
 
+      try {
+        await upsertRecipientFromCard(env, {
+          userId: session.userId,
+          details: recipientDetailsFor(record),
+          cardId: record.id,
+          email: method === 'email' ? deliveredTo : '',
+          phoneE164: method === 'text' ? deliveredTo : '',
+          photos: pendingRecipientPhotos,
+        })
+        pendingRecipientPhotos = []
+      } catch (recipientError) {
+        console.error('recipient save failed', recipientError)
+      }
+
       results.push({ destination: deliveredTo, status: 'sent' })
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
@@ -4002,6 +4129,7 @@ const handleOrderPrintCard = async (request, env) => {
       insideImage,
       coverThumbImage,
       insideThumbImage,
+      saveRecipientPhotos,
     } = body
     const record = await getCardRecord(env, cardId)
 
@@ -4032,6 +4160,17 @@ const handleOrderPrintCard = async (request, env) => {
     await saveAccountEmail(env, { userId: session.userId, email: shopperEmail })
     if (!isDefaultPrintMailFrom(mailFrom)) {
       await saveAccountMailingAddress(env, { userId: session.userId, mailingAddress: mailFrom })
+    }
+    try {
+      await upsertRecipientFromCard(env, {
+        userId: session.userId,
+        details: recipientDetailsFor(record),
+        cardId: record.id,
+        mailingAddress: shipTo,
+        photos: Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : [],
+      })
+    } catch (recipientError) {
+      console.error('recipient save failed', recipientError)
     }
     const orderCode = savedOrder?.orderCode || String(savedOrder?.orderNumber || '')
     if (!orderCode) {
@@ -5832,7 +5971,28 @@ const handleAdminShopperHistory = async (request, env) => {
     return jsonResponse(request, env, { error: 'Shopper not found.' }, 404)
   }
   const history = await getAccountHistory(env, shopper.id, shopper.phoneE164, { includeHidden: true })
-  return jsonResponse(request, env, await buildAccountHistoryPayload(request, env, history, shopper.phoneE164))
+  return jsonResponse(request, env, {
+    ...(await buildAccountHistoryPayload(request, env, history, shopper.phoneE164)),
+    recipients: await listRecipients(env, shopper.id),
+  })
+}
+
+const handleAdminBackfillRecipients = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const result = await backfillRecipients(env, {
+    loadCardDetails: async (cardId) => {
+      const record = await getCardRecord(env, cardId)
+      if (record) {
+        return recipientDetailsFor(record)
+      }
+      const row = await env.ACCOUNT_DB.prepare('SELECT recipient_name, occasion FROM cards WHERE id = ?').bind(cardId).first()
+      return row ? { recipientName: row.recipient_name || '', occasion: row.occasion || '' } : null
+    },
+  })
+  return jsonResponse(request, env, { ok: true, ...result })
 }
 
 const SHIP_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -6159,6 +6319,30 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
     return handleAdminResendCardEmail(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/account/recipients') {
+    return handleListRecipients(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/account/recipients/photo') {
+    return handleGetRecipientPhoto(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/recipients/update') {
+    return handleUpdateRecipient(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/recipients/delete') {
+    return handleDeleteRecipient(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/account/recipients/photo-delete') {
+    return handleDeleteRecipientPhoto(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/backfill-recipients') {
+    return handleAdminBackfillRecipients(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/admin/shoppers') {

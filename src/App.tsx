@@ -77,6 +77,37 @@ type ReferencePhoto = {
   dataUrl: string
 }
 
+type SavedRecipient = {
+  id: string
+  name: string
+  relation: string
+  email: string
+  phoneE164: string
+  mailingAddress: MailingAddress | null
+  keyDetails: string
+  tone: string
+  imageStyle: string
+  birthday: string
+  anniversary: string
+  notes: string
+  photoCount: number
+  cardsCount: number
+  lastOccasion: string
+  lastSentAt: string
+}
+
+type RecipientDraft = {
+  name: string
+  relation: string
+  email: string
+  phone: string
+  mailing: MailingAddress
+  keyDetails: string
+  birthday: string
+  anniversary: string
+  notes: string
+}
+
 type InterviewMessage = {
   role: 'assistant' | 'user'
   content: string
@@ -2606,6 +2637,7 @@ function App() {
       shipmentEmailSentAt?: string
     }>
     cardSummaries?: Record<string, { recipientName?: string; occasion?: string; groupKey?: string }>
+    recipients?: SavedRecipient[]
   } | null>(null)
   type AccountHistoryData = NonNullable<typeof accountHistory>
   const [adminShoppers, setAdminShoppers] = useState<
@@ -2917,6 +2949,16 @@ function App() {
       .slice(0, maxReferencePhotos)
   })
   const [referencePhotoNotice, setReferencePhotoNotice] = useState('')
+  const [savedRecipients, setSavedRecipients] = useState<SavedRecipient[]>([])
+  const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false)
+  const [selectedRecipientId, setSelectedRecipientId] = useState('')
+  const [saveRecipientPhotosOptIn, setSaveRecipientPhotosOptIn] = useState(false)
+  const [editingRecipientId, setEditingRecipientId] = useState('')
+  const [recipientDraft, setRecipientDraft] = useState<RecipientDraft | null>(null)
+  const [recipientNotice, setRecipientNotice] = useState('')
+  const [isSavingRecipient, setIsSavingRecipient] = useState(false)
+  const [recipientPhotoUrls, setRecipientPhotoUrls] = useState<Record<string, string>>({})
+  const [showAllRecipients, setShowAllRecipients] = useState(false)
   const [isAddingPhotos, setIsAddingPhotos] = useState(false)
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
   const [actionFeedback, setActionFeedback] = useState('')
@@ -5563,6 +5605,276 @@ function App() {
     }
   }
 
+  const recipientPhotosToSave = () =>
+    saveRecipientPhotosOptIn && details.recipientName.trim() && referencePhotos.length
+      ? referencePhotos.map((photo) => photo.dataUrl)
+      : undefined
+
+  const loadSavedRecipients = async (token = accountSession?.token) => {
+    if (!token) {
+      return
+    }
+    try {
+      const response = await fetch(apiUrl('/api/account/recipients'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load recipients.')
+      if (response.ok && Array.isArray(data.recipients)) {
+        setSavedRecipients(data.recipients)
+      }
+    } catch {
+      // Autofill is optional; the form still works without saved recipients.
+    }
+  }
+
+  useEffect(() => {
+    if (accountSession?.token && !isRecipientView) {
+      void loadSavedRecipients(accountSession.token)
+    } else {
+      setSavedRecipients([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountSession?.token, isRecipientView])
+
+  useEffect(() => {
+    const recipient = savedRecipients.find((entry) => entry.id === selectedRecipientId)
+    if (!recipient) {
+      return
+    }
+    const value =
+      deliveryMethod === 'text'
+        ? recipient.phoneE164
+          ? formatPhoneNumberDisplay(recipient.phoneE164)
+          : ''
+        : recipient.email
+    if (value) {
+      setDeliveryDestinations((current) => (current.some((entry) => entry.trim()) ? current : [value]))
+    }
+  }, [deliveryMethod, selectedRecipientId, savedRecipients])
+
+  const fetchRecipientPhotoBlob = async (recipientId: string, index: number) => {
+    if (!accountSession?.token) {
+      return null
+    }
+    const response = await fetch(
+      apiUrl(`/api/account/recipients/photo?id=${encodeURIComponent(recipientId)}&n=${index}`),
+      { headers: { Authorization: `Bearer ${accountSession.token}` } },
+    )
+    return response.ok ? response.blob() : null
+  }
+
+  const blobToDataUrl = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+
+  const recipientSuggestions = useMemo(() => {
+    const query = details.recipientName.trim().toLowerCase()
+    return savedRecipients
+      .filter((recipient) => !query || recipient.name.toLowerCase().includes(query))
+      .filter((recipient) => recipient.name.toLowerCase() !== query || recipient.id !== selectedRecipientId)
+      .slice(0, 6)
+  }, [savedRecipients, details.recipientName, selectedRecipientId])
+
+  const applySavedRecipient = async (recipient: SavedRecipient, { fresh = false } = {}) => {
+    setShowRecipientSuggestions(false)
+    setSelectedRecipientId(recipient.id)
+    setError('')
+    setDetails((current) => ({
+      ...current,
+      recipientName: recipient.name,
+      recipientType: recipient.relation || current.recipientType,
+      keyDetails: current.keyDetails.trim() ? current.keyDetails : recipient.keyDetails || current.keyDetails,
+    }))
+    setDeliveryDestinations((current) => {
+      if (current.some((entry) => entry.trim())) {
+        return current
+      }
+      const value =
+        deliveryMethod === 'text'
+          ? recipient.phoneE164
+            ? formatPhoneNumberDisplay(recipient.phoneE164)
+            : ''
+          : recipient.email
+      return value ? [value] : current
+    })
+    if (recipient.mailingAddress?.line1) {
+      setPrintShipTo((current) =>
+        current.line1.trim() ? current : { ...emptyMailingAddress(), ...recipient.mailingAddress, name: recipient.mailingAddress?.name || recipient.name },
+      )
+    }
+    if (recipient.photoCount > 0 && (fresh || referencePhotos.length === 0)) {
+      try {
+        const photos: ReferencePhoto[] = []
+        for (let index = 0; index < Math.min(recipient.photoCount, maxReferencePhotos); index += 1) {
+          const blob = await fetchRecipientPhotoBlob(recipient.id, index)
+          if (blob) {
+            photos.push({
+              id: `saved-${recipient.id}-${index}`,
+              name: `${recipient.name} photo ${index + 1}`,
+              dataUrl: await blobToDataUrl(blob),
+            })
+          }
+        }
+        if (photos.length) {
+          setReferencePhotos((current) => (current.length ? current : photos))
+        }
+      } catch {
+        setReferencePhotoNotice('We couldn’t load the saved photos. You can add them again.')
+      }
+    }
+  }
+
+  const makeCardForRecipient = (recipient: SavedRecipient) => {
+    const hasCurrentWork =
+      Boolean(card) ||
+      referencePhotos.length > 0 ||
+      (Object.keys(initialDetails) as Array<keyof CardDetails>).some(
+        (field) => details[field].trim() !== initialDetails[field].trim(),
+      )
+    if (
+      hasCurrentWork &&
+      !window.confirm(`Start a new card for ${recipient.name}? The information currently in your card fields will be replaced.`)
+    ) {
+      return
+    }
+    startNewCard()
+    void applySavedRecipient(recipient, { fresh: true })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const startEditingRecipient = async (recipient: SavedRecipient, refreshPhotos = false) => {
+    setEditingRecipientId(recipient.id)
+    setRecipientNotice('')
+    setRecipientDraft({
+      name: recipient.name,
+      relation: recipient.relation,
+      email: recipient.email,
+      phone: recipient.phoneE164 ? formatPhoneNumberDisplay(recipient.phoneE164) : '',
+      mailing: { ...emptyMailingAddress(), ...(recipient.mailingAddress || {}) },
+      keyDetails: recipient.keyDetails,
+      birthday: recipient.birthday,
+      anniversary: recipient.anniversary,
+      notes: recipient.notes,
+    })
+    for (let index = 0; index < recipient.photoCount; index += 1) {
+      const key = `${recipient.id}:${index}`
+      if (!refreshPhotos && recipientPhotoUrls[key]) {
+        continue
+      }
+      try {
+        const blob = await fetchRecipientPhotoBlob(recipient.id, index)
+        if (blob) {
+          const url = URL.createObjectURL(blob)
+          setRecipientPhotoUrls((current) => ({ ...current, [key]: url }))
+        }
+      } catch {
+        // The edit form still works without the preview.
+      }
+    }
+  }
+
+  const saveRecipientDraft = async () => {
+    if (!accountSession?.token || !editingRecipientId || !recipientDraft) {
+      return
+    }
+    const mailing = recipientDraft.mailing
+    const hasMailing = [mailing.line1, mailing.city, mailing.state, mailing.zip].some((value) => value.trim())
+    if (hasMailing && ![mailing.line1, mailing.city, mailing.state, mailing.zip].every((value) => value.trim())) {
+      setRecipientNotice('Fill in the street, city, state, and ZIP, or clear the address.')
+      return
+    }
+    setIsSavingRecipient(true)
+    setRecipientNotice('')
+    try {
+      const response = await fetch(apiUrl('/api/account/recipients/update'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingRecipientId,
+          name: recipientDraft.name,
+          relation: recipientDraft.relation,
+          email: recipientDraft.email,
+          phone: recipientDraft.phone,
+          mailingAddress: hasMailing ? { ...mailing, name: mailing.name.trim() || recipientDraft.name } : null,
+          keyDetails: recipientDraft.keyDetails,
+          birthday: recipientDraft.birthday,
+          anniversary: recipientDraft.anniversary,
+          notes: recipientDraft.notes,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to save this recipient.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save this recipient.')
+      }
+      setSavedRecipients((current) => current.map((entry) => (entry.id === editingRecipientId ? data.recipient : entry)))
+      setEditingRecipientId('')
+      setRecipientDraft(null)
+    } catch (caughtError) {
+      setRecipientNotice(caughtError instanceof Error ? caughtError.message : 'Unable to save this recipient.')
+    } finally {
+      setIsSavingRecipient(false)
+    }
+  }
+
+  const deleteSavedRecipient = async (recipient: SavedRecipient) => {
+    if (
+      !accountSession?.token ||
+      !window.confirm(`Remove ${recipient.name} from your recipients? Their saved details and photos will be deleted.`)
+    ) {
+      return
+    }
+    try {
+      const response = await fetch(apiUrl('/api/account/recipients/delete'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: recipient.id }),
+      })
+      if (!response.ok) {
+        const data = await getApiJson(response, 'Unable to remove this recipient.')
+        throw new Error(data.error || 'Unable to remove this recipient.')
+      }
+      setSavedRecipients((current) => current.filter((entry) => entry.id !== recipient.id))
+      if (editingRecipientId === recipient.id) {
+        setEditingRecipientId('')
+        setRecipientDraft(null)
+      }
+    } catch (caughtError) {
+      setRecipientNotice(caughtError instanceof Error ? caughtError.message : 'Unable to remove this recipient.')
+    }
+  }
+
+  const deleteSavedRecipientPhoto = async (recipient: SavedRecipient, index: number) => {
+    if (!accountSession?.token) {
+      return
+    }
+    try {
+      const response = await fetch(apiUrl('/api/account/recipients/photo-delete'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: recipient.id, index }),
+      })
+      const data = await getApiJson(response, 'Unable to remove the photo.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to remove the photo.')
+      }
+      setRecipientPhotoUrls((current) => {
+        const next = { ...current }
+        for (let photoIndex = 0; photoIndex < 3; photoIndex += 1) {
+          delete next[`${recipient.id}:${photoIndex}`]
+        }
+        return next
+      })
+      setSavedRecipients((current) => current.map((entry) => (entry.id === recipient.id ? data.recipient : entry)))
+      void startEditingRecipient(data.recipient, true)
+    } catch (caughtError) {
+      setRecipientNotice(caughtError instanceof Error ? caughtError.message : 'Unable to remove the photo.')
+    }
+  }
+
   const removeReferencePhoto = (photoId: string) => {
     setReferencePhotos((current) => current.filter((photo) => photo.id !== photoId))
     setReferencePhotoNotice('')
@@ -7179,6 +7491,7 @@ function App() {
           insideImage: insideUrl,
           coverThumbImage: coverThumbUrl || undefined,
           insideThumbImage: insideThumbUrl || undefined,
+          saveRecipientPhotos: recipientPhotosToSave(),
         }),
       })
       const data = await getApiJson(response, 'Unable to place the print order.')
@@ -7233,6 +7546,7 @@ function App() {
         )
       }
       setHasPrintedCurrentCard(true)
+      void loadSavedRecipients()
       flashSentButton('print', '✓ Print order placed')
       setPrintOrderNotice(
         <div className="print-order-success-notice">
@@ -8501,6 +8815,7 @@ function App() {
           destinations: validatedDestinations.map((entry) => entry.value),
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
           senderCopyEmail: senderCopyValue || undefined,
+          saveRecipientPhotos: recipientPhotosToSave(),
         }),
       })
       const data = await getApiJson(response, 'Unable to deliver the card.')
@@ -8590,6 +8905,7 @@ function App() {
       resetDeliveryDestinations()
       setHasSentCurrentCard(true)
       if (deliveredCount > 0) {
+        void loadSavedRecipients()
         flashSentButton(
           'deliver',
           deliveredCount > 1
@@ -9100,6 +9416,279 @@ function App() {
                   <span>Phone</span>
                   <strong>{formatPhoneNumberDisplay(accountHistory.phoneE164 || accountSession?.phoneE164 || '')}</strong>
                 </div>
+              </div>
+              <div className="account-block account-recipients-block">
+                <h3>Your recipients</h3>
+                <p className="field-help">
+                  Saved automatically when you send or print a card. Pick one in the “To” field to fill in their
+                  details.
+                </p>
+                {recipientNotice && <div className="field-notice">{recipientNotice}</div>}
+                {savedRecipients.length === 0 ? (
+                  <p>No saved recipients yet.</p>
+                ) : (
+                  <>
+                    <div className="account-list">
+                      {(showAllRecipients ? savedRecipients : savedRecipients.slice(0, accountActivityPreviewLimit)).map(
+                        (recipient) => {
+                          const isEditing = editingRecipientId === recipient.id && recipientDraft
+                          const contact = [
+                            recipient.phoneE164 ? formatPhoneNumberDisplay(recipient.phoneE164) : '',
+                            recipient.email,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')
+                          return (
+                            <div className="account-row recipient-row" key={recipient.id}>
+                              <span className="account-row-title">
+                                {recipient.name}
+                                {recipient.relation ? ` (${recipient.relation})` : ''}
+                              </span>
+                              <span className="account-row-detail">
+                                {[contact, recipient.mailingAddress ? formatAccountMailingAddress(recipient.mailingAddress) : '']
+                                  .filter(Boolean)
+                                  .join('\n') || 'No contact info saved yet'}
+                              </span>
+                              <span className="account-row-status">
+                                {recipient.cardsCount} card{recipient.cardsCount === 1 ? '' : 's'}
+                                {recipient.photoCount ? ` · ${recipient.photoCount} photo${recipient.photoCount === 1 ? '' : 's'}` : ''}
+                              </span>
+                              <span className="account-row-date">
+                                {recipient.lastSentAt
+                                  ? `${recipient.lastOccasion ? `${recipient.lastOccasion} · ` : ''}${formatAccountDay(recipient.lastSentAt)}`
+                                  : ''}
+                              </span>
+                              <span className="account-row-actions recipient-row-actions">
+                                <button
+                                  className="text-action-link"
+                                  type="button"
+                                  onClick={() => makeCardForRecipient(recipient)}
+                                >
+                                  Make a card
+                                </button>
+                                <button
+                                  className="text-action-link"
+                                  type="button"
+                                  onClick={() => {
+                                    if (isEditing) {
+                                      setEditingRecipientId('')
+                                      setRecipientDraft(null)
+                                    } else {
+                                      void startEditingRecipient(recipient)
+                                    }
+                                  }}
+                                >
+                                  {isEditing ? 'Cancel' : 'Edit'}
+                                </button>
+                              </span>
+                              {isEditing && recipientDraft && (
+                                <form
+                                  className="recipient-edit-form"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    void saveRecipientDraft()
+                                  }}
+                                >
+                                  <div className="field-grid">
+                                    <label>
+                                      Name
+                                      <input
+                                        value={recipientDraft.name}
+                                        onChange={(event) => setRecipientDraft({ ...recipientDraft, name: event.target.value })}
+                                      />
+                                    </label>
+                                    <label>
+                                      Relation
+                                      <input
+                                        value={recipientDraft.relation}
+                                        onChange={(event) =>
+                                          setRecipientDraft({ ...recipientDraft, relation: event.target.value })
+                                        }
+                                        placeholder="mom, friend, coworker"
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="field-grid">
+                                    <label>
+                                      Cellphone
+                                      <input
+                                        type="tel"
+                                        inputMode="tel"
+                                        value={recipientDraft.phone}
+                                        onChange={(event) => setRecipientDraft({ ...recipientDraft, phone: event.target.value })}
+                                        placeholder="(925) 555-1234"
+                                      />
+                                    </label>
+                                    <label>
+                                      Email
+                                      <input
+                                        type="email"
+                                        inputMode="email"
+                                        value={recipientDraft.email}
+                                        onChange={(event) => setRecipientDraft({ ...recipientDraft, email: event.target.value })}
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="field-grid">
+                                    <label>
+                                      Birthday
+                                      <input
+                                        type="date"
+                                        value={recipientDraft.birthday}
+                                        onChange={(event) =>
+                                          setRecipientDraft({ ...recipientDraft, birthday: event.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Anniversary
+                                      <input
+                                        type="date"
+                                        value={recipientDraft.anniversary}
+                                        onChange={(event) =>
+                                          setRecipientDraft({ ...recipientDraft, anniversary: event.target.value })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+                                  <fieldset className="recipient-mailing-fields">
+                                    <legend>Mailing address</legend>
+                                    <input
+                                      value={recipientDraft.mailing.line1}
+                                      onChange={(event) =>
+                                        setRecipientDraft({
+                                          ...recipientDraft,
+                                          mailing: { ...recipientDraft.mailing, line1: event.target.value },
+                                        })
+                                      }
+                                      placeholder="Street address"
+                                      autoComplete="off"
+                                    />
+                                    <input
+                                      value={recipientDraft.mailing.line2}
+                                      onChange={(event) =>
+                                        setRecipientDraft({
+                                          ...recipientDraft,
+                                          mailing: { ...recipientDraft.mailing, line2: event.target.value },
+                                        })
+                                      }
+                                      placeholder="Apt, suite (optional)"
+                                      autoComplete="off"
+                                    />
+                                    <div className="recipient-mailing-row">
+                                      <input
+                                        value={recipientDraft.mailing.city}
+                                        onChange={(event) =>
+                                          setRecipientDraft({
+                                            ...recipientDraft,
+                                            mailing: { ...recipientDraft.mailing, city: event.target.value },
+                                          })
+                                        }
+                                        placeholder="City"
+                                        autoComplete="off"
+                                      />
+                                      <select
+                                        value={recipientDraft.mailing.state}
+                                        onChange={(event) =>
+                                          setRecipientDraft({
+                                            ...recipientDraft,
+                                            mailing: { ...recipientDraft.mailing, state: event.target.value },
+                                          })
+                                        }
+                                        aria-label="State"
+                                      >
+                                        <option value="">State</option>
+                                        {usStateOptions.map((state) => (
+                                          <option key={state} value={state}>
+                                            {state}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        value={recipientDraft.mailing.zip}
+                                        onChange={(event) =>
+                                          setRecipientDraft({
+                                            ...recipientDraft,
+                                            mailing: { ...recipientDraft.mailing, zip: event.target.value },
+                                          })
+                                        }
+                                        placeholder="ZIP"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                      />
+                                    </div>
+                                  </fieldset>
+                                  <label>
+                                    Personal details
+                                    <textarea
+                                      rows={4}
+                                      value={recipientDraft.keyDetails}
+                                      onChange={(event) =>
+                                        setRecipientDraft({ ...recipientDraft, keyDetails: event.target.value })
+                                      }
+                                      placeholder="Interests, memories, how they look (for the cover)"
+                                    />
+                                  </label>
+                                  <label>
+                                    Notes
+                                    <textarea
+                                      rows={2}
+                                      value={recipientDraft.notes}
+                                      onChange={(event) => setRecipientDraft({ ...recipientDraft, notes: event.target.value })}
+                                      placeholder="Anything else to remember"
+                                    />
+                                  </label>
+                                  {recipient.photoCount > 0 && (
+                                    <div className="recipient-photos">
+                                      <span className="field-title">Saved photos</span>
+                                      <ul className="reference-photo-list">
+                                        {Array.from({ length: recipient.photoCount }, (_, index) => (
+                                          <li key={index}>
+                                            {recipientPhotoUrls[`${recipient.id}:${index}`] ? (
+                                              <img src={recipientPhotoUrls[`${recipient.id}:${index}`]} alt="" />
+                                            ) : null}
+                                            <button
+                                              type="button"
+                                              onClick={() => void deleteSavedRecipientPhoto(recipient, index)}
+                                              aria-label={`Delete saved photo ${index + 1}`}
+                                            >
+                                              ×
+                                            </button>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  <div className="recipient-edit-actions">
+                                    <button className="secondary-button" type="submit" disabled={isSavingRecipient}>
+                                      {isSavingRecipient ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button
+                                      className="text-action-link recipient-delete-link"
+                                      type="button"
+                                      onClick={() => void deleteSavedRecipient(recipient)}
+                                    >
+                                      Remove recipient
+                                    </button>
+                                  </div>
+                                </form>
+                              )}
+                            </div>
+                          )
+                        },
+                      )}
+                    </div>
+                    {savedRecipients.length > accountActivityPreviewLimit && (
+                      <button
+                        className="text-action-link account-more-link"
+                        type="button"
+                        onClick={() => setShowAllRecipients((current) => !current)}
+                      >
+                        {showAllRecipients ? 'Show less' : `Show ${savedRecipients.length - accountActivityPreviewLimit} more`}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
               <div className="account-block">
                 <div className="account-block-heading">
@@ -10004,6 +10593,45 @@ function App() {
                 </div>
               </div>
               <div className="account-block">
+                <h3>Recipients</h3>
+                {(shopperHistory.recipients || []).length === 0 ? (
+                  <p>No saved recipients yet.</p>
+                ) : (
+                  <div className="account-list">
+                    {(shopperHistory.recipients || []).map((recipient) => (
+                      <div className="account-row" key={recipient.id}>
+                        <span className="account-row-title">
+                          {recipient.name}
+                          {recipient.relation ? ` (${recipient.relation})` : ''}
+                        </span>
+                        <span className="account-row-detail admin-recipient-detail">
+                          {[
+                            [recipient.phoneE164 ? formatPhoneNumberDisplay(recipient.phoneE164) : '', recipient.email]
+                              .filter(Boolean)
+                              .join(' · '),
+                            recipient.mailingAddress ? formatAccountMailingAddress(recipient.mailingAddress) : '',
+                            recipient.birthday ? `Birthday: ${recipient.birthday}` : '',
+                            recipient.anniversary ? `Anniversary: ${recipient.anniversary}` : '',
+                            recipient.notes ? `Notes: ${recipient.notes}` : '',
+                          ]
+                            .filter(Boolean)
+                            .join('\n') || 'No contact info saved'}
+                        </span>
+                        <span className="account-row-status">
+                          {recipient.cardsCount} card{recipient.cardsCount === 1 ? '' : 's'}
+                          {recipient.photoCount ? ` · ${recipient.photoCount} photo${recipient.photoCount === 1 ? '' : 's'}` : ''}
+                        </span>
+                        <span className="account-row-date">
+                          {recipient.lastSentAt
+                            ? `${recipient.lastOccasion ? `${recipient.lastOccasion} · ` : ''}${formatAccountDay(recipient.lastSentAt)}`
+                            : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="account-block">
                 <h3>Cards and sends</h3>
                 {shopperCardActivityItems.length === 0 ? (
                   <p>No cards sent yet.</p>
@@ -10413,13 +11041,51 @@ function App() {
               />
             </label>
 
-            <label>
+            <label className="recipient-name-field">
               To
               <input
                 value={details.recipientName}
-                onChange={(event) => updateDetails('recipientName', event.target.value)}
-                placeholder="Example: Jamie"
+                onChange={(event) => {
+                  updateDetails('recipientName', event.target.value)
+                  setSelectedRecipientId('')
+                  setShowRecipientSuggestions(true)
+                }}
+                onFocus={() => setShowRecipientSuggestions(true)}
+                onBlur={() => window.setTimeout(() => setShowRecipientSuggestions(false), 150)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setShowRecipientSuggestions(false)
+                  }
+                }}
+                placeholder={savedRecipients.length ? 'Type or pick a saved recipient' : 'Example: Jamie'}
+                autoComplete="off"
+                aria-autocomplete="list"
+                aria-expanded={showRecipientSuggestions && recipientSuggestions.length > 0}
               />
+              {showRecipientSuggestions && recipientSuggestions.length > 0 && (
+                <ul className="recipient-suggestions" role="listbox" aria-label="Saved recipients">
+                  {recipientSuggestions.map((recipient) => (
+                    <li key={recipient.id} role="option" aria-selected={false}>
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => void applySavedRecipient(recipient)}
+                      >
+                        <strong>{recipient.name}</strong>
+                        <span>
+                          {[
+                            recipient.relation,
+                            recipient.lastOccasion ? `last: ${recipient.lastOccasion}` : '',
+                            recipient.photoCount ? `${recipient.photoCount} photo${recipient.photoCount === 1 ? '' : 's'}` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </label>
           </div>
 
@@ -10535,6 +11201,21 @@ function App() {
               </div>
             )}
             {referencePhotoNotice && <div className="field-notice">{referencePhotoNotice}</div>}
+            {accountSession && referencePhotos.length > 0 && (
+              <label className="recipient-photo-optin">
+                <input
+                  type="checkbox"
+                  checked={saveRecipientPhotosOptIn}
+                  onChange={(event) => setSaveRecipientPhotosOptIn(event.target.checked)}
+                />
+                <span>
+                  Save {referencePhotos.length === 1 ? 'this photo' : 'these photos'} to{' '}
+                  {details.recipientName.trim() ? `${details.recipientName.trim()}’s` : 'this recipient’s'} saved
+                  details when you send or print this card. Only you can see them, and you can delete them anytime
+                  in your account.
+                </span>
+              </label>
+            )}
           </div>
 
           {error && (
