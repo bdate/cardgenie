@@ -90,7 +90,7 @@ export const isJunkRealtimeTranscript = (text: string) => {
   }
   // Genie often hears its own greeting as the shopper (“I'll help you create…”).
   if (
-    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for|wish is my command|free at last|rubbed the lamp|your wish is granted|as you wish|consider it granted|until your next wish|i'?m assuming (this|it'?s|the card)( card)? is from)\b/i.test(
+    /\b(i('d| will)? love to help you|help you create( the)?( perfect)? card|tell me who (it'?s|is) for|wish is my command|free at last|rubbed the lamp|your wish is granted|as you wish|consider it granted|until your next wish|i'?m assuming (this|it'?s|the card)( card)? is from|looks like (this|the) card is from you)\b/i.test(
       lower,
     )
   ) {
@@ -795,8 +795,11 @@ export const connectLampGenieRealtime = async (options: {
     // Mute before the greeting so Genie's voice can't re-enter the mic.
     setMicEnabled(false)
     setThinking(true)
+    const senderName = String(options.shopperFirstName || '').trim()
     requestAssistantResponse({
-      instructions: `Start with exactly these words, said like a cheerful genie who just popped out of the lamp: "${LAMP_GENIE_OPENING_LINE}" Then, in one short English sentence, ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.`,
+      instructions: senderName
+        ? `Start with exactly these words, said like a cheerful genie who just popped out of the lamp: "${LAMP_GENIE_OPENING_LINE} Looks like this card is from you, ${senderName}." Then, in one short English sentence, ask them to tell you who the card is for, the occasion, and any details or memories. Do NOT ask who the card is from. Do not ask about tone or art style. Then wait silently for their answer.`
+        : `Start with exactly these words, said like a cheerful genie who just popped out of the lamp: "${LAMP_GENIE_OPENING_LINE}" Then, in one short English sentence, ask them to tell you about the card they want — who it’s for, who it’s from, the occasion, and any details or memories. Do not ask about tone or art style. Then wait silently for their answer.`,
     })
     logFlushTimer = window.setInterval(() => {
       void flushSessionLog(false)
