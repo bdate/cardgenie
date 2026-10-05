@@ -607,8 +607,8 @@
   flex: none;
   width: 18px;
   height: 18px;
-  border: 2.5px solid rgba(63, 155, 145, 0.25);
-  border-top-color: var(--gcu-dark-teal);
+  border: 2.5px solid rgba(245, 158, 51, 0.25);
+  border-top-color: var(--gcu-orange);
   border-radius: 50%;
   animation: genie-thinking-spin 0.8s linear infinite;
 }
