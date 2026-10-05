@@ -1355,7 +1355,7 @@ const ensurePrintOrderTables = async (db) => {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_card_id ON print_orders (card_id)`),
   ])
 
-  for (const column of ['shopper_email', 'ship_date', 'gcu_order_number', 'shipment_email_sent_at']) {
+  for (const column of ['shopper_email', 'ship_date', 'gcu_order_number', 'shipment_email_sent_at', 'order_source', 'amount_cents']) {
     try {
       await db.prepare(`ALTER TABLE print_orders ADD COLUMN ${column} TEXT`).run()
     } catch {
@@ -1390,7 +1390,34 @@ const mapPrintOrderRow = (row) => {
     shipDate: row.ship_date || '',
     gcuOrderNumber: row.gcu_order_number || '',
     shipmentEmailSentAt: row.shipment_email_sent_at || '',
+    orderSource: row.order_source || 'shopper',
+    amountCents: Number(row.amount_cents) || 0,
   }
+}
+
+export const listRecipientPrintOrders = async (env) => {
+  if (!env.ACCOUNT_DB) {
+    return []
+  }
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  const result = await env.ACCOUNT_DB.prepare(
+    `SELECT * FROM print_orders WHERE order_source = 'recipient' ORDER BY created_at DESC LIMIT 200`,
+  ).all()
+  return (result.results || []).map(mapPrintOrderRow)
+}
+
+export const countRecipientPrintOrders = async (env) => {
+  if (!env.ACCOUNT_DB) {
+    return { total: 0, pending: 0, lastAt: '' }
+  }
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  const row = await env.ACCOUNT_DB.prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN shipment_email_sent_at IS NULL THEN 1 ELSE 0 END) AS pending,
+            MAX(created_at) AS last_at
+     FROM print_orders WHERE order_source = 'recipient'`,
+  ).first()
+  return { total: Number(row?.total) || 0, pending: Number(row?.pending) || 0, lastAt: row?.last_at || '' }
 }
 
 export const getPrintOrder = async (env, orderNumber) => {
@@ -1607,7 +1634,7 @@ export const saveAccountMailingAddress = async (env, { userId, mailingAddress })
 /** Allocate the next sequential print order number (1001+) and store the order. */
 export const createPrintOrder = async (
   env,
-  { userId, cardId, mailFrom, shipTo, shopperEmail = '', creditCost = 10, status = 'submitted' },
+  { userId, cardId, mailFrom, shipTo, shopperEmail = '', creditCost = 10, status = 'submitted', orderSource = 'shopper', amountCents = 0 },
 ) => {
   if (!env.ACCOUNT_DB || !cardId) {
     return null
@@ -1631,8 +1658,9 @@ export const createPrintOrder = async (
   const email = String(shopperEmail || '').trim().toLowerCase()
   await env.ACCOUNT_DB.prepare(
     `INSERT INTO print_orders (
-      order_number, user_id, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, shopper_email, status, credit_cost
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      order_number, user_id, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, shopper_email, status, credit_cost,
+      order_source, amount_cents
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       orderNumber,
@@ -1645,6 +1673,8 @@ export const createPrintOrder = async (
       email || null,
       status,
       Math.max(0, Math.floor(Number(creditCost) || 0)),
+      orderSource,
+      Math.max(0, Math.floor(Number(amountCents) || 0)),
     )
     .run()
 

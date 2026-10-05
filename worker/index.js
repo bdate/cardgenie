@@ -24,6 +24,8 @@ import {
   getPrintOrder,
   getShopperById,
   listAdminShoppers,
+  countRecipientPrintOrders,
+  listRecipientPrintOrders,
   markPrintOrderShipmentEmailSent,
   updatePrintOrderShipping,
   saveAccountEmail,
@@ -3098,6 +3100,184 @@ const grantCreditsFromCheckoutSession = async (env, checkoutSession) => {
   return { ok: true, ...result }
 }
 
+const RECIPIENT_PRINT_PRICE_CENTS = 500
+const RECIPIENT_PRINT_PENDING_PREFIX = 'recipient-print-pending:'
+const RECIPIENT_PRINT_DONE_PREFIX = 'recipient-print-done:'
+
+const handleRecipientPrintCheckout = async (request, env) => {
+  const stripe = getStripe(env)
+  if (!stripe || !env.CARD_STORE) {
+    return jsonResponse(request, env, { error: 'Printed cards are not available right now.' }, 503)
+  }
+
+  try {
+    const body = (await readJson(request)) || {}
+    const record = await getCardRecord(env, String(body.cardId || '').trim())
+    if (!record) {
+      return jsonResponse(request, env, { error: 'This card is no longer available to print.' }, 404)
+    }
+    const shipTo = normalizeMailingAddress(body.shipTo, 'ship-to')
+    const email = normalizeEmailAddress(body.email)
+    const cover = parseDataUrlImage(body.coverImage, 'cover')
+    const inside = parseDataUrlImage(body.insideImage, 'inside')
+    const coverThumb = body.coverThumbImage
+      ? parseDataUrlImage(body.coverThumbImage, 'cover thumbnail')
+      : { type: cover.type, content: cover.content }
+    const insideThumb = body.insideThumbImage
+      ? parseDataUrlImage(body.insideThumbImage, 'inside thumbnail')
+      : { type: inside.type, content: inside.content }
+
+    const pendingId = crypto.randomUUID()
+    await env.CARD_STORE.put(
+      `${RECIPIENT_PRINT_PENDING_PREFIX}${pendingId}`,
+      JSON.stringify({ cardId: record.id, shipTo, email, cover, inside, coverThumb, insideThumb, createdAt: new Date().toISOString() }),
+      { expirationTtl: 3 * 24 * 60 * 60 },
+    )
+
+    const { sender, occasion } = buildSharePreviewCopy(record)
+    const appUrl = getCheckoutReturnBaseUrl(request, env)
+    const cardQuery = `card=${encodeURIComponent(record.id)}`
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: RECIPIENT_PRINT_PRICE_CENTS,
+            product_data: {
+              name: 'Printed Card Genie keepsake card',
+              description: `Your ${occasion} card from ${sender}, printed and mailed to you. Shipping included.`,
+            },
+          },
+        },
+      ],
+      customer_email: email,
+      success_url: `${appUrl}/?${cardQuery}&keepsake=success`,
+      cancel_url: `${appUrl}/?${cardQuery}&keepsake=cancel`,
+      metadata: { kind: 'recipient_print', pendingId, cardId: record.id },
+      integration_identifier: `card-genie-keepsake-${pendingId.slice(0, 8)}`,
+    })
+    if (!checkoutSession.url) {
+      return jsonResponse(request, env, { error: 'Unable to start checkout.' }, 500)
+    }
+    return jsonResponse(request, env, { ok: true, url: checkoutSession.url })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to start checkout.'
+    const isValidation = /enter|choose|provide|valid|united states|zip|state|street|name|city|image|email|@/i.test(message)
+    if (!isValidation) {
+      console.error('Recipient print checkout failed.', error)
+    }
+    return jsonResponse(request, env, { error: message }, isValidation ? 400 : 500)
+  }
+}
+
+const fulfillRecipientPrintOrder = async (request, env, checkoutSession) => {
+  const pendingId = String(checkoutSession?.metadata?.pendingId || '')
+  const doneKey = `${RECIPIENT_PRINT_DONE_PREFIX}${checkoutSession.id}`
+  if (!pendingId || (await env.CARD_STORE.get(doneKey))) {
+    return
+  }
+  const pending = await env.CARD_STORE.get(`${RECIPIENT_PRINT_PENDING_PREFIX}${pendingId}`, 'json')
+  if (!pending) {
+    console.error('Paid recipient print order has no pending data.', { pendingId, checkoutId: checkoutSession.id })
+    await sendEmailDelivery({
+      env,
+      to: PRINT_ORDER_SUPPORT_EMAIL,
+      copy: {
+        subject: 'Recipient keepsake order needs attention',
+        text: `A $5 recipient keepsake order was paid (Stripe checkout ${checkoutSession.id}, card ${checkoutSession?.metadata?.cardId || 'unknown'}, ${checkoutSession.customer_details?.email || ''}), but its print files had expired. Please contact the customer.`,
+        html: `<p>A $5 recipient keepsake order was paid (Stripe checkout ${escapeHtml(checkoutSession.id)}, card ${escapeHtml(checkoutSession?.metadata?.cardId || 'unknown')}, ${escapeHtml(checkoutSession.customer_details?.email || '')}), but its print files had expired. Please contact the customer.</p>`,
+      },
+    })
+    await env.CARD_STORE.put(doneKey, 'missing', { expirationTtl: 30 * 24 * 60 * 60 })
+    return
+  }
+
+  const record = await getCardRecord(env, pending.cardId)
+  const savedOrder = await createPrintOrder(env, {
+    userId: null,
+    cardId: pending.cardId,
+    mailFrom: DEFAULT_PRINT_MAIL_FROM,
+    shipTo: pending.shipTo,
+    shopperEmail: pending.email,
+    creditCost: 0,
+    orderSource: 'recipient',
+    amountCents: checkoutSession.amount_total ?? RECIPIENT_PRINT_PRICE_CENTS,
+  })
+  const orderCode = savedOrder.orderCode
+  await env.CARD_STORE.put(doneKey, orderCode, { expirationTtl: 30 * 24 * 60 * 60 })
+
+  const supportCopy = buildPrintOrderEmailCopy({
+    cardId: pending.cardId,
+    orderCode,
+    shareUrl: getShareUrl(request, env, pending.cardId),
+    mailFrom: DEFAULT_PRINT_MAIL_FROM,
+    shipTo: pending.shipTo,
+    details: record?.details || {},
+    shopperEmail: pending.email,
+  })
+  const keepsakeNote = 'Recipient keepsake order: paid $5.00 by card (shipping included). Mail it to the recipient below.'
+  supportCopy.subject = `Recipient keepsake · ${supportCopy.subject}`
+  supportCopy.text = `${keepsakeNote}\n\n${supportCopy.text}`
+  supportCopy.html = `<p style="margin:0 0 12px;font-family:Arial,sans-serif;"><strong>${keepsakeNote}</strong></p>${supportCopy.html}`
+
+  try {
+    await sendEmailDelivery({
+      env,
+      to: PRINT_ORDER_SUPPORT_EMAIL,
+      copy: supportCopy,
+      attachments: [
+        {
+          filename: pending.cover.type?.includes('jpeg') ? 'print-cover.jpg' : 'print-cover.png',
+          type: pending.cover.type || 'image/png',
+          content: pending.cover.content,
+        },
+        { filename: 'print-inside.png', type: pending.inside.type || 'image/png', content: pending.inside.content },
+      ],
+    })
+  } catch (error) {
+    console.error('Recipient keepsake support email failed.', error)
+  }
+
+  try {
+    await sendEmailDelivery({
+      env,
+      to: pending.email,
+      copy: buildPrintOrderConfirmationCopy({ orderCode, shipTo: pending.shipTo, mailFrom: DEFAULT_PRINT_MAIL_FROM }),
+      attachments: [
+        {
+          filename: 'print-cover-thumb.jpg',
+          type: pending.coverThumb.type || 'image/jpeg',
+          content: pending.coverThumb.content,
+          disposition: 'inline',
+          contentId: 'print-cover-thumb',
+        },
+        {
+          filename: 'print-inside-thumb.png',
+          type: pending.insideThumb.type || 'image/png',
+          content: pending.insideThumb.content,
+          disposition: 'inline',
+          contentId: 'print-inside-thumb',
+        },
+      ],
+    })
+  } catch (error) {
+    console.error('Recipient keepsake confirmation email failed.', error)
+  }
+
+  try {
+    await env.CARD_STORE.put(
+      `${PRINT_ORDER_PREVIEWS_PREFIX}${orderCode}`,
+      JSON.stringify({ cover: pending.coverThumb, inside: pending.insideThumb }),
+      { expirationTtl: PRINT_ORDER_PREVIEWS_TTL_SECONDS },
+    )
+    await env.CARD_STORE.delete(`${RECIPIENT_PRINT_PENDING_PREFIX}${pendingId}`)
+  } catch (error) {
+    console.error('Recipient keepsake cleanup failed.', error)
+  }
+}
+
 const handleStripeWebhook = async (request, env) => {
   const stripe = getStripe(env)
   const webhookSecret = String(env.STRIPE_WEBHOOK_SECRET || '').trim()
@@ -3130,7 +3310,11 @@ const handleStripeWebhook = async (request, env) => {
       const checkoutSession = event.data.object
       const paymentStatus = checkoutSession.payment_status
       if (paymentStatus === 'paid' || paymentStatus === 'no_payment_required' || event.type === 'checkout.session.async_payment_succeeded') {
-        await grantCreditsFromCheckoutSession(env, checkoutSession)
+        if (checkoutSession?.metadata?.kind === 'recipient_print') {
+          await fulfillRecipientPrintOrder(request, env, checkoutSession)
+        } else {
+          await grantCreditsFromCheckoutSession(env, checkoutSession)
+        }
       }
     }
   } catch (error) {
@@ -5985,8 +6169,48 @@ const handleAdminShoppers = async (request, env) => {
   if (denied) {
     return denied
   }
-  const shoppers = await listAdminShoppers(env, { query: new URL(request.url).searchParams.get('q') || '' })
-  return jsonResponse(request, env, { ok: true, shoppers })
+  const query = new URL(request.url).searchParams.get('q') || ''
+  const shoppers = await listAdminShoppers(env, { query })
+  const keepsakes = query.trim() ? { total: 0 } : await countRecipientPrintOrders(env)
+  const keepsakeRow = keepsakes.total
+    ? [
+        {
+          id: RECIPIENT_KEEPSAKE_SHOPPER_ID,
+          phoneE164: '',
+          email: '',
+          preferredName: 'Recipient keepsake orders',
+          mailingAddress: null,
+          creditBalance: 0,
+          createdAt: keepsakes.lastAt,
+          lastUsedAt: keepsakes.lastAt,
+          cardsCount: 0,
+          printsCount: keepsakes.total,
+          printsPending: keepsakes.pending,
+          lastPrintAt: keepsakes.lastAt,
+        },
+      ]
+    : []
+  return jsonResponse(request, env, { ok: true, shoppers: [...keepsakeRow, ...shoppers] })
+}
+
+const RECIPIENT_KEEPSAKE_SHOPPER_ID = 'recipient-keepsakes'
+
+const buildRecipientKeepsakeHistory = async (request, env) => {
+  const orders = await listRecipientPrintOrders(env)
+  const thumbs = await Promise.all(orders.map((order) => hasCoverThumb(env, order.cardId).catch(() => false)))
+  return {
+    ok: true,
+    phoneE164: '',
+    account: { preferredName: 'Recipient keepsake orders', email: '', creditBalance: 0, creditsPurchased: 0, creditsSpent: 0 },
+    creditEvents: [],
+    cards: [],
+    deliveries: [],
+    recipients: [],
+    printOrders: orders.map((order, index) => ({
+      ...order,
+      coverThumbUrl: thumbs[index] ? getCoverThumbUrl(request, env, order.cardId) : '',
+    })),
+  }
 }
 
 const handleAdminShopperHistory = async (request, env) => {
@@ -5994,7 +6218,11 @@ const handleAdminShopperHistory = async (request, env) => {
   if (denied) {
     return denied
   }
-  const shopper = await getShopperById(env, new URL(request.url).searchParams.get('id') || '')
+  const shopperId = new URL(request.url).searchParams.get('id') || ''
+  if (shopperId === RECIPIENT_KEEPSAKE_SHOPPER_ID) {
+    return jsonResponse(request, env, await buildRecipientKeepsakeHistory(request, env))
+  }
+  const shopper = await getShopperById(env, shopperId)
   if (!shopper) {
     return jsonResponse(request, env, { error: 'Shopper not found.' }, 404)
   }
@@ -6347,6 +6575,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
     return handleAdminResendCardEmail(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/recipient-print/checkout') {
+    return handleRecipientPrintCheckout(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/account/recipients') {

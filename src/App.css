@@ -3656,6 +3656,48 @@ select.is-placeholder option {
   white-space: pre-line;
 }
 
+.recipient-keepsake {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff8ef, #fdeedd);
+  box-shadow: 0 0 0 1px rgba(245, 158, 51, 0.28);
+}
+
+.recipient-keepsake h3,
+.recipient-keepsake p {
+  margin: 0;
+}
+
+.recipient-keepsake-kicker {
+  color: #c46f12;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recipient-keepsake-button {
+  justify-self: center;
+}
+
+.recipient-keepsake-form {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.recipient-keepsake-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.recipient-keepsake-note {
+  color: var(--gcu-grey);
+  font-size: 0.82rem;
+}
+
 .recipient-name-field {
   position: relative;
 }

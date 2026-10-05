@@ -2959,6 +2959,15 @@ function App() {
   const [isSavingRecipient, setIsSavingRecipient] = useState(false)
   const [recipientPhotoUrls, setRecipientPhotoUrls] = useState<Record<string, string>>({})
   const [showAllRecipients, setShowAllRecipients] = useState(false)
+  const [showKeepsakeForm, setShowKeepsakeForm] = useState(false)
+  const [keepsakeShipTo, setKeepsakeShipTo] = useState<MailingAddress>(() => emptyMailingAddress())
+  const [keepsakeEmail, setKeepsakeEmail] = useState('')
+  const [isStartingKeepsake, setIsStartingKeepsake] = useState(false)
+  const [keepsakeNotice, setKeepsakeNotice] = useState('')
+  const [keepsakeResult, setKeepsakeResult] = useState<'' | 'success' | 'cancel'>(() => {
+    const value = new URLSearchParams(window.location.search).get('keepsake')
+    return value === 'success' || value === 'cancel' ? value : ''
+  })
   const [isAddingPhotos, setIsAddingPhotos] = useState(false)
   const [photoAddElapsed, setPhotoAddElapsed] = useState(0)
   const [actionFeedback, setActionFeedback] = useState('')
@@ -3787,6 +3796,16 @@ function App() {
       cancelled = true
     }
   }, [isRecipientView])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('keepsake')) {
+      return
+    }
+    params.delete('keepsake')
+    const nextQuery = params.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -7366,6 +7385,51 @@ function App() {
     setPrintOrderNotice('')
   }
 
+  const startKeepsakeCheckout = async () => {
+    const shipTo = validateMailingAddress(keepsakeShipTo, 'mailing')
+    if (!shipTo.ok) {
+      setKeepsakeNotice(shipTo.message)
+      return
+    }
+    const email = keepsakeEmail.trim() ? validateEmailAddress(keepsakeEmail) : null
+    if (!email || !email.ok) {
+      setKeepsakeNotice(email && !email.ok ? email.message : 'Enter your email so we can send your order confirmation.')
+      return
+    }
+    const cardId = sharedCard?.id
+    if (!cardId) {
+      setKeepsakeNotice('This card is still loading. Please try again in a moment.')
+      return
+    }
+
+    setIsStartingKeepsake(true)
+    setKeepsakeNotice('')
+    try {
+      const { coverUrl, insideUrl, coverThumbUrl, insideThumbUrl } = await preparePrintOrderImages(cardId)
+      const response = await fetch(apiUrl('/api/recipient-print/checkout'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardId,
+          shipTo: shipTo.value,
+          email: email.value,
+          coverImage: coverUrl,
+          insideImage: insideUrl,
+          coverThumbImage: coverThumbUrl || undefined,
+          insideThumbImage: insideThumbUrl || undefined,
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to start checkout.')
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || 'Unable to start checkout.')
+      }
+      window.location.href = data.url
+    } catch (caughtError) {
+      setKeepsakeNotice(caughtError instanceof Error ? caughtError.message : 'Unable to start checkout.')
+      setIsStartingKeepsake(false)
+    }
+  }
+
   const preparePrintOrderImages = async (cardId?: string) => {
     if (!card) {
       throw new Error('Create a card before ordering a print.')
@@ -10555,6 +10619,8 @@ function App() {
           {selectedShopperId && isLoadingShopperHistory && <p>Loading shopper...</p>}
           {selectedShopperId && shopperHistory && (
             <>
+              {selectedShopperId !== 'recipient-keepsakes' && (
+                <>
               <div className="account-block account-profile-block">
                 <h3>Shopper details</h3>
                 <dl className="admin-shopper-details">
@@ -10681,6 +10747,8 @@ function App() {
                   </div>
                 )}
               </div>
+                </>
+              )}
               <div className="account-block">
                 <h3>Printed cards</h3>
                 {shopperPrintOrderItems.length === 0 ? (
@@ -11585,6 +11653,152 @@ function App() {
               )}
               {isRecipientView && (step === 'front' || step === 'inside') && (
                 <aside className="recipient-invite" aria-label="Say thanks or make a card">
+                  {(keepsakeResult || hasViewedInside || step === 'inside') && (
+                    <div className="recipient-keepsake">
+                      {keepsakeResult === 'success' ? (
+                        <>
+                          <h3>Your keepsake is on its way</h3>
+                          <p role="status">
+                            Thank you! We’re printing your card and will mail it from Northern California. Watch your
+                            email for your order confirmation.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="recipient-keepsake-kicker">Love this card?</span>
+                          <h3>Keep it forever</h3>
+                          <p>
+                            We’ll print your card from {senderLabel} on premium cardstock and mail it to you, a
+                            keepsake you can hold onto, display, and treasure.{' '}
+                            <strong>Just $5, shipping included.</strong>
+                          </p>
+                          {keepsakeResult === 'cancel' && !showKeepsakeForm && (
+                            <p className="recipient-keepsake-note" role="status">
+                              Checkout canceled. No payment was taken.
+                            </p>
+                          )}
+                          {!showKeepsakeForm ? (
+                            <button
+                              className="primary-button recipient-keepsake-button"
+                              type="button"
+                              onClick={() => {
+                                setShowKeepsakeForm(true)
+                                setKeepsakeResult('')
+                                setKeepsakeNotice('')
+                                setKeepsakeShipTo((current) =>
+                                  current.name.trim()
+                                    ? current
+                                    : { ...current, name: String(sharedCard?.details?.recipientName || '').trim() },
+                                )
+                              }}
+                            >
+                              Get my printed card · $5
+                            </button>
+                          ) : (
+                            <form
+                              className="recipient-keepsake-form"
+                              onSubmit={(event) => {
+                                event.preventDefault()
+                                void startKeepsakeCheckout()
+                              }}
+                            >
+                              <label>
+                                Your name
+                                <input
+                                  value={keepsakeShipTo.name}
+                                  onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, name: event.target.value })}
+                                  autoComplete="shipping name"
+                                />
+                              </label>
+                              <label>
+                                Street address
+                                <input
+                                  value={keepsakeShipTo.line1}
+                                  onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, line1: event.target.value })}
+                                  autoComplete="shipping address-line1"
+                                />
+                              </label>
+                              <label>
+                                Apt, suite, unit <span className="field-optional">(optional)</span>
+                                <input
+                                  value={keepsakeShipTo.line2}
+                                  onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, line2: event.target.value })}
+                                  autoComplete="shipping address-line2"
+                                />
+                              </label>
+                              <div className="recipient-mailing-row">
+                                <label>
+                                  City
+                                  <input
+                                    value={keepsakeShipTo.city}
+                                    onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, city: event.target.value })}
+                                    autoComplete="shipping address-level2"
+                                  />
+                                </label>
+                                <label>
+                                  State
+                                  <select
+                                    value={keepsakeShipTo.state}
+                                    onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, state: event.target.value })}
+                                    autoComplete="shipping address-level1"
+                                  >
+                                    <option value="">State</option>
+                                    {usStateOptions.map((state) => (
+                                      <option key={state} value={state}>
+                                        {state}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  ZIP
+                                  <input
+                                    value={keepsakeShipTo.zip}
+                                    onChange={(event) => setKeepsakeShipTo({ ...keepsakeShipTo, zip: event.target.value })}
+                                    inputMode="numeric"
+                                    autoComplete="shipping postal-code"
+                                  />
+                                </label>
+                              </div>
+                              <label>
+                                Email for your order confirmation
+                                <input
+                                  type="email"
+                                  inputMode="email"
+                                  value={keepsakeEmail}
+                                  onChange={(event) => setKeepsakeEmail(event.target.value)}
+                                  autoComplete="email"
+                                />
+                              </label>
+                              {keepsakeNotice && <div className="field-notice">{keepsakeNotice}</div>}
+                              <button
+                                className="primary-button recipient-keepsake-button"
+                                type="submit"
+                                disabled={isStartingKeepsake}
+                                aria-busy={isStartingKeepsake}
+                              >
+                                {isStartingKeepsake ? 'Preparing your card…' : 'Continue to payment · $5'}
+                              </button>
+                              <p className="recipient-keepsake-note">
+                                US addresses only. Mailed via USPS with a regular stamp, usually arriving in 3 to 7
+                                business days. Secure payment by Stripe.
+                              </p>
+                              <button
+                                className="text-action-link"
+                                type="button"
+                                onClick={() => {
+                                  setShowKeepsakeForm(false)
+                                  setKeepsakeNotice('')
+                                }}
+                              >
+                                Not now
+                              </button>
+                            </form>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div className="recipient-thanks">
                     <h3>Say thanks</h3>
                     {thankYouAlreadySent ? (
