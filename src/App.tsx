@@ -5776,7 +5776,16 @@ function App() {
   }, [accountSession?.token, isRecipientView])
 
   useEffect(() => {
-    const recipient = savedRecipients.find((entry) => entry.id === selectedRecipientId)
+    if (!card) {
+      return
+    }
+    const nameKey = details.recipientName.trim().toLowerCase()
+    const nameMatches = nameKey
+      ? savedRecipients.filter((entry) => entry.name.trim().toLowerCase() === nameKey)
+      : []
+    const recipient =
+      savedRecipients.find((entry) => entry.id === selectedRecipientId) ||
+      (nameMatches.length === 1 ? nameMatches[0] : undefined)
     if (!recipient) {
       return
     }
@@ -5789,7 +5798,7 @@ function App() {
     if (value) {
       setDeliveryDestinations((current) => (current.some((entry) => entry.trim()) ? current : [value]))
     }
-  }, [deliveryMethod, selectedRecipientId, savedRecipients])
+  }, [card, deliveryMethod, selectedRecipientId, savedRecipients, details.recipientName])
 
   const fetchRecipientPhotoBlob = async (recipientId: string, index: number) => {
     if (!accountSession?.token) {
