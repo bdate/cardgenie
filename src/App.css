@@ -3848,14 +3848,41 @@ select.is-placeholder option {
   letter-spacing: 0.02em;
 }
 
-.recipient-date-input select {
+.recipient-date-input select,
+.recipient-mailing-row select {
   min-width: 0;
+  padding-right: 30px;
+  padding-left: 12px;
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 11px) 50%,
+    0 0;
+}
+
+@media (max-width: 560px) {
+  .recipient-date-input {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .recipient-date-input legend + select {
+    grid-column: 1 / -1;
+  }
 }
 
 .recipient-mailing-row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(70px, 1fr) minmax(80px, 1fr);
   gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .recipient-mailing-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .recipient-mailing-row > :first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 .recipient-edit-actions {
