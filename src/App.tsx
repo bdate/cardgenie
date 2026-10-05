@@ -3109,6 +3109,20 @@ function App() {
   )
     .split(/\s+/)
     .find(Boolean) || ''
+  const accountSenderName =
+    accountPreferredName.trim() ||
+    accountSession?.preferredName?.trim() ||
+    (accountProfileMailing.name.trim() || accountSession?.mailingAddress?.name?.trim() || '').split(/\s+/)[0] ||
+    ''
+  const senderNameClearedByShopperRef = useRef(false)
+
+  useEffect(() => {
+    if (!isSignedIn || isRecipientView || !accountSenderName || senderNameClearedByShopperRef.current) {
+      return
+    }
+    setDetails((current) => (current.senderName.trim() ? current : { ...current, senderName: accountSenderName }))
+  }, [isSignedIn, isRecipientView, accountSenderName, details.senderName])
+
   const creditsSummary = isSignedIn
     ? accountFirstName
       ? `Hi ${accountFirstName}. ${credits} credits in your account`
@@ -5723,6 +5737,11 @@ function App() {
       recipientName: recipient.name,
       recipientType: recipient.relation || current.recipientType,
       keyDetails: current.keyDetails.trim() ? current.keyDetails : recipient.keyDetails || current.keyDetails,
+      tone: recipient.tone && current.tone === initialDetails.tone ? recipient.tone : current.tone,
+      imageStyle:
+        recipient.imageStyle && current.imageStyle === initialDetails.imageStyle
+          ? recipient.imageStyle
+          : current.imageStyle,
     }))
     setDeliveryDestinations((current) => {
       if (current.some((entry) => entry.trim())) {
@@ -11134,7 +11153,10 @@ function App() {
               <input
                 required
                 value={details.senderName}
-                onChange={(event) => updateDetails('senderName', event.target.value)}
+                onChange={(event) => {
+                  senderNameClearedByShopperRef.current = !event.target.value.trim()
+                  updateDetails('senderName', event.target.value)
+                }}
                 placeholder="Example: your name"
               />
             </label>
@@ -11149,7 +11171,16 @@ function App() {
                   setShowRecipientSuggestions(true)
                 }}
                 onFocus={() => setShowRecipientSuggestions(true)}
-                onBlur={() => window.setTimeout(() => setShowRecipientSuggestions(false), 150)}
+                onBlur={(event) => {
+                  const typed = event.currentTarget.value.trim().toLowerCase()
+                  const matches = typed
+                    ? savedRecipients.filter((recipient) => recipient.name.trim().toLowerCase() === typed)
+                    : []
+                  if (matches.length === 1 && matches[0].id !== selectedRecipientId) {
+                    void applySavedRecipient(matches[0])
+                  }
+                  window.setTimeout(() => setShowRecipientSuggestions(false), 150)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') {
                     setShowRecipientSuggestions(false)
@@ -11167,7 +11198,15 @@ function App() {
                       <button
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => void applySavedRecipient(recipient)}
+                        onPointerDown={(event) => {
+                          event.preventDefault()
+                          void applySavedRecipient(recipient)
+                        }}
+                        onClick={(event) => {
+                          if (event.detail === 0) {
+                            void applySavedRecipient(recipient)
+                          }
+                        }}
                       >
                         <strong>{recipient.name}</strong>
                         <span>
