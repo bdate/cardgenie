@@ -3656,6 +3656,106 @@ select.is-placeholder option {
   white-space: pre-line;
 }
 
+.admin-shopper-row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-shopper-row:hover,
+.admin-shopper-row:focus-visible {
+  border-color: rgba(63, 155, 145, 0.4);
+  background: #fff;
+}
+
+.admin-shopper-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.admin-shopper-details dt {
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+}
+
+.admin-shopper-details dd {
+  margin: 2px 0 0;
+  color: var(--gcu-ink);
+  font-size: 0.9rem;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.admin-print-order-row .admin-shipment-fields {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(63, 155, 145, 0.2);
+}
+
+.admin-shipment-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--gcu-grey);
+  font-size: 0.78rem;
+}
+
+.admin-shipment-fields input {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
+.admin-shipment-fields input[type='text'] {
+  width: 160px;
+}
+
+.admin-shipment-action {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-shipment-action .text-action-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.admin-shipment-sent {
+  color: var(--gcu-grey);
+  font-size: 0.8rem;
+}
+
+.admin-shipment-notice {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--gcu-ink);
+  font-size: 0.82rem;
+}
+
+.admin-print-thumb-toggle {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.admin-print-thumb {
+  grid-column: 1 / -1;
+  width: 132px;
+}
+
+.admin-print-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(63, 155, 145, 0.16);
+}
+
 .account-row a {
   color: inherit;
   text-decoration: none;

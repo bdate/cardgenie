@@ -2543,7 +2543,7 @@ function App() {
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showCreditDetails, setShowCreditDetails] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
-  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | null>(null)
+  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | 'shoppers' | null>(null)
   const [accountHistory, setAccountHistory] = useState<{
     phoneE164?: string
     account?: {
@@ -2601,9 +2601,38 @@ function App() {
       status: string
       creditCost?: number
       coverThumbUrl?: string
+      shipDate?: string
+      gcuOrderNumber?: string
+      shipmentEmailSentAt?: string
     }>
     cardSummaries?: Record<string, { recipientName?: string; occasion?: string; groupKey?: string }>
   } | null>(null)
+  type AccountHistoryData = NonNullable<typeof accountHistory>
+  const [adminShoppers, setAdminShoppers] = useState<
+    Array<{
+      id: string
+      phoneE164: string
+      email: string
+      preferredName: string
+      mailingAddress?: MailingAddress | null
+      creditBalance: number
+      createdAt?: string
+      lastUsedAt?: string
+      cardsCount: number
+      printsCount: number
+      printsPending: number
+      lastPrintAt?: string
+    }>
+  >([])
+  const [adminShopperQuery, setAdminShopperQuery] = useState('')
+  const [isLoadingAdminShoppers, setIsLoadingAdminShoppers] = useState(false)
+  const [adminShoppersNotice, setAdminShoppersNotice] = useState('')
+  const [selectedShopperId, setSelectedShopperId] = useState('')
+  const [shopperHistory, setShopperHistory] = useState<AccountHistoryData | null>(null)
+  const [isLoadingShopperHistory, setIsLoadingShopperHistory] = useState(false)
+  const [shipmentDrafts, setShipmentDrafts] = useState<Record<string, { shipDate: string; gcuOrderNumber: string }>>({})
+  const [shipmentBusyOrder, setShipmentBusyOrder] = useState('')
+  const [shipmentNotices, setShipmentNotices] = useState<Record<string, string>>({})
   const [isLoadingAccountHistory, setIsLoadingAccountHistory] = useState(false)
   const [accountHistoryError, setAccountHistoryError] = useState('')
   const [showAllCreditEvents, setShowAllCreditEvents] = useState(false)
@@ -5622,8 +5651,8 @@ function App() {
     return 'Credit update'
   }
 
-  const cardActivityItems = useMemo(() => {
-    if (!accountHistory) {
+  const buildCardActivityItems = (history: AccountHistoryData | null) => {
+    if (!history) {
       return []
     }
 
@@ -5638,9 +5667,9 @@ function App() {
       return coverThumbUrl
     }
 
-    const deliveries = (accountHistory.deliveries || []).filter((delivery) => !delivery.isSenderCopy)
-    const printOrders = accountHistory.printOrders || []
-    const cards = accountHistory.cards || []
+    const deliveries = (history.deliveries || []).filter((delivery) => !delivery.isSenderCopy)
+    const printOrders = history.printOrders || []
+    const cards = history.cards || []
     const cardById = new Map(cards.map((card) => [card.id, card]))
     const cardIds = new Set<string>([
       ...cards.map((card) => card.id),
@@ -5648,8 +5677,8 @@ function App() {
       ...printOrders.map((order) => order.cardId).filter((cardId): cardId is string => Boolean(cardId)),
     ])
 
-    const thankYous = accountHistory.thankYous || []
-    const summaries = accountHistory.cardSummaries || {}
+    const thankYous = history.thankYous || []
+    const summaries = history.cardSummaries || {}
     const groupKeyFor = (cardId: string) => summaries[cardId]?.groupKey || cardId
     const groups = new Map<string, string[]>()
     for (const cardId of cardIds) {
@@ -5760,10 +5789,10 @@ function App() {
     return [...cardRows, ...thanks].sort((left, right) =>
       String(right.createdAt).localeCompare(String(left.createdAt)),
     )
-  }, [accountHistory])
+  }
 
-  const printOrderItems = useMemo(() => {
-    if (!accountHistory?.printOrders?.length) {
+  const buildPrintOrderItems = (history: AccountHistoryData | null) => {
+    if (!history?.printOrders?.length) {
       return []
     }
 
@@ -5778,7 +5807,7 @@ function App() {
       return coverThumbUrl
     }
 
-    return accountHistory.printOrders.map((order) => {
+    return history.printOrders.map((order) => {
       const shipToLines =
         formatAccountMailingAddress(order.shipTo) || order.shipToName || 'Mailing address saved'
       const detailParts = [
@@ -5793,9 +5822,18 @@ function App() {
         detail: detailParts.join('\n'),
         status: order.status || 'submitted',
         coverThumbUrl: resolveThumbUrl(order.cardId, order.coverThumbUrl),
+        shipDate: order.shipDate || '',
+        gcuOrderNumber: order.gcuOrderNumber || '',
+        shipmentEmailSentAt: order.shipmentEmailSentAt || '',
+        shopperEmail: order.shopperEmail || '',
       }
     })
-  }, [accountHistory])
+  }
+
+  const cardActivityItems = useMemo(() => buildCardActivityItems(accountHistory), [accountHistory])
+  const printOrderItems = useMemo(() => buildPrintOrderItems(accountHistory), [accountHistory])
+  const shopperCardActivityItems = useMemo(() => buildCardActivityItems(shopperHistory), [shopperHistory])
+  const shopperPrintOrderItems = useMemo(() => buildPrintOrderItems(shopperHistory), [shopperHistory])
 
   const loadAccountHistory = async (token: string) => {
     setIsLoadingAccountHistory(true)
@@ -6140,6 +6178,187 @@ function App() {
   const closeAdminView = () => {
     setAdminView(null)
     void openAccountPage()
+  }
+
+  const loadAdminShoppers = async (token: string, query = adminShopperQuery) => {
+    setIsLoadingAdminShoppers(true)
+    setAdminShoppersNotice('')
+    try {
+      const response = await fetch(apiUrl(`/api/admin/shoppers?q=${encodeURIComponent(query.trim())}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load shoppers.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load shoppers.')
+      }
+      setAdminShoppers(Array.isArray(data.shoppers) ? data.shoppers : [])
+    } catch (caughtError) {
+      setAdminShoppers([])
+      setAdminShoppersNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load shoppers.')
+    } finally {
+      setIsLoadingAdminShoppers(false)
+    }
+  }
+
+  const openAdminShoppers = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('shoppers')
+    setShowCreditMenu(false)
+    setSelectedShopperId('')
+    setShopperHistory(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadAdminShoppers(accountSession.token)
+  }
+
+  const openShopperHistory = async (shopperId: string) => {
+    if (!accountSession?.token) {
+      return
+    }
+    setSelectedShopperId(shopperId)
+    setShopperHistory(null)
+    setShipmentDrafts({})
+    setShipmentNotices({})
+    setActiveCoverThumbId(null)
+    setIsLoadingShopperHistory(true)
+    setAdminShoppersNotice('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    try {
+      const response = await fetch(apiUrl(`/api/admin/shopper-history?id=${encodeURIComponent(shopperId)}`), {
+        headers: { Authorization: `Bearer ${accountSession.token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load this shopper.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load this shopper.')
+      }
+      setShopperHistory(data)
+    } catch (caughtError) {
+      setAdminShoppersNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load this shopper.')
+    } finally {
+      setIsLoadingShopperHistory(false)
+    }
+  }
+
+  const closeShopperHistory = () => {
+    setSelectedShopperId('')
+    setShopperHistory(null)
+    if (accountSession?.token) {
+      void loadAdminShoppers(accountSession.token)
+    }
+  }
+
+  type ShopperOrderUpdate = {
+    orderCode: string
+    shipDate?: string
+    gcuOrderNumber?: string
+    shipmentEmailSentAt?: string
+    status?: string
+  }
+
+  const applyShopperOrderUpdate = (order: ShopperOrderUpdate) => {
+    setShopperHistory((current) =>
+      current
+        ? {
+            ...current,
+            printOrders: (current.printOrders || []).map((entry) =>
+              entry.orderCode === order.orderCode
+                ? {
+                    ...entry,
+                    shipDate: order.shipDate || '',
+                    gcuOrderNumber: order.gcuOrderNumber || '',
+                    shipmentEmailSentAt: order.shipmentEmailSentAt || '',
+                    status: order.status || entry.status,
+                  }
+                : entry,
+            ),
+          }
+        : current,
+    )
+  }
+
+  const shipmentDraftFor = (order: { orderCode: string; shipDate: string; gcuOrderNumber: string }) =>
+    shipmentDrafts[order.orderCode] || { shipDate: order.shipDate, gcuOrderNumber: order.gcuOrderNumber }
+
+  const saveShipmentFields = async (order: { orderCode: string; shipDate: string; gcuOrderNumber: string }) => {
+    const draft = shipmentDraftFor(order)
+    if (
+      !accountSession?.token ||
+      (draft.shipDate === order.shipDate && draft.gcuOrderNumber.trim() === order.gcuOrderNumber)
+    ) {
+      return true
+    }
+    setShipmentBusyOrder(order.orderCode)
+    setShipmentNotices((current) => ({ ...current, [order.orderCode]: '' }))
+    try {
+      const response = await fetch(apiUrl(`/api/admin/print-orders/${encodeURIComponent(order.orderCode)}/shipping`), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipDate: draft.shipDate, gcuOrderNumber: draft.gcuOrderNumber.trim() }),
+      })
+      const data = await getApiJson(response, 'Unable to save shipping details.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to save shipping details.')
+      }
+      applyShopperOrderUpdate(data.order)
+      setShipmentDrafts((current) => {
+        const next = { ...current }
+        delete next[order.orderCode]
+        return next
+      })
+      return true
+    } catch (caughtError) {
+      setShipmentNotices((current) => ({
+        ...current,
+        [order.orderCode]: caughtError instanceof Error ? caughtError.message : 'Unable to save shipping details.',
+      }))
+      return false
+    } finally {
+      setShipmentBusyOrder('')
+    }
+  }
+
+  const sendShipmentEmail = async (order: {
+    orderCode: string
+    shipDate: string
+    gcuOrderNumber: string
+    shipmentEmailSentAt: string
+    shopperEmail: string
+  }) => {
+    if (!accountSession?.token) {
+      return
+    }
+    if (
+      order.shipmentEmailSentAt &&
+      !window.confirm(`A shipment email was already sent for order ${order.orderCode}. Send it again?`)
+    ) {
+      return
+    }
+    if (!(await saveShipmentFields(order))) {
+      return
+    }
+    setShipmentBusyOrder(order.orderCode)
+    setShipmentNotices((current) => ({ ...current, [order.orderCode]: '' }))
+    try {
+      const response = await fetch(
+        apiUrl(`/api/admin/print-orders/${encodeURIComponent(order.orderCode)}/shipment-email`),
+        { method: 'POST', headers: { Authorization: `Bearer ${accountSession.token}` } },
+      )
+      const data = await getApiJson(response, 'Unable to send the shipment email.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to send the shipment email.')
+      }
+      applyShopperOrderUpdate(data.order)
+      setShipmentNotices((current) => ({ ...current, [order.orderCode]: `Sent to ${data.sentTo}.` }))
+    } catch (caughtError) {
+      setShipmentNotices((current) => ({
+        ...current,
+        [order.orderCode]: caughtError instanceof Error ? caughtError.message : 'Unable to send the shipment email.',
+      }))
+    } finally {
+      setShipmentBusyOrder('')
+    }
   }
 
   const grantCreditsToPhone = async () => {
@@ -8686,6 +8905,9 @@ function App() {
                     <button className="text-action-link" type="button" onClick={() => void openAdminCardHistory()}>
                       Card history
                     </button>
+                    <button className="text-action-link" type="button" onClick={() => void openAdminShoppers()}>
+                      Shopper Orders
+                    </button>
                   </div>
                   <form
                     className="admin-grant-credits"
@@ -9647,6 +9869,293 @@ function App() {
               </div>
             )}
           </div>
+        </section>
+      )}
+
+      {adminView === 'shoppers' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="Shopper orders">
+          <div className="panel-heading">
+            <div>
+              <h2>Shopper Orders</h2>
+              <p>
+                {selectedShopperId
+                  ? 'This shopper’s account: cards and sends, credit activity, and printed cards.'
+                  : 'Every shopper account. Shoppers with printed cards awaiting a shipment email are listed first.'}
+              </p>
+            </div>
+            <div className="admin-page-actions">
+              {selectedShopperId ? (
+                <button className="text-action-link" type="button" onClick={closeShopperHistory}>
+                  All shoppers
+                </button>
+              ) : (
+                <button
+                  className="text-action-link"
+                  type="button"
+                  disabled={isLoadingAdminShoppers || !accountSession?.token}
+                  onClick={() => accountSession?.token && void loadAdminShoppers(accountSession.token)}
+                >
+                  {isLoadingAdminShoppers ? 'Refreshing...' : 'Refresh'}
+                </button>
+              )}
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          {adminShoppersNotice && <div className="field-notice">{adminShoppersNotice}</div>}
+          {!selectedShopperId && (
+            <>
+              <form
+                className="admin-history-search"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (accountSession?.token) {
+                    void loadAdminShoppers(accountSession.token)
+                  }
+                }}
+              >
+                <input
+                  type="search"
+                  value={adminShopperQuery}
+                  onChange={(event) => setAdminShopperQuery(event.target.value)}
+                  placeholder="Search name, email, phone, or order #"
+                  aria-label="Search shoppers"
+                />
+                <button className="secondary-button" type="submit" disabled={isLoadingAdminShoppers}>
+                  Search
+                </button>
+              </form>
+              <div className="account-block">
+                {isLoadingAdminShoppers && adminShoppers.length === 0 ? (
+                  <p>Loading shoppers...</p>
+                ) : adminShoppers.length === 0 ? (
+                  <p>No shoppers found.</p>
+                ) : (
+                  <div className="account-list admin-shopper-list">
+                    {adminShoppers.map((shopper) => (
+                      <button
+                        className="account-row admin-shopper-row"
+                        type="button"
+                        key={shopper.id}
+                        onClick={() => void openShopperHistory(shopper.id)}
+                      >
+                        <span className="account-row-title">
+                          {shopper.preferredName || shopper.mailingAddress?.name || 'No name'}
+                        </span>
+                        <span className="account-row-detail">
+                          {[formatPhoneNumberDisplay(shopper.phoneE164), shopper.email].filter(Boolean).join(' · ')}
+                        </span>
+                        <span className="account-row-status">
+                          {shopper.printsPending > 0
+                            ? `${shopper.printsPending} print${shopper.printsPending === 1 ? '' : 's'} to ship`
+                            : `${shopper.cardsCount} card${shopper.cardsCount === 1 ? '' : 's'} · ${shopper.printsCount} printed`}
+                        </span>
+                        <span className="account-row-date">
+                          {formatAccountDay(shopper.lastUsedAt || shopper.createdAt)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          {selectedShopperId && isLoadingShopperHistory && <p>Loading shopper...</p>}
+          {selectedShopperId && shopperHistory && (
+            <>
+              <div className="account-block account-profile-block">
+                <h3>Shopper details</h3>
+                <dl className="admin-shopper-details">
+                  <div>
+                    <dt>First name</dt>
+                    <dd>{shopperHistory.account?.preferredName || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{shopperHistory.account?.email || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Mailing address</dt>
+                    <dd>{formatAccountMailingAddress(shopperHistory.account?.mailingAddress) || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Joined</dt>
+                    <dd>{formatAccountDate(shopperHistory.account?.createdAt) || '—'}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div className="account-summary">
+                <div>
+                  <span>Credits now</span>
+                  <strong>{shopperHistory.account?.creditBalance ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Purchased</span>
+                  <strong>{shopperHistory.account?.creditsPurchased ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Spent</span>
+                  <strong>{shopperHistory.account?.creditsSpent ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong>{formatPhoneNumberDisplay(shopperHistory.phoneE164 || '')}</strong>
+                </div>
+              </div>
+              <div className="account-block">
+                <h3>Cards and sends</h3>
+                {shopperCardActivityItems.length === 0 ? (
+                  <p>No cards sent yet.</p>
+                ) : (
+                  <div className="account-list is-expanded">
+                    {shopperCardActivityItems.map((item) => (
+                      <div className="account-row" key={item.id}>
+                        <span className="account-row-title">{item.title}</span>
+                        <span className="account-row-detail">
+                          {item.timeline.length > 0 ? item.summary : item.detail}
+                        </span>
+                        <span className="account-row-status">{item.status}</span>
+                        {item.timeline.length > 0 ? (
+                          <span className="account-row-date account-row-timeline">
+                            {item.timeline.map((entry, index) => (
+                              <span key={`${entry.at}-${index}`}>
+                                {entry.label} — {formatAccountDate(entry.at)}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="account-block">
+                <h3>Credit activity</h3>
+                {(shopperHistory.creditEvents || []).length === 0 ? (
+                  <p>No credit activity yet.</p>
+                ) : (
+                  <div className="account-list">
+                    {(shopperHistory.creditEvents || []).map((event, index) => (
+                      <div className="account-row" key={`${event.createdAt}-${index}`}>
+                        <span className="account-row-title">{event.label}</span>
+                        <span className="account-row-detail">{creditEventDetail(event)}</span>
+                        <span className="account-row-amount">
+                          {event.creditsDelta > 0 ? `+${event.creditsDelta}` : event.creditsDelta}
+                        </span>
+                        <span className="account-row-date">{formatAccountDate(event.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="account-block">
+                <h3>Printed cards</h3>
+                {shopperPrintOrderItems.length === 0 ? (
+                  <p>No printed cards ordered yet.</p>
+                ) : (
+                  <div className="account-list">
+                    {shopperPrintOrderItems.map((order) => {
+                      const draft = shipmentDraftFor(order)
+                      const canSend = Boolean(draft.shipDate && draft.gcuOrderNumber.trim() && order.shopperEmail)
+                      const isBusy = shipmentBusyOrder === order.orderCode
+                      return (
+                        <div
+                          className="account-row account-print-order-row admin-print-order-row"
+                          key={order.id}
+                        >
+                          <span className="account-row-title">Order {order.orderCode}</span>
+                          <span className="account-row-detail">{order.detail}</span>
+                          <span className="account-row-status">
+                            {order.shipmentEmailSentAt ? 'shipped' : order.status}
+                          </span>
+                          <span className="account-row-date">{formatAccountDate(order.createdAt)}</span>
+                          <div className="admin-shipment-fields">
+                            <label>
+                              Ship date
+                              <input
+                                type="date"
+                                value={draft.shipDate}
+                                disabled={isBusy}
+                                onChange={(event) =>
+                                  setShipmentDrafts((current) => ({
+                                    ...current,
+                                    [order.orderCode]: { ...draft, shipDate: event.target.value },
+                                  }))
+                                }
+                                onBlur={() => void saveShipmentFields(order)}
+                              />
+                            </label>
+                            <label>
+                              GCU order #
+                              <input
+                                type="text"
+                                value={draft.gcuOrderNumber}
+                                maxLength={80}
+                                disabled={isBusy}
+                                onChange={(event) =>
+                                  setShipmentDrafts((current) => ({
+                                    ...current,
+                                    [order.orderCode]: { ...draft, gcuOrderNumber: event.target.value },
+                                  }))
+                                }
+                                onBlur={() => void saveShipmentFields(order)}
+                              />
+                            </label>
+                            <div className="admin-shipment-action">
+                              <button
+                                className="text-action-link"
+                                type="button"
+                                disabled={!canSend || isBusy}
+                                title={
+                                  canSend
+                                    ? `Email ${order.shopperEmail}`
+                                    : order.shopperEmail
+                                      ? 'Fill in the ship date and GCU order # first'
+                                      : 'This order has no shopper email'
+                                }
+                                onClick={() => void sendShipmentEmail(order)}
+                              >
+                                {isBusy
+                                  ? 'Working…'
+                                  : order.shipmentEmailSentAt
+                                    ? 'Resend shipment email'
+                                    : 'Send shipment email'}
+                              </button>
+                              <span className="admin-shipment-sent">
+                                Email sent: {order.shipmentEmailSentAt ? formatAccountDate(order.shipmentEmailSentAt) : '—'}
+                              </span>
+                            </div>
+                            {shipmentNotices[order.orderCode] && (
+                              <p className="admin-shipment-notice">{shipmentNotices[order.orderCode]}</p>
+                            )}
+                          </div>
+                          {order.coverThumbUrl ? (
+                            <button
+                              className="text-action-link admin-print-thumb-toggle"
+                              type="button"
+                              onClick={() =>
+                                setActiveCoverThumbId((current) => (current === order.id ? null : order.id))
+                              }
+                            >
+                              {activeCoverThumbId === order.id ? 'Hide cover' : 'Show cover'}
+                            </button>
+                          ) : null}
+                          {order.coverThumbUrl && activeCoverThumbId === order.id ? (
+                            <span className="admin-print-thumb">
+                              <img src={order.coverThumbUrl} alt={`Order ${order.orderCode} cover`} loading="lazy" />
+                            </span>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
 

@@ -409,7 +409,7 @@ const creditReasonLabel = (reason) => {
   return labels[reason] || reason || 'Credit change'
 }
 
-export const getAccountHistory = async (env, userId, phoneE164) => {
+export const getAccountHistory = async (env, userId, phoneE164, { includeHidden = false } = {}) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
   }
@@ -477,7 +477,7 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
   try {
     await ensurePrintOrderTables(env.ACCOUNT_DB)
     printOrders = await env.ACCOUNT_DB.prepare(
-      `SELECT order_number, card_id, created_at, ship_to_name, ship_to_json, mail_from_json, shopper_email, status, credit_cost
+      `SELECT *
        FROM print_orders
        WHERE user_id = ?
        ORDER BY created_at DESC
@@ -489,21 +489,12 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
     printOrders = { results: [] }
   }
 
-  const hiddenCardIds = await getHiddenCardIds(env.ACCOUNT_DB, userId)
+  const hiddenCardIds = includeHidden ? new Set() : await getHiddenCardIds(env.ACCOUNT_DB, userId)
   const visible = (cardId) => !cardId || !hiddenCardIds.has(cardId)
   cards.results = (cards.results || []).filter((row) => visible(row.id))
   deliveries.results = (deliveries.results || []).filter((row) => visible(row.card_id))
   thankYous.results = (thankYous.results || []).filter((row) => visible(row.card_id))
   printOrders.results = (printOrders.results || []).filter((row) => visible(row.card_id))
-
-  const parseStoredAddress = (raw) => {
-    try {
-      const parsed = JSON.parse(raw || '{}')
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      return {}
-    }
-  }
 
   return {
     account: mapUser(user),
@@ -543,22 +534,7 @@ export const getAccountHistory = async (env, userId, phoneE164) => {
       status: row.status,
       recipientName: row.recipient_name || '',
     })),
-    printOrders: (printOrders.results || []).map((row) => {
-      const shipTo = parseStoredAddress(row.ship_to_json)
-      const mailFrom = parseStoredAddress(row.mail_from_json)
-      return {
-        orderNumber: row.order_number,
-        orderCode: String(row.order_number),
-        cardId: row.card_id,
-        createdAt: row.created_at,
-        shipToName: row.ship_to_name || shipTo.name || '',
-        shipTo,
-        mailFrom,
-        shopperEmail: row.shopper_email || '',
-        status: row.status || 'submitted',
-        creditCost: row.credit_cost,
-      }
-    }),
+    printOrders: (printOrders.results || []).map(mapPrintOrderRow),
   }
 }
 
@@ -1379,11 +1355,121 @@ const ensurePrintOrderTables = async (db) => {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_card_id ON print_orders (card_id)`),
   ])
 
-  try {
-    await db.prepare(`ALTER TABLE print_orders ADD COLUMN shopper_email TEXT`).run()
-  } catch {
-    // Column already exists.
+  for (const column of ['shopper_email', 'ship_date', 'gcu_order_number', 'shipment_email_sent_at']) {
+    try {
+      await db.prepare(`ALTER TABLE print_orders ADD COLUMN ${column} TEXT`).run()
+    } catch {
+      // Column already exists.
+    }
   }
+}
+
+const mapPrintOrderRow = (row) => {
+  const parseStoredAddress = (raw) => {
+    try {
+      const parsed = JSON.parse(raw || '{}')
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  const shipTo = parseStoredAddress(row.ship_to_json)
+  const mailFrom = parseStoredAddress(row.mail_from_json)
+  return {
+    orderNumber: row.order_number,
+    orderCode: String(row.order_number),
+    userId: row.user_id || '',
+    cardId: row.card_id,
+    createdAt: row.created_at,
+    shipToName: row.ship_to_name || shipTo.name || '',
+    shipTo,
+    mailFrom,
+    shopperEmail: row.shopper_email || '',
+    status: row.status || 'submitted',
+    creditCost: row.credit_cost,
+    shipDate: row.ship_date || '',
+    gcuOrderNumber: row.gcu_order_number || '',
+    shipmentEmailSentAt: row.shipment_email_sent_at || '',
+  }
+}
+
+export const getPrintOrder = async (env, orderNumber) => {
+  if (!env.ACCOUNT_DB) {
+    return null
+  }
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  const row = await env.ACCOUNT_DB.prepare('SELECT * FROM print_orders WHERE order_number = ?')
+    .bind(Number(orderNumber))
+    .first()
+  return row ? mapPrintOrderRow(row) : null
+}
+
+export const updatePrintOrderShipping = async (env, { orderNumber, shipDate, gcuOrderNumber }) => {
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  await env.ACCOUNT_DB.prepare('UPDATE print_orders SET ship_date = ?, gcu_order_number = ? WHERE order_number = ?')
+    .bind(shipDate || null, gcuOrderNumber || null, Number(orderNumber))
+    .run()
+  return getPrintOrder(env, orderNumber)
+}
+
+export const markPrintOrderShipmentEmailSent = async (env, { orderNumber, sentAt }) => {
+  await env.ACCOUNT_DB.prepare(
+    "UPDATE print_orders SET shipment_email_sent_at = ?, status = 'shipped' WHERE order_number = ?",
+  )
+    .bind(sentAt, Number(orderNumber))
+    .run()
+  return getPrintOrder(env, orderNumber)
+}
+
+export const getShopperById = async (env, userId) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return null
+  }
+  return mapUser(await getUserById(env.ACCOUNT_DB, userId))
+}
+
+export const listAdminShoppers = async (env, { query = '', limit = 200 } = {}) => {
+  if (!env.ACCOUNT_DB) {
+    return []
+  }
+  await ensureUserProfileColumns(env.ACCOUNT_DB)
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  const q = String(query || '').trim().toLowerCase()
+  const digits = q.replace(/\D/g, '')
+  const where = q
+    ? `WHERE LOWER(COALESCE(u.email, '')) LIKE ?1
+         OR LOWER(COALESCE(u.preferred_name, '')) LIKE ?1
+         OR LOWER(COALESCE(u.mailing_address_json, '')) LIKE ?1
+         OR (?2 != '' AND u.phone_e164 LIKE ?2)
+         OR EXISTS (SELECT 1 FROM print_orders p WHERE p.user_id = u.id AND (CAST(p.order_number AS TEXT) = ?3 OR LOWER(COALESCE(p.gcu_order_number, '')) = ?3))`
+    : ''
+  const statement = env.ACCOUNT_DB.prepare(
+    `SELECT u.id, u.phone_e164, u.email, u.preferred_name, u.mailing_address_json, u.credit_balance,
+            u.created_at, u.last_used_at,
+            (SELECT COUNT(*) FROM cards c WHERE c.user_id = u.id) AS cards_count,
+            (SELECT COUNT(*) FROM print_orders p WHERE p.user_id = u.id) AS prints_count,
+            (SELECT COUNT(*) FROM print_orders p WHERE p.user_id = u.id AND p.shipment_email_sent_at IS NULL) AS prints_pending,
+            (SELECT MAX(p.created_at) FROM print_orders p WHERE p.user_id = u.id) AS last_print_at
+     FROM users u
+     ${where}
+     ORDER BY prints_pending DESC, COALESCE(u.last_used_at, u.created_at) DESC
+     LIMIT ${Math.max(1, Math.min(500, Math.floor(Number(limit) || 200)))}`,
+  )
+  const result = await (q ? statement.bind(`%${q}%`, digits ? `%${digits}%` : '', q) : statement).all()
+  return (result.results || []).map((row) => ({
+    id: row.id,
+    phoneE164: row.phone_e164 || '',
+    email: row.email || '',
+    preferredName: String(row.preferred_name || '').trim(),
+    mailingAddress: parseMailingAddressJson(row.mailing_address_json),
+    creditBalance: row.credit_balance ?? 0,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+    cardsCount: row.cards_count ?? 0,
+    printsCount: row.prints_count ?? 0,
+    printsPending: row.prints_pending ?? 0,
+    lastPrintAt: row.last_print_at || '',
+  }))
 }
 
 export const saveAccountEmail = async (env, { userId, email }) => {

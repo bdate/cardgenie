@@ -21,6 +21,11 @@ import {
   recordSuccessfulDelivery,
   recordThankYou,
   createPrintOrder,
+  getPrintOrder,
+  getShopperById,
+  listAdminShoppers,
+  markPrintOrderShipmentEmailSent,
+  updatePrintOrderShipping,
   saveAccountEmail,
   saveAccountMailingAddress,
   updateAccountProfile,
@@ -1704,6 +1709,8 @@ const handleAdminDeploySummary = async (request, env) => {
 
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
+const PRINT_ORDER_PREVIEWS_PREFIX = 'print-order-previews:'
+const PRINT_ORDER_PREVIEWS_TTL_SECONDS = 400 * 24 * 60 * 60
 
 const US_STATE_CODES = new Set([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
@@ -1850,19 +1857,49 @@ const buildPrintOrderEmailCopy = ({ cardId, orderCode, shareUrl, mailFrom, shipT
   return { subject, text, html }
 }
 
-const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
+const formatShipDateLong = (isoDate) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').trim())
+  if (!match) {
+    return String(isoDate || '').trim()
+  }
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+const buildPrintOrderConfirmationCopy = ({
+  orderCode,
+  shipTo,
+  mailFrom,
+  shipment = null,
+  hasCoverPreview = true,
+  hasInsidePreview = true,
+}) => {
   const shipToBlock = formatMailingAddressBlock(shipTo)
   const includeReturnAddress = mailFrom && !isDefaultPrintMailFrom(mailFrom)
   const returnAddressBlock = includeReturnAddress ? formatMailingAddressBlock(mailFrom) : ''
-  const subject = `Your Card Genie printed card order - ${orderCode}`
-  const deliveryCopy =
-    "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
-  const deliveryNote =
-    'There is no tracking available on your order. It is mailed out in a regular envelope with a postage stamp.'
+  const subject = shipment
+    ? `Your Card Genie printed card order shipment confirmation - ${orderCode}`
+    : `Your Card Genie printed card order - ${orderCode}`
+  const introLine = shipment
+    ? 'Your Card Genie printed card has been mailed. Thank you for your order!'
+    : "We've received your Card Genie print order. Thank you!"
+  const gcuOrderNumber = shipment ? escapeHtml(shipment.gcuOrderNumber) : ''
+  const deliveryCopy = shipment
+    ? `Your card was mailed on ${formatShipDateLong(shipment.shipDate)}, from Northern California. Please allow 3 to 7 business days for delivery.`
+    : "Your card will be mailed out the next business day via USPS regular mail, from Northern California. Once mailed, it'll take 3 to 7 business days for delivery."
+  const deliveryNote = shipment
+    ? 'Your card has been sent via USPS (regular mail) with a regular postage stamp, so there is no tracking.'
+    : 'There is no tracking available on your order. It is mailed out in a regular envelope with a postage stamp.'
   const text = [
-    "We've received your Card Genie print order. Thank you!",
+    introLine,
     '',
     `Order number: ${orderCode}`,
+    shipment ? `GCU Order number: ${shipment.gcuOrderNumber}` : null,
     '',
     'Shipping to:',
     shipToBlock,
@@ -1874,16 +1911,42 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
     '',
     'Delivery Note:',
     deliveryNote,
-    '',
-    'Previews of your card cover and inside are included in this email.',
+    hasCoverPreview || hasInsidePreview ? '' : null,
+    hasCoverPreview && hasInsidePreview
+      ? 'Previews of your card cover and inside are included in this email.'
+      : hasCoverPreview
+        ? 'A preview of your card cover is included in this email.'
+        : hasInsidePreview
+          ? 'A preview of your card inside is included in this email.'
+          : null,
   ]
     .filter((line) => line !== null)
     .join('\n')
 
+  const previewCells = [
+    hasCoverPreview
+      ? `<td style="padding: 0 12px 0 0; vertical-align: top;">
+            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Cover</p>
+            <img src="cid:print-cover-thumb" alt="Card cover" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;border-radius:8px;" />
+          </td>`
+      : '',
+    hasInsidePreview
+      ? `<td style="padding: 0; vertical-align: top;">
+            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Inside</p>
+            <img src="cid:print-inside-thumb" alt="Card inside" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:1px solid #d0d0d0;border-radius:8px;" />
+          </td>`
+      : '',
+  ].join('')
+
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #16272b;">
-      <p style="margin: 0 0 12px;">We've received your Card Genie print order. Thank you!</p>
-      <p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 12px;">${introLine}</p>
+      ${
+        shipment
+          ? `<p style="margin: 0 0 4px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>
+      <p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>GCU Order number:</strong> ${gcuOrderNumber}</p>`
+          : `<p style="margin: 0 0 16px; font-size: 1.1rem;"><strong>Order number:</strong> ${orderCode}</p>`
+      }
       <p style="margin: 0 0 6px;"><strong>Shipping to</strong></p>
       <pre style="margin: 0 0 16px; font-family: Arial, sans-serif; white-space: pre-wrap;">${shipToBlock}</pre>
       ${
@@ -1895,18 +1958,15 @@ const buildPrintOrderConfirmationCopy = ({ orderCode, shipTo, mailFrom }) => {
       <p style="margin: 0 0 12px;">${deliveryCopy}</p>
       <p style="margin: 0 0 4px;"><strong>Delivery Note:</strong></p>
       <p style="margin: 0 0 16px;">${deliveryNote}</p>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      ${
+        previewCells
+          ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
         <tr>
-          <td style="padding: 0 12px 0 0; vertical-align: top;">
-            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Cover</p>
-            <img src="cid:print-cover-thumb" alt="Card cover" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;border-radius:8px;" />
-          </td>
-          <td style="padding: 0; vertical-align: top;">
-            <p style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Inside</p>
-            <img src="cid:print-inside-thumb" alt="Card inside" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:1px solid #d0d0d0;border-radius:8px;" />
-          </td>
+          ${previewCells}
         </tr>
-      </table>
+      </table>`
+          : ''
+      }
       <p style="margin: 18px 0 0; color: #666; font-size: 0.9rem;">Questions? Email support@card-genie.com and include your order number.</p>
     </div>
   `
@@ -3077,15 +3137,19 @@ const handleGetAccountHistory = async (request, env) => {
   }
 
   const history = await getAccountHistory(env, session.userId, session.phoneE164)
+  return jsonResponse(request, env, await buildAccountHistoryPayload(request, env, history, session.phoneE164))
+}
+
+const buildAccountHistoryPayload = async (request, env, history, phoneE164) => {
   if (!history) {
-    return jsonResponse(request, env, {
+    return {
       ok: true,
-      phoneE164: session.phoneE164,
+      phoneE164,
       account: null,
       creditEvents: [],
       cards: [],
       deliveries: [],
-    })
+    }
   }
 
   const cardIds = [
@@ -3150,15 +3214,15 @@ const handleGetAccountHistory = async (request, env) => {
       }
     })
 
-  return jsonResponse(request, env, {
+  return {
     ok: true,
-    phoneE164: session.phoneE164,
+    phoneE164,
     ...history,
     cards: withThumbUrls(history.cards, 'id'),
     deliveries: withThumbUrls(history.deliveries, 'cardId'),
     printOrders: withThumbUrls(history.printOrders, 'cardId'),
     cardSummaries,
-  })
+  }
 }
 
 const handleGetAccountCard = async (request, env, cardId) => {
@@ -4036,6 +4100,16 @@ const handleOrderPrintCard = async (request, env) => {
       })
     } catch (confirmationError) {
       console.error('Unable to send print order confirmation email.', confirmationError)
+    }
+
+    try {
+      await env.CARD_STORE?.put(
+        `${PRINT_ORDER_PREVIEWS_PREFIX}${orderCode}`,
+        JSON.stringify({ cover: coverThumb, inside: insideThumb }),
+        { expirationTtl: PRINT_ORDER_PREVIEWS_TTL_SECONDS },
+      )
+    } catch (previewError) {
+      console.error('Unable to save print order previews.', previewError)
     }
 
     try {
@@ -5739,6 +5813,114 @@ const handleAdminResendCardEmail = async (request, env) => {
   }
 }
 
+const handleAdminShoppers = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const shoppers = await listAdminShoppers(env, { query: new URL(request.url).searchParams.get('q') || '' })
+  return jsonResponse(request, env, { ok: true, shoppers })
+}
+
+const handleAdminShopperHistory = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const shopper = await getShopperById(env, new URL(request.url).searchParams.get('id') || '')
+  if (!shopper) {
+    return jsonResponse(request, env, { error: 'Shopper not found.' }, 404)
+  }
+  const history = await getAccountHistory(env, shopper.id, shopper.phoneE164, { includeHidden: true })
+  return jsonResponse(request, env, await buildAccountHistoryPayload(request, env, history, shopper.phoneE164))
+}
+
+const SHIP_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+const handleAdminUpdatePrintOrderShipping = async (request, env, orderNumber) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const existing = await getPrintOrder(env, orderNumber)
+  if (!existing) {
+    return jsonResponse(request, env, { error: 'Order not found.' }, 404)
+  }
+  const body = (await readJson(request)) || {}
+  const shipDate = String(body.shipDate || '').trim()
+  const gcuOrderNumber = String(body.gcuOrderNumber || '').trim().slice(0, 80)
+  if (shipDate && !SHIP_DATE_PATTERN.test(shipDate)) {
+    return jsonResponse(request, env, { error: 'Enter the ship date as YYYY-MM-DD.' }, 400)
+  }
+  const order = await updatePrintOrderShipping(env, { orderNumber, shipDate, gcuOrderNumber })
+  return jsonResponse(request, env, { ok: true, order })
+}
+
+const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const order = await getPrintOrder(env, orderNumber)
+  if (!order) {
+    return jsonResponse(request, env, { error: 'Order not found.' }, 404)
+  }
+  if (!SHIP_DATE_PATTERN.test(order.shipDate) || !order.gcuOrderNumber) {
+    return jsonResponse(request, env, { error: 'Save the ship date and GCU order number first.' }, 400)
+  }
+  if (!order.shopperEmail) {
+    return jsonResponse(request, env, { error: 'This order has no shopper email.' }, 400)
+  }
+
+  const attachments = []
+  const previews = await env.CARD_STORE?.get(`${PRINT_ORDER_PREVIEWS_PREFIX}${order.orderCode}`, 'json').catch(() => null)
+  let cover = previews?.cover?.content ? previews.cover : null
+  const inside = previews?.inside?.content ? previews.inside : null
+  if (!cover && order.cardId) {
+    const thumb = await getCoverThumbBytes(env, order.cardId).catch(() => null)
+    if (thumb?.bytes?.length) {
+      cover = { type: thumb.contentType || 'image/jpeg', content: arrayBufferToBase64(thumb.bytes) }
+    }
+  }
+  if (cover) {
+    attachments.push({
+      filename: 'print-cover-thumb.jpg',
+      type: cover.type || 'image/jpeg',
+      content: cover.content,
+      disposition: 'inline',
+      contentId: 'print-cover-thumb',
+    })
+  }
+  if (inside) {
+    attachments.push({
+      filename: 'print-inside-thumb.png',
+      type: inside.type || 'image/png',
+      content: inside.content,
+      disposition: 'inline',
+      contentId: 'print-inside-thumb',
+    })
+  }
+
+  const copy = buildPrintOrderConfirmationCopy({
+    orderCode: order.orderCode,
+    shipTo: order.shipTo,
+    mailFrom: order.mailFrom,
+    shipment: { shipDate: order.shipDate, gcuOrderNumber: order.gcuOrderNumber },
+    hasCoverPreview: Boolean(cover),
+    hasInsidePreview: Boolean(inside),
+  })
+
+  try {
+    await sendEmailDelivery({ env, to: order.shopperEmail, copy, attachments })
+  } catch (error) {
+    console.error('shipment email failed', error)
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to send.' }, 502)
+  }
+
+  const updated = await markPrintOrderShipmentEmailSent(env, { orderNumber, sentAt: new Date().toISOString() })
+  return jsonResponse(request, env, { ok: true, order: updated, sentTo: order.shopperEmail })
+}
+
 const handleAdminCardHistory = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) {
@@ -5977,6 +6159,21 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
     return handleAdminResendCardEmail(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/shoppers') {
+    return handleAdminShoppers(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/shopper-history') {
+    return handleAdminShopperHistory(request, env)
+  }
+
+  const adminPrintOrderMatch = url.pathname.match(/^\/api\/admin\/print-orders\/(\d+)\/(shipping|shipment-email)$/)
+  if (request.method === 'POST' && adminPrintOrderMatch) {
+    return adminPrintOrderMatch[2] === 'shipping'
+      ? handleAdminUpdatePrintOrderShipping(request, env, Number(adminPrintOrderMatch[1]))
+      : handleAdminSendShipmentEmail(request, env, Number(adminPrintOrderMatch[1]))
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {
