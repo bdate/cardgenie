@@ -2912,6 +2912,7 @@ function App() {
   )
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
+  const [lastSentNotice, setLastSentNotice] = useState('')
   const [showAccountConfirm, setShowAccountConfirm] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [accountCode, setAccountCode] = useState('')
@@ -5444,6 +5445,7 @@ function App() {
     setHasAcceptedRevision(false)
     setShowPolishDialog(false)
     setDeliveryNotice('')
+    setLastSentNotice('')
     setDeliveryLogs([])
     setHasSentCurrentCard(false)
     setHasPrintedCurrentCard(false)
@@ -9104,6 +9106,9 @@ function App() {
             : `Card sent to ${deliveredCount} recipients.`
 
       setDeliveryNotice(notice)
+      if (deliveredCount > 0) {
+        setLastSentNotice(notice)
+      }
       resetDeliveryDestinations()
       setHasSentCurrentCard(true)
       if (deliveredCount > 0) {
@@ -12310,8 +12315,15 @@ function App() {
                   </>
                 )}
                 <div className="credit-action-block">
+                  {hasSentCurrentCard && lastSentNotice && sentButtonLabel?.key !== 'deliver' && !isDelivering && (
+                    <p className="last-sent-hint" role="status">
+                      {lastSentNotice}
+                    </p>
+                  )}
                   <button
-                    className={`primary-button${sentButtonLabel?.key === 'deliver' ? ' is-sent' : ''}`}
+                    className={`primary-button${sentButtonLabel?.key === 'deliver' ? ' is-sent' : ''}${
+                      hasSentCurrentCard && lastSentNotice ? ' is-send-another' : ''
+                    }`}
                     type="submit"
                     disabled={
                       isDelivering ||
@@ -12327,6 +12339,19 @@ function App() {
                       ? plannedRecipientCount > 1
                         ? 'Sending your cards...'
                         : 'Sending your card...'
+                      : hasSentCurrentCard && lastSentNotice
+                      ? (
+                        <>
+                          <span>
+                            {plannedRecipientCount > 1
+                              ? `Send another to ${plannedRecipientCount}`
+                              : `Send another by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
+                          </span>
+                          <span className="send-another-cost">
+                            {currentSendCreditCost} {currentSendCreditCost === 1 ? 'credit' : 'credits'}
+                          </span>
+                        </>
+                      )
                       : plannedRecipientCount > 1
                         ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
                         : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
@@ -12395,7 +12420,7 @@ function App() {
                     ? renderCreditNeedNotice(deliveryNotice)
                     : (
                       <div className="delivery-notice">
-                        <div>{deliveryNotice}</div>
+                        {deliveryNotice !== lastSentNotice && <div>{deliveryNotice}</div>}
                         {hasSentCurrentCard && !isGenerating && (
                           <div className="post-send-actions">
                             <button
