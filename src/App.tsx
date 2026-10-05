@@ -8346,9 +8346,11 @@ function App() {
     pendingCreatedSaveRef.current = false
     const replacesCardId = replaceCreatedCardIdRef.current
     replaceCreatedCardIdRef.current = ''
-    void saveCurrentCard({ replacesCardId }).catch((saveError) => {
-      console.error('Unable to save the new card to the account.', saveError)
-    })
+    void saveCurrentCard({ replacesCardId })
+      .then(() => loadSavedRecipients())
+      .catch((saveError) => {
+        console.error('Unable to save the new card to the account.', saveError)
+      })
     // saveCurrentCard reads the latest card state; only a newly generated card should trigger this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card, sharedCard, accountSession?.token, isRecipientView])

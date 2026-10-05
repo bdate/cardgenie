@@ -42,6 +42,7 @@ import {
   putCoverThumbFromDataUrl,
 } from './cover-thumbs.js'
 import {
+  backfillCreatedCardRecipients,
   backfillRecipients,
   deleteRecipient,
   deleteRecipientPhoto,
@@ -2454,6 +2455,16 @@ const handleSaveCard = async (request, env) => {
         })
       } catch (accountError) {
         console.error('Unable to record created card for account.', accountError)
+      }
+      try {
+        await upsertRecipientFromCard(env, {
+          userId: saveAccount.userId,
+          details: recipientDetailsFor(record),
+          cardId: record.id,
+          sent: false,
+        })
+      } catch (recipientError) {
+        console.error('recipient save failed', recipientError)
       }
     }
     await recordCardHistory(env, {
@@ -6241,16 +6252,19 @@ const handleAdminBackfillRecipients = async (request, env) => {
   if (denied) {
     return denied
   }
-  const result = await backfillRecipients(env, {
-    loadCardDetails: async (cardId) => {
-      const record = await getCardRecord(env, cardId)
-      if (record) {
-        return recipientDetailsFor(record)
-      }
-      const row = await env.ACCOUNT_DB.prepare('SELECT recipient_name, occasion FROM cards WHERE id = ?').bind(cardId).first()
-      return row ? { recipientName: row.recipient_name || '', occasion: row.occasion || '' } : null
-    },
-  })
+  const loadCardDetails = async (cardId) => {
+    const record = await getCardRecord(env, cardId)
+    if (record) {
+      return recipientDetailsFor(record)
+    }
+    const row = await env.ACCOUNT_DB.prepare('SELECT recipient_name, occasion FROM cards WHERE id = ?').bind(cardId).first()
+    return row ? { recipientName: row.recipient_name || '', occasion: row.occasion || '' } : null
+  }
+  const url = new URL(request.url)
+  const result =
+    url.searchParams.get('scope') === 'created'
+      ? await backfillCreatedCardRecipients(env, { loadCardDetails })
+      : await backfillRecipients(env, { loadCardDetails })
   return jsonResponse(request, env, { ok: true, ...result })
 }
 

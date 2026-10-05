@@ -123,7 +123,7 @@ const storeRecipientPhotos = async (env, recipientId, photos, previousCount) => 
  */
 export const upsertRecipientFromCard = async (
   env,
-  { userId, details, cardId, at, email = '', phoneE164 = '', mailingAddress = null, photos = [] },
+  { userId, details, cardId, at, email = '', phoneE164 = '', mailingAddress = null, photos = [], sent = true },
 ) => {
   const name = clean(details?.recipientName, 120)
   if (!env.ACCOUNT_DB || !userId || !name) {
@@ -170,7 +170,7 @@ export const upsertRecipientFromCard = async (
     card_ids_json: JSON.stringify(cardIds.slice(-MAX_TRACKED_CARD_IDS)),
     last_card_id: isLatest ? cardId || existing?.last_card_id || null : existing?.last_card_id || null,
     last_occasion: pick(clean(details?.occasion, 120), existing?.last_occasion),
-    last_sent_at: isLatest ? eventAt : existing?.last_sent_at,
+    last_sent_at: sent && isLatest ? eventAt : existing?.last_sent_at || null,
   }
 
   if (existing) {
@@ -397,4 +397,33 @@ export const backfillRecipients = async (env, { loadCardDetails }) => {
     saved += 1
   }
   return { events: events.length, saved, skipped }
+}
+
+/** Saves recipients that only appear on created-but-never-sent cards (missed before create-time saving). */
+export const backfillCreatedCardRecipients = async (env, { loadCardDetails }) => {
+  const db = env.ACCOUNT_DB
+  await ensureRecipientsTable(db)
+  const cards = await db
+    .prepare(
+      `SELECT c.id, c.user_id, c.created_at, c.recipient_name FROM cards c
+       WHERE c.user_id IS NOT NULL AND trim(coalesce(c.recipient_name, '')) <> ''
+         AND NOT EXISTS (
+           SELECT 1 FROM recipients r
+           WHERE r.user_id = c.user_id AND r.name_key = lower(trim(c.recipient_name))
+         )
+       ORDER BY c.created_at`,
+    )
+    .all()
+  let saved = 0
+  let skipped = 0
+  for (const row of cards.results || []) {
+    const details = (await loadCardDetails(row.id)) || { recipientName: row.recipient_name }
+    if (!details?.recipientName) {
+      skipped += 1
+      continue
+    }
+    await upsertRecipientFromCard(env, { userId: row.user_id, cardId: row.id, at: row.created_at, details, sent: false })
+    saved += 1
+  }
+  return { cards: (cards.results || []).length, saved, skipped }
 }
