@@ -2536,6 +2536,81 @@ const buildPrintInsideImageUrl = async ({
   )
 }
 
+const recipientDateMonths = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+/** Parses "YYYY-MM-DD" or year-less "--MM-DD". */
+const parseRecipientDate = (value: string) => {
+  const match = /^(\d{4}|-)-(\d{2})-(\d{2})$/.exec(String(value || '').trim())
+  if (!match) {
+    return { year: '', month: '', day: '' }
+  }
+  return { year: match[1] === '-' ? '' : match[1], month: match[2], day: match[3] }
+}
+
+const buildRecipientDate = ({ year, month, day }: { year: string; month: string; day: string }) =>
+  month && day ? `${year || '-'}-${month}-${day}` : ''
+
+const formatRecipientDate = (value: string) => {
+  const { year, month, day } = parseRecipientDate(value)
+  if (!month || !day) {
+    return value
+  }
+  const label = `${recipientDateMonths[Number(month) - 1]} ${Number(day)}`
+  return year ? `${label}, ${year}` : label
+}
+
+function RecipientDateInput({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+  const parsed = parseRecipientDate(value)
+  const [month, setMonth] = useState(parsed.month)
+  const [day, setDay] = useState(parsed.day)
+  const [year, setYear] = useState(parsed.year)
+  const currentYear = new Date().getFullYear()
+  const daysInMonth = month ? new Date(Number(year || 2000), Number(month), 0).getDate() : 31
+
+  const update = (next: { year: string; month: string; day: string }) => {
+    const clampedDay =
+      next.day && next.month
+        ? String(Math.min(Number(next.day), new Date(Number(next.year || 2000), Number(next.month), 0).getDate())).padStart(2, '0')
+        : next.day
+    setMonth(next.month)
+    setDay(clampedDay)
+    setYear(next.year)
+    onChange(buildRecipientDate({ ...next, day: clampedDay }))
+  }
+
+  return (
+    <fieldset className="recipient-date-input">
+      <legend>{label}</legend>
+      <select aria-label={`${label} month`} value={month} onChange={(event) => update({ year, month: event.target.value, day })}>
+        <option value="">Month</option>
+        {recipientDateMonths.map((name, index) => (
+          <option key={name} value={String(index + 1).padStart(2, '0')}>
+            {name}
+          </option>
+        ))}
+      </select>
+      <select aria-label={`${label} day`} value={day} onChange={(event) => update({ year, month, day: event.target.value })}>
+        <option value="">Day</option>
+        {Array.from({ length: daysInMonth }, (_, index) => String(index + 1).padStart(2, '0')).map((option) => (
+          <option key={option} value={option}>
+            {Number(option)}
+          </option>
+        ))}
+      </select>
+      <select aria-label={`${label} year (optional)`} title="Year (optional)" value={year} onChange={(event) => update({ year: event.target.value, month, day })}>
+        <option value="">Unknown</option>
+        {Array.from({ length: currentYear - 1899 }, (_, index) => String(currentYear - index)).map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </fieldset>
+  )
+}
 
 function App() {
   const sharedCardId = useMemo(() => getSharedCardId(), [])
@@ -9631,26 +9706,16 @@ function App() {
                                     </label>
                                   </div>
                                   <div className="field-grid">
-                                    <label>
-                                      Birthday
-                                      <input
-                                        type="date"
-                                        value={recipientDraft.birthday}
-                                        onChange={(event) =>
-                                          setRecipientDraft({ ...recipientDraft, birthday: event.target.value })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Anniversary
-                                      <input
-                                        type="date"
-                                        value={recipientDraft.anniversary}
-                                        onChange={(event) =>
-                                          setRecipientDraft({ ...recipientDraft, anniversary: event.target.value })
-                                        }
-                                      />
-                                    </label>
+                                    <RecipientDateInput
+                                      label="Birthday"
+                                      value={recipientDraft.birthday}
+                                      onChange={(next) => setRecipientDraft((current) => current && { ...current, birthday: next })}
+                                    />
+                                    <RecipientDateInput
+                                      label="Anniversary"
+                                      value={recipientDraft.anniversary}
+                                      onChange={(next) => setRecipientDraft((current) => current && { ...current, anniversary: next })}
+                                    />
                                   </div>
                                   <fieldset className="recipient-mailing-fields">
                                     <legend>Mailing address</legend>
@@ -10713,8 +10778,8 @@ function App() {
                               .filter(Boolean)
                               .join(' · '),
                             recipient.mailingAddress ? formatAccountMailingAddress(recipient.mailingAddress) : '',
-                            recipient.birthday ? `Birthday: ${recipient.birthday}` : '',
-                            recipient.anniversary ? `Anniversary: ${recipient.anniversary}` : '',
+                            recipient.birthday ? `Birthday: ${formatRecipientDate(recipient.birthday)}` : '',
+                            recipient.anniversary ? `Anniversary: ${formatRecipientDate(recipient.anniversary)}` : '',
                             recipient.notes ? `Notes: ${recipient.notes}` : '',
                           ]
                             .filter(Boolean)

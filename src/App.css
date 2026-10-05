@@ -3827,6 +3827,30 @@ select.is-placeholder option {
   padding: 0;
 }
 
+.recipient-date-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(64px, 0.8fr) minmax(0, 1.3fr);
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.recipient-date-input legend,
+.recipient-mailing-fields legend {
+  margin-bottom: 3px;
+  padding: 0;
+  color: var(--gcu-ink);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.recipient-date-input select {
+  min-width: 0;
+}
+
 .recipient-mailing-row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(70px, 1fr) minmax(80px, 1fr);
