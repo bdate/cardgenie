@@ -3926,7 +3926,7 @@ Ask for ALL remaining essential gaps (sender, recipient name, occasion, key deta
 ${shopperNote}
 
 As soon as you learn new fields, call update_card_details with whatever you know (partial updates are fine).
-When essentials are complete, call complete_card_interview with the full details. After that tool returns, say exactly: "Consider it granted! I filled the form below. Review it, then create your card. Until your next wish… poof!" Then stop talking.
+When essentials are complete, call complete_card_interview with the full details. After that tool returns, say exactly: "Consider it granted! I filled the form below. Review it, then create your card. Until your next wish!" Then stop talking.
 Do not invent facts. Keep replies to 1–2 short sentences.`
 }
 

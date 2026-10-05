@@ -8,6 +8,8 @@
  * - After interview complete, keep mic muted and end the session
  */
 
+import { playGenieMagicSound, primeGenieMagicSound } from './genieMagicSound'
+
 export type LampGenieCardDetailsPatch = {
   recipientName?: string
   recipientType?: string
@@ -59,7 +61,7 @@ const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 
 /** Spoken + on-screen line when the interview is done. */
 export const LAMP_GENIE_COMPLETE_LINE =
-  'Consider it granted! I filled the form below. Review it, then create your card. Until your next wish… poof!'
+  'Consider it granted! I filled the form below. Review it, then create your card. Until your next wish!'
 
 export const LAMP_GENIE_OPENING_LINE = 'Your wish is my command!'
 
@@ -201,7 +203,18 @@ export const connectLampGenieRealtime = async (options: {
   let lastActivityAt = Date.now()
   let cleanedUp = false
   let thinking = false
+  let magicSoundPlayed = false
   const processedToolCalls = new Set<string>()
+
+  primeGenieMagicSound()
+
+  const playSignOffMagic = () => {
+    if (magicSoundPlayed) {
+      return
+    }
+    magicSoundPlayed = true
+    playGenieMagicSound()
+  }
 
   const setThinking = (next: boolean) => {
     if (thinking === next) {
@@ -326,6 +339,7 @@ export const connectLampGenieRealtime = async (options: {
 
     if (interviewComplete) {
       setMicEnabled(false)
+      playSignOffMagic()
       // Closing “All set…” line finished — end the voice session shortly after.
       if (endSessionTimer) {
         window.clearTimeout(endSessionTimer)
@@ -538,6 +552,7 @@ export const connectLampGenieRealtime = async (options: {
       // Fallback if audio-end never arrives.
       endSessionTimer = window.setTimeout(() => {
         endSessionTimer = 0
+        playSignOffMagic()
         cleanup()
       }, 16000)
       return
