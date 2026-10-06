@@ -1355,7 +1355,15 @@ const ensurePrintOrderTables = async (db) => {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_print_orders_card_id ON print_orders (card_id)`),
   ])
 
-  for (const column of ['shopper_email', 'ship_date', 'gcu_order_number', 'shipment_email_sent_at', 'order_source', 'amount_cents']) {
+  for (const column of [
+    'shopper_email',
+    'ship_date',
+    'gcu_order_number',
+    'shipment_email_sent_at',
+    'order_source',
+    'amount_cents',
+    'shipment_email_scheduled_for',
+  ]) {
     try {
       await db.prepare(`ALTER TABLE print_orders ADD COLUMN ${column} TEXT`).run()
     } catch {
@@ -1390,6 +1398,7 @@ const mapPrintOrderRow = (row) => {
     shipDate: row.ship_date || '',
     gcuOrderNumber: row.gcu_order_number || '',
     shipmentEmailSentAt: row.shipment_email_sent_at || '',
+    shipmentEmailScheduledFor: row.shipment_email_scheduled_for || '',
     orderSource: row.order_source || 'shopper',
     amountCents: Number(row.amount_cents) || 0,
   }
@@ -1441,11 +1450,34 @@ export const updatePrintOrderShipping = async (env, { orderNumber, shipDate, gcu
 
 export const markPrintOrderShipmentEmailSent = async (env, { orderNumber, sentAt }) => {
   await env.ACCOUNT_DB.prepare(
-    "UPDATE print_orders SET shipment_email_sent_at = ?, status = 'shipped' WHERE order_number = ?",
+    "UPDATE print_orders SET shipment_email_sent_at = ?, shipment_email_scheduled_for = NULL, status = 'shipped' WHERE order_number = ?",
   )
     .bind(sentAt, Number(orderNumber))
     .run()
   return getPrintOrder(env, orderNumber)
+}
+
+export const setPrintOrderShipmentEmailSchedule = async (env, { orderNumber, scheduledFor }) => {
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  await env.ACCOUNT_DB.prepare('UPDATE print_orders SET shipment_email_scheduled_for = ? WHERE order_number = ?')
+    .bind(scheduledFor || null, Number(orderNumber))
+    .run()
+  return getPrintOrder(env, orderNumber)
+}
+
+export const listDueShipmentEmailOrders = async (env, nowIso) => {
+  if (!env.ACCOUNT_DB) {
+    return []
+  }
+  await ensurePrintOrderTables(env.ACCOUNT_DB)
+  const result = await env.ACCOUNT_DB.prepare(
+    `SELECT * FROM print_orders
+     WHERE shipment_email_scheduled_for IS NOT NULL AND shipment_email_scheduled_for <= ?
+     ORDER BY shipment_email_scheduled_for LIMIT 25`,
+  )
+    .bind(nowIso)
+    .all()
+  return (result.results || []).map(mapPrintOrderRow)
 }
 
 export const getShopperById = async (env, userId) => {

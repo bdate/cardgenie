@@ -2542,6 +2542,21 @@ const parseRecipientDate = (value: string) => {
 const buildRecipientDate = ({ year, month, day }: { year: string; month: string; day: string }) =>
   month && day ? `${year || '-'}-${month}-${day}` : ''
 
+const formatPacificSendTime = (iso: string) => {
+  const date = new Date(iso)
+  if (!iso || Number.isNaN(date.getTime())) {
+    return 'the ship date'
+  }
+  return `${new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)} PT`
+}
+
 const formatRecipientDate = (value: string) => {
   const { year, month, day } = parseRecipientDate(value)
   if (!month || !day) {
@@ -2699,6 +2714,7 @@ function App() {
       shipDate?: string
       gcuOrderNumber?: string
       shipmentEmailSentAt?: string
+      shipmentEmailScheduledFor?: string
     }>
     cardSummaries?: Record<string, { recipientName?: string; occasion?: string; groupKey?: string }>
     recipients?: SavedRecipient[]
@@ -6266,6 +6282,7 @@ function App() {
         shipDate: order.shipDate || '',
         gcuOrderNumber: order.gcuOrderNumber || '',
         shipmentEmailSentAt: order.shipmentEmailSentAt || '',
+        shipmentEmailScheduledFor: order.shipmentEmailScheduledFor || '',
         shopperEmail: order.shopperEmail || '',
       }
     })
@@ -6695,6 +6712,7 @@ function App() {
     shipDate?: string
     gcuOrderNumber?: string
     shipmentEmailSentAt?: string
+    shipmentEmailScheduledFor?: string
     status?: string
   }
 
@@ -6710,6 +6728,7 @@ function App() {
                     shipDate: order.shipDate || '',
                     gcuOrderNumber: order.gcuOrderNumber || '',
                     shipmentEmailSentAt: order.shipmentEmailSentAt || '',
+                    shipmentEmailScheduledFor: order.shipmentEmailScheduledFor || '',
                     status: order.status || entry.status,
                   }
                 : entry,
@@ -6760,23 +6779,27 @@ function App() {
     }
   }
 
-  const sendShipmentEmail = async (order: {
-    orderCode: string
-    shipDate: string
-    gcuOrderNumber: string
-    shipmentEmailSentAt: string
-    shopperEmail: string
-  }) => {
+  const sendShipmentEmail = async (
+    order: {
+      orderCode: string
+      shipDate: string
+      gcuOrderNumber: string
+      shipmentEmailSentAt: string
+      shopperEmail: string
+    },
+    mode: 'schedule' | 'now' | 'cancel' = 'schedule',
+  ) => {
     if (!accountSession?.token) {
       return
     }
     if (
+      mode !== 'cancel' &&
       order.shipmentEmailSentAt &&
       !window.confirm(`A shipment email was already sent for order ${order.orderCode}. Send it again?`)
     ) {
       return
     }
-    if (!(await saveShipmentFields(order))) {
+    if (mode !== 'cancel' && !(await saveShipmentFields(order))) {
       return
     }
     setShipmentBusyOrder(order.orderCode)
@@ -6784,14 +6807,26 @@ function App() {
     try {
       const response = await fetch(
         apiUrl(`/api/admin/print-orders/${encodeURIComponent(order.orderCode)}/shipment-email`),
-        { method: 'POST', headers: { Authorization: `Bearer ${accountSession.token}` } },
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        },
       )
       const data = await getApiJson(response, 'Unable to send the shipment email.')
       if (!response.ok) {
         throw new Error(data.error || 'Unable to send the shipment email.')
       }
       applyShopperOrderUpdate(data.order)
-      setShipmentNotices((current) => ({ ...current, [order.orderCode]: `Sent to ${data.sentTo}.` }))
+      setShipmentNotices((current) => ({
+        ...current,
+        [order.orderCode]:
+          mode === 'cancel'
+            ? 'Scheduled email canceled.'
+            : mode === 'schedule'
+              ? `Will email ${data.sentTo} on ${formatPacificSendTime(String(data.scheduledFor || ''))}.`
+              : `Sent to ${data.sentTo}.`,
+      }))
     } catch (caughtError) {
       setShipmentNotices((current) => ({
         ...current,
@@ -10912,25 +10947,53 @@ function App() {
                               />
                             </label>
                             <div className="admin-shipment-action">
-                              <button
-                                className="text-action-link"
-                                type="button"
-                                disabled={!canSend || isBusy}
-                                title={
-                                  canSend
-                                    ? `Email ${order.shopperEmail}`
-                                    : order.shopperEmail
-                                      ? 'Fill in the ship date and GCU order # first'
-                                      : 'This order has no shopper email'
-                                }
-                                onClick={() => void sendShipmentEmail(order)}
-                              >
-                                {isBusy
-                                  ? 'Working…'
-                                  : order.shipmentEmailSentAt
-                                    ? 'Resend shipment email'
-                                    : 'Send shipment email'}
-                              </button>
+                              {order.shipmentEmailScheduledFor ? (
+                                <>
+                                  <span className="admin-shipment-sent">
+                                    Email scheduled: {formatPacificSendTime(order.shipmentEmailScheduledFor)}
+                                  </span>
+                                  <button
+                                    className="text-action-link"
+                                    type="button"
+                                    disabled={!canSend || isBusy}
+                                    onClick={() => void sendShipmentEmail(order, 'now')}
+                                  >
+                                    {isBusy ? 'Working…' : 'Send now'}
+                                  </button>
+                                  <button
+                                    className="text-action-link"
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => void sendShipmentEmail(order, 'cancel')}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  className="text-action-link"
+                                  type="button"
+                                  disabled={!canSend || isBusy}
+                                  title={
+                                    canSend
+                                      ? order.shipmentEmailSentAt
+                                        ? `Email ${order.shopperEmail} again now`
+                                        : `Email ${order.shopperEmail} at 10 AM PT on the ship date`
+                                      : order.shopperEmail
+                                        ? 'Fill in the ship date and GCU order # first'
+                                        : 'This order has no shopper email'
+                                  }
+                                  onClick={() =>
+                                    void sendShipmentEmail(order, order.shipmentEmailSentAt ? 'now' : 'schedule')
+                                  }
+                                >
+                                  {isBusy
+                                    ? 'Working…'
+                                    : order.shipmentEmailSentAt
+                                      ? 'Resend shipment email'
+                                      : 'Schedule shipment email (10 AM PT)'}
+                                </button>
+                              )}
                               <span className="admin-shipment-sent">
                                 Email sent: {order.shipmentEmailSentAt ? formatAccountDate(order.shipmentEmailSentAt) : '—'}
                               </span>

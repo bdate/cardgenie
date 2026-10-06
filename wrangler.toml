@@ -23,6 +23,9 @@ zone_name = "card-genie.com"
 pattern = "card-genie.com/c/*"
 zone_name = "card-genie.com"
 
+[triggers]
+crons = ["*/15 * * * *"]
+
 [[kv_namespaces]]
 binding = "CARD_STORE"
 id = "e599b5d8c31b4d5296a7d4c8e7a8aef0"

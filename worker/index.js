@@ -27,6 +27,8 @@ import {
   countRecipientPrintOrders,
   listRecipientPrintOrders,
   markPrintOrderShipmentEmailSent,
+  setPrintOrderShipmentEmailSchedule,
+  listDueShipmentEmailOrders,
   updatePrintOrderShipping,
   saveAccountEmail,
   saveAccountMailingAddress,
@@ -6285,8 +6287,57 @@ const handleAdminUpdatePrintOrderShipping = async (request, env, orderNumber) =>
   if (shipDate && !SHIP_DATE_PATTERN.test(shipDate)) {
     return jsonResponse(request, env, { error: 'Enter the ship date as YYYY-MM-DD.' }, 400)
   }
-  const order = await updatePrintOrderShipping(env, { orderNumber, shipDate, gcuOrderNumber })
+  let order = await updatePrintOrderShipping(env, { orderNumber, shipDate, gcuOrderNumber })
+  if (order?.shipmentEmailScheduledFor) {
+    order = await setPrintOrderShipmentEmailSchedule(env, {
+      orderNumber,
+      scheduledFor: SHIP_DATE_PATTERN.test(order.shipDate) ? shipmentEmailSendTime(order.shipDate) : null,
+    })
+  }
   return jsonResponse(request, env, { ok: true, order })
+}
+
+const PACIFIC_TIME_ZONE = 'America/Los_Angeles'
+const SHIPMENT_EMAIL_HOUR_PT = 10
+
+const pacificDateKey = (date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: PACIFIC_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+
+const pacificHourOn = (dateKey, hour) => {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  for (const offsetHours of [7, 8]) {
+    const candidate = new Date(Date.UTC(year, month - 1, day, hour + offsetHours))
+    const localHour = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: PACIFIC_TIME_ZONE, hour: 'numeric', hourCycle: 'h23' }).format(
+        candidate,
+      ),
+    )
+    if (localHour === hour && pacificDateKey(candidate) === dateKey) {
+      return candidate
+    }
+  }
+  return new Date(Date.UTC(year, month - 1, day, hour + 8))
+}
+
+const shiftDateKey = (dateKey, days) => {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+// 10 AM Pacific on the ship date; if that has already passed, the next 10 AM Pacific.
+const shipmentEmailSendTime = (shipDate, now = new Date()) => {
+  const onShipDate = pacificHourOn(shipDate, SHIPMENT_EMAIL_HOUR_PT)
+  if (onShipDate > now) {
+    return onShipDate.toISOString()
+  }
+  const today = pacificDateKey(now)
+  const todayAtHour = pacificHourOn(today, SHIPMENT_EMAIL_HOUR_PT)
+  return (todayAtHour > now ? todayAtHour : pacificHourOn(shiftDateKey(today, 1), SHIPMENT_EMAIL_HOUR_PT)).toISOString()
 }
 
 const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
@@ -6298,13 +6349,53 @@ const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
   if (!order) {
     return jsonResponse(request, env, { error: 'Order not found.' }, 404)
   }
+  const body = (await readJson(request)) || {}
+  const mode = ['schedule', 'cancel'].includes(body.mode) ? body.mode : 'now'
+  if (mode === 'cancel') {
+    const updated = await setPrintOrderShipmentEmailSchedule(env, { orderNumber, scheduledFor: null })
+    return jsonResponse(request, env, { ok: true, order: updated })
+  }
   if (!SHIP_DATE_PATTERN.test(order.shipDate) || !order.gcuOrderNumber) {
     return jsonResponse(request, env, { error: 'Save the ship date and GCU order number first.' }, 400)
   }
   if (!order.shopperEmail) {
     return jsonResponse(request, env, { error: 'This order has no shopper email.' }, 400)
   }
+  if (mode === 'schedule') {
+    const scheduledFor = shipmentEmailSendTime(order.shipDate)
+    const updated = await setPrintOrderShipmentEmailSchedule(env, { orderNumber, scheduledFor })
+    return jsonResponse(request, env, { ok: true, order: updated, scheduledFor, sentTo: order.shopperEmail })
+  }
 
+  try {
+    await deliverShipmentEmail(env, order)
+  } catch (error) {
+    console.error('shipment email failed', error)
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to send.' }, 502)
+  }
+
+  const updated = await markPrintOrderShipmentEmailSent(env, { orderNumber, sentAt: new Date().toISOString() })
+  return jsonResponse(request, env, { ok: true, order: updated, sentTo: order.shopperEmail })
+}
+
+const sendScheduledShipmentEmails = async (env) => {
+  const due = await listDueShipmentEmailOrders(env, new Date().toISOString())
+  for (const order of due) {
+    if (!SHIP_DATE_PATTERN.test(order.shipDate) || !order.gcuOrderNumber || !order.shopperEmail) {
+      console.error('scheduled shipment email skipped: missing details', order.orderCode)
+      await setPrintOrderShipmentEmailSchedule(env, { orderNumber: order.orderNumber, scheduledFor: null })
+      continue
+    }
+    try {
+      await deliverShipmentEmail(env, order)
+      await markPrintOrderShipmentEmailSent(env, { orderNumber: order.orderNumber, sentAt: new Date().toISOString() })
+    } catch (error) {
+      console.error('scheduled shipment email failed', order.orderCode, error)
+    }
+  }
+}
+
+const deliverShipmentEmail = async (env, order) => {
   const attachments = []
   const previews = await env.CARD_STORE?.get(`${PRINT_ORDER_PREVIEWS_PREFIX}${order.orderCode}`, 'json').catch(() => null)
   let cover = previews?.cover?.content ? previews.cover : null
@@ -6343,15 +6434,7 @@ const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
     hasInsidePreview: Boolean(inside),
   })
 
-  try {
-    await sendEmailDelivery({ env, to: order.shopperEmail, copy, attachments })
-  } catch (error) {
-    console.error('shipment email failed', error)
-    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to send.' }, 502)
-  }
-
-  const updated = await markPrintOrderShipmentEmailSent(env, { orderNumber, sentAt: new Date().toISOString() })
-  return jsonResponse(request, env, { ok: true, order: updated, sentTo: order.shopperEmail })
+  await sendEmailDelivery({ env, to: order.shopperEmail, copy, attachments })
 }
 
 const handleAdminCardHistory = async (request, env) => {
@@ -6802,5 +6885,8 @@ export default {
   },
   async queue(batch, env) {
     await handleGenerateQueue(batch, env)
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(sendScheduledShipmentEmails(env))
   },
 }
