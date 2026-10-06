@@ -6192,9 +6192,11 @@ const handleAdminShoppers = async (request, env) => {
     ? [
         {
           id: RECIPIENT_KEEPSAKE_SHOPPER_ID,
-          phoneE164: '',
-          email: '',
-          preferredName: 'Recipient keepsake orders',
+          phoneE164: keepsakes.recipientPhone || '',
+          email: keepsakes.recipientEmail || '',
+          preferredName: keepsakes.recipientName
+            ? `Recipient keepsake: ${keepsakes.recipientName}${keepsakes.total > 1 ? ` +${keepsakes.total - 1} more` : ''}`
+            : 'Recipient keepsake orders',
           mailingAddress: null,
           creditBalance: 0,
           createdAt: keepsakes.lastAt,

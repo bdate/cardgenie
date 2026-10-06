@@ -1426,7 +1426,32 @@ export const countRecipientPrintOrders = async (env) => {
             MAX(created_at) AS last_at
      FROM print_orders WHERE order_source = 'recipient'`,
   ).first()
-  return { total: Number(row?.total) || 0, pending: Number(row?.pending) || 0, lastAt: row?.last_at || '' }
+  const latest = await env.ACCOUNT_DB.prepare(
+    `SELECT p.ship_to_name, p.ship_to_json, p.shopper_email,
+            (SELECT d.destination FROM deliveries d
+              WHERE d.card_id = p.card_id AND d.method = 'text' AND d.is_sender_copy = 0
+              ORDER BY d.created_at DESC LIMIT 1) AS recipient_phone
+     FROM print_orders p
+     WHERE p.order_source = 'recipient'
+     ORDER BY (p.shipment_email_sent_at IS NULL) DESC, p.created_at DESC
+     LIMIT 1`,
+  ).first()
+  let recipientName = latest?.ship_to_name || ''
+  if (!recipientName && latest?.ship_to_json) {
+    try {
+      recipientName = JSON.parse(latest.ship_to_json)?.name || ''
+    } catch {
+      recipientName = ''
+    }
+  }
+  return {
+    total: Number(row?.total) || 0,
+    pending: Number(row?.pending) || 0,
+    lastAt: row?.last_at || '',
+    recipientName,
+    recipientPhone: latest?.recipient_phone || '',
+    recipientEmail: latest?.shopper_email || '',
+  }
 }
 
 export const getPrintOrder = async (env, orderNumber) => {
