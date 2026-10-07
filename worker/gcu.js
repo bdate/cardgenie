@@ -1,11 +1,12 @@
-// www.card-genie.com/gcu/<card#> (any case): envelope reveal for a GreetingCardUniverse card.
+// www.card-genie.com/gcu/<card#> (any case; index.html loads this page from api.card-genie.com):
+// envelope reveal for a GreetingCardUniverse card.
 // The worker scrapes the product once and keeps it in D1; the visitor's browser re-typesets the
 // inside message at print size (it needs canvas + web fonts) and uploads it to KV for next time.
 import pageHtml from './gcu-page.html'
 
 const SITE = 'https://www.greetingcarduniverse.com'
 // Bump when the browser-side inside renderer changes so stored inside images are rebuilt.
-const INSIDE_VERSION = 3
+const INSIDE_VERSION = 4
 const MAX_INSIDE_BYTES = 6 * 1024 * 1024
 const insideKey = (pid) => `gcu:inside:${pid}`
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
@@ -246,5 +247,7 @@ export const handleGcuRequest = async (request, env, url, match, corsHeaders) =>
   const res = await route(request, env, url, match)
   const out = new Response(res.body, res)
   for (const [k, v] of Object.entries(corsHeaders)) out.headers.set(k, v)
+  // Without this, a copy cached from a same-origin visit (no CORS headers) is reused cross-origin.
+  out.headers.set('Vary', 'Origin')
   return out
 }

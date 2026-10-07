@@ -323,8 +323,29 @@ const fontCss = (name, px) => {
   const f = FONTS[name];
   return `${f.style || "normal"} ${f.weight || 400} ${px}px "${f.family}"`;
 };
-const loadFonts = () => Promise.all(Object.keys(FONTS).map((n) => document.fonts.load(fontCss(n, 40), "Happy Birthday")))
-  .catch(() => {});
+// On www the page is written in by script, so the Google Fonts sheet may still be loading here (and
+// its load event never fires); until it's applied, document.fonts.load() knows no faces and canvas
+// silently falls back to a default font.
+const knownFamilies = () => new Set([...document.fonts].map((f) => f.family.replace(/"/g, "")));
+const fontRulesReady = async () => {
+  for (let waited = 0; waited < 8000; waited += 50) {
+    const known = knownFamilies();
+    if (Object.values(FONTS).every((f) => known.has(f.family))) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+};
+const loadFonts = async () => {
+  await fontRulesReady();
+  await Promise.all(Object.keys(FONTS).map((n) => document.fonts.load(fontCss(n, 40), "Happy Birthday"))).catch(() => {});
+  const loaded = new Set([...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")));
+  // Canvas can still draw a just-loaded face with the fallback font until it has been used once
+  // and a frame has passed.
+  const ctx = sized(400, 80);
+  for (const n of Object.keys(FONTS)) { ctx.font = fontCss(n, 40); ctx.fillText("Happy Birthday", 0, 60); }
+  ctx.getImageData(0, 0, 1, 1);
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  return Object.values(FONTS).every((f) => loaded.has(f.family));
+};
 
 const loadImage = (src, cors = false) => new Promise((resolve, reject) => {
   const img = new Image();
@@ -668,9 +689,9 @@ async function prepare() {
     return { front: info.front, inside: API_ORIGIN + info.inside, w: front.naturalWidth, h: front.naturalHeight };
   }
   setStatus("Getting the card images…");
-  const [front, preview] = await Promise.all([
+  const [front, preview, fontsOk] = await Promise.all([
     loadImage(info.front),
-    info.hasPreview ? loadImage(`${API}/preview`, true).catch(() => null) : null,
+    info.hasPreview ? loadImage(`${API}/preview?cors=1`, true).catch(() => null) : null,
     loadFonts(),
   ]);
   setStatus("Creating the inside page…");
@@ -679,7 +700,8 @@ async function prepare() {
   const { canvas, meta, landscape = frontLandscape } = renderInside(preview, info.lines || [], frontLandscape);
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
   const q = new URLSearchParams({ w: front.naturalWidth, h: front.naturalHeight, landscape: landscape ? "1" : "0", ...meta });
-  fetch(`${API}/inside?${q}`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob }).catch(() => {});
+  // A page drawn with fallback fonts or without the preview is still shown, but not kept for the next visitor.
+  if (fontsOk && (preview || !info.hasPreview)) fetch(`${API}/inside?${q}`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob }).catch(() => {});
   return { front: info.front, inside: URL.createObjectURL(blob), w: front.naturalWidth, h: front.naturalHeight };
 }
 
