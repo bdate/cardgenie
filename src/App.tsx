@@ -1065,7 +1065,7 @@ const clearCheckoutResumeQueryParam = () => {
     params.delete('resume')
     const nextQuery = params.toString()
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`
-    window.history.replaceState({}, '', nextUrl)
+    window.history.replaceState(window.history.state, '', nextUrl)
   } catch {
     // Ignore history failures.
   }
@@ -3885,7 +3885,7 @@ function App() {
     }
     params.delete('keepsake')
     const nextQuery = params.toString()
-    window.history.replaceState({}, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
   }, [])
 
   useEffect(() => {
@@ -3899,7 +3899,7 @@ function App() {
       params.delete('billing')
       const nextQuery = params.toString()
       const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`
-      window.history.replaceState({}, '', nextUrl)
+      window.history.replaceState(window.history.state, '', nextUrl)
     }
 
     if (billing === 'cancel') {
@@ -7878,6 +7878,174 @@ function App() {
     setHasAcceptedRevision(true)
   }
 
+  // Browser Back steps back through Card Genie screens instead of leaving the site.
+  const navKey = isRecipientView
+    ? 'base'
+    : [
+        adminView
+          ? `admin:${adminView}${adminView === 'shoppers' && selectedShopperId ? `:${selectedShopperId}` : ''}`
+          : showAccountPage
+            ? 'account'
+            : '',
+        printOrderStep !== 'closed' ? `print:${printOrderStep}` : '',
+        showEditor ? 'editor' : '',
+      ]
+        .filter(Boolean)
+        .join('|') || 'base'
+  const hasWorkToProtect =
+    !isRecipientView &&
+    (Boolean(card) ||
+      (Object.keys(initialDetails) as Array<keyof CardDetails>).some(
+        (field) => details[field].trim() !== initialDetails[field].trim(),
+      ))
+
+  const applyNavKey = (key: string) => {
+    const parts = key.split('|')
+    const overlay = parts.find((part) => part === 'account' || part.startsWith('admin:')) || ''
+    const targetPrintStep = (parts.find((part) => part.startsWith('print:'))?.slice(6) || 'closed') as PrintOrderStep
+    const targetEditor = parts.includes('editor')
+
+    if (!overlay) {
+      setShowAccountPage(false)
+      setAdminView(null)
+    } else if (overlay === 'account') {
+      if (!showAccountPage || adminView) {
+        void openAccountPage()
+      }
+    } else {
+      const [, view, shopperId = ''] = overlay.split(':')
+      if (view !== adminView) {
+        setShowAccountPage(false)
+        setAdminView(view as NonNullable<typeof adminView>)
+      }
+      if (view === 'shoppers' && !shopperId && selectedShopperId) {
+        closeShopperHistory()
+      } else if (view === 'shoppers' && shopperId && shopperId !== selectedShopperId) {
+        void openShopperHistory(shopperId)
+      }
+    }
+
+    if (targetPrintStep !== printOrderStep) {
+      setPrintOrderStep(targetPrintStep)
+      setPrintOrderNotice('')
+    }
+    if (!targetEditor && showEditor) {
+      if (editorHasChanges) {
+        acceptEditorChanges()
+      } else {
+        setShowEditor(false)
+        setShowPolishDialog(false)
+      }
+    } else if (targetEditor && !showEditor && card) {
+      openEditor()
+    }
+  }
+
+  const navStackRef = useRef<string[]>([])
+  const navIndexRef = useRef(0)
+  const navArmedRef = useRef(false)
+  const navInteractedRef = useRef(false)
+  const navIgnorePopsRef = useRef(0)
+  const navLeaveHintTimerRef = useRef<number | null>(null)
+  const [showNavLeaveHint, setShowNavLeaveHint] = useState(false)
+  const navStateRef = useRef({ navKey, hasWorkToProtect, applyNavKey })
+  navStateRef.current = { navKey, hasWorkToProtect, applyNavKey }
+
+  const syncNavHistory = () => {
+    if (isRecipientView) {
+      return
+    }
+    const { navKey: key, hasWorkToProtect: hasWork } = navStateRef.current
+    if (!navArmedRef.current) {
+      if (!navInteractedRef.current || (!hasWork && key === 'base')) {
+        return
+      }
+      navArmedRef.current = true
+      navStackRef.current = ['', key]
+      navIndexRef.current = 1
+      window.history.pushState({ ...(window.history.state || {}), cardGenieNav: 1 }, '')
+      return
+    }
+    const stack = navStackRef.current
+    const index = navIndexRef.current
+    if (stack[index] === key) {
+      return
+    }
+    const earlier = stack.lastIndexOf(key, index - 1)
+    if (earlier >= 1) {
+      navIgnorePopsRef.current += 1
+      navIndexRef.current = earlier
+      window.history.go(earlier - index)
+      return
+    }
+    navStackRef.current = [...stack.slice(0, index + 1), key]
+    navIndexRef.current = index + 1
+    window.history.pushState({ ...(window.history.state || {}), cardGenieNav: index + 1 }, '')
+  }
+
+  useEffect(() => {
+    syncNavHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navKey, hasWorkToProtect, isRecipientView])
+
+  useEffect(() => {
+    if (isRecipientView) {
+      return
+    }
+    const markInteraction = () => {
+      if (!navInteractedRef.current) {
+        navInteractedRef.current = true
+        syncNavHistory()
+      }
+    }
+    const handlePopState = (event: PopStateEvent) => {
+      if (navIgnorePopsRef.current > 0) {
+        navIgnorePopsRef.current -= 1
+        return
+      }
+      if (!navArmedRef.current) {
+        return
+      }
+      const target = Number((event.state as { cardGenieNav?: number } | null)?.cardGenieNav) || 0
+      if (target <= 0) {
+        navArmedRef.current = false
+        navInteractedRef.current = false
+        navStackRef.current = []
+        navIndexRef.current = 0
+        navStateRef.current.applyNavKey('base')
+        setShowNavLeaveHint(true)
+        if (navLeaveHintTimerRef.current) {
+          window.clearTimeout(navLeaveHintTimerRef.current)
+        }
+        navLeaveHintTimerRef.current = window.setTimeout(() => setShowNavLeaveHint(false), 4000)
+        return
+      }
+      navIndexRef.current = target
+      navStateRef.current.applyNavKey(navStackRef.current[target] || 'base')
+    }
+    document.addEventListener('pointerdown', markInteraction, true)
+    document.addEventListener('keydown', markInteraction, true)
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      document.removeEventListener('pointerdown', markInteraction, true)
+      document.removeEventListener('keydown', markInteraction, true)
+      window.removeEventListener('popstate', handlePopState)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecipientView])
+
+  useEffect(() => {
+    if (!isGenerating && !isDelivering) {
+      return
+    }
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [isGenerating, isDelivering])
+
   const scrollToCardPreview = () => {
     window.setTimeout(() => {
       previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -9161,6 +9329,11 @@ function App() {
 
   return (
     <main className="app-shell">
+      {showNavLeaveHint && (
+        <div className="nav-leave-hint" role="status">
+          Go back again to leave Card Genie. Your card is saved.
+        </div>
+      )}
       <section className="hero-section">
         {isRecipientView ? (
           <a className="brand brand-split" href="/" aria-label="Card Genie home">

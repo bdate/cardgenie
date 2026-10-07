@@ -5722,3 +5722,21 @@ select.is-placeholder option {
 .account-list.is-expanded .account-row.has-cover-thumb .account-row-actions {
   grid-area: actions;
 }
+
+.nav-leave-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 1000;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: #fff;
+  background: var(--gcu-dark-teal);
+  box-shadow: 0 12px 28px rgba(45, 103, 98, 0.28);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: center;
+}
