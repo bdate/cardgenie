@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GCU Card# __PID__ · Card Genie</title>
+<link rel="icon" href="https://www.card-genie.com/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Playfair+Display:wght@700;800&family=Arimo&family=Questrial&family=Poiret+One&family=Tinos&family=Courgette&family=Comic+Neue&family=Emilys+Candy&family=Pinyon+Script&family=Kalam&family=Gochi+Hand&family=Yellowtail&family=Roboto+Condensed&family=Chewy&family=Patrick+Hand&family=Tenor+Sans&family=Great+Vibes&display=swap">
+<style>
+/* Envelope/card reveal, mirrored from ~/Documents/gcu-inside/animation_template.html. */
+:root {
+  --gcu-orange: #f59e33;
+  --gcu-teal: #8fd0c9;
+  --gcu-dark-teal: #3f9b91;
+  --gcu-grey: #7d7d7d;
+  --gcu-dark-grey: #666666;
+  --gcu-ink: #315f5b;
+  --card-cover-width: 5;
+  --card-cover-height: 7;
+  color: var(--gcu-ink);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(245, 158, 51, 0.34), transparent 34%),
+    radial-gradient(circle at 85% 4%, rgba(143, 208, 201, 0.4), transparent 30%),
+    linear-gradient(135deg, #fff8ef 0%, #f3fbfa 48%, #eef3ff 100%);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px 16px; }
+main { position: relative; width: min(680px, 100%); }
+button { font: inherit; }
+
+.proof-stage { min-height: 530px; }
+
+.envelope-scene, .card-reveal {
+  display: grid; place-items: center; justify-items: center;
+  width: 100%; max-width: 100%; border: 0; border-radius: 30px;
+  padding: 96px 40px 24px;
+  background:
+    radial-gradient(circle at top, rgba(245, 158, 51, 0.28), transparent 35%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(143, 208, 201, 0.22));
+  cursor: pointer; perspective: 1400px;
+}
+.envelope-scene { position: relative; grid-template-rows: 320px auto; align-content: center; row-gap: 22px; }
+.envelope-scene .envelope { grid-row: 1; }
+.opening-stack { position: relative; grid-row: 1; width: min(520px, 88vw); height: 320px; isolation: isolate; }
+.opening-stack .envelope { width: 100%; height: 100%; }
+
+.envelope {
+  --envelope-paper:
+    linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(-32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(145deg, #fff8ef, #eaf8f6);
+  --envelope-lining: linear-gradient(145deg, #e7ecea, #ccd4d1);
+  --envelope-inside: linear-gradient(145deg, #f4f6f5, #e6ebe9);
+  position: relative; width: min(520px, 88vw); height: 320px;
+  transform-style: preserve-3d;
+  box-shadow: 0 26px 35px rgba(63, 155, 145, 0.22);
+  animation: floatIn 700ms ease both;
+}
+.envelope-static { animation: none; }
+.envelope-front-face, .envelope-back, .envelope-body, .envelope-flap, .envelope-liner { position: absolute; inset: 0; }
+.envelope-front-face {
+  z-index: 2; display: grid; place-items: center; align-content: center; color: var(--gcu-ink);
+  background: radial-gradient(circle at 78% 20%, rgba(245, 158, 51, 0.1), transparent 22%), linear-gradient(145deg, #fff8ef, #eaf8f6);
+  box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
+  backface-visibility: hidden;
+}
+.envelope.is-flipping { animation: none; }
+.envelope.is-flipping .envelope-front-face { animation: envelopeFrontFlipOut 2.4s cubic-bezier(0.18, 0.82, 0.22, 1) both; }
+.envelope.is-flipping .envelope-front-address, .envelope.is-flipping .envelope-from { animation: frontAddressFlipCutoff 2.4s linear both; }
+.envelope-from {
+  position: absolute; z-index: 3; top: 36px; left: 38px; max-width: 42%;
+  color: var(--gcu-ink); font-size: 0.82rem; font-weight: 700; line-height: 1.25; text-align: left;
+  transform: translateZ(1px);
+}
+.envelope-front-address {
+  max-width: 68%; font-family: "Playfair Display", Georgia, serif; font-size: clamp(2rem, 4vw, 2.5rem);
+  line-height: 1.12; text-align: center; text-wrap: balance; overflow-wrap: anywhere; grid-area: 1 / 1;
+}
+.envelope-front-address.is-medium { max-width: 62%; font-size: clamp(1.45rem, 3.1vw, 1.85rem); }
+.envelope-front-address.is-long { max-width: 58%; font-size: clamp(1.15rem, 2.5vw, 1.45rem); }
+.envelope-stamp {
+  position: absolute; top: 18px; right: 22px; width: 82px; height: auto; object-fit: contain;
+  filter: drop-shadow(0 8px 12px rgba(22, 39, 43, 0.14)); pointer-events: none;
+}
+.envelope-prompt {
+  display: inline-flex; grid-row: 2; color: var(--gcu-dark-teal);
+  font-size: 1rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.envelope-prompt-placeholder { visibility: hidden; }
+.envelope-back { z-index: 0; background: var(--envelope-paper); box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18); }
+.envelope-back-face {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center;
+  background: var(--envelope-paper); box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
+  transform: rotateY(180deg); transform-style: preserve-3d; backface-visibility: hidden;
+}
+.envelope-back-face .envelope-back, .envelope-back-face .envelope-flap,
+.envelope-back-face .envelope-liner, .envelope-back-face .envelope-body { transform: none; }
+.envelope.is-flipping .envelope-back-face { animation: envelopeBackFlipIn 2.4s cubic-bezier(0.18, 0.82, 0.22, 1) both; transform: none; }
+.envelope-back-face.is-static { transform: none; }
+.envelope-body {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; z-index: 1;
+  background: var(--envelope-paper); box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.18);
+}
+.envelope.is-opening .envelope-body { z-index: 6; background: transparent; box-shadow: none; animation: backEnvelopeLayerReveal 9s linear both; }
+.envelope-liner {
+  z-index: 3; clip-path: polygon(0 0, 50% 62%, 100% 0); background: var(--envelope-inside); pointer-events: none;
+}
+.envelope-flap {
+  z-index: 4; clip-path: polygon(0 0, 50% 62%, 100% 0); background: var(--envelope-lining);
+  transform-origin: top center; animation: flapPeek 2.2s ease-in-out infinite;
+}
+.envelope-flap-static { animation: none; }
+.opening-scene { position: relative; overflow: visible; cursor: default; }
+.opening-scene .envelope { z-index: 3; animation: envelopeOpenAndFade 4.6s ease forwards; }
+.envelope.is-opening .envelope-flap { z-index: 6; transform: translateZ(0px); animation: flapOpen 4.6s cubic-bezier(0.2, 0.9, 0.2, 1) forwards; }
+.envelope.is-opening .envelope-back-face, .envelope.is-opening .envelope-liner { animation: envelopeLayerFade 4.6s ease forwards; }
+.envelope.is-opening .envelope-back, .envelope.is-opening .envelope-back-face,
+.envelope.is-opening .envelope-liner, .envelope.is-opening .envelope-body { backface-visibility: hidden; transform: none; }
+.card-cover-frame img, .open-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.card-reveal { gap: 0; color: var(--gcu-dark-grey); font-weight: 900; }
+.front-reveal, .card-open-scene.is-static-inside { min-height: auto; padding: 28px; place-items: center; align-content: center; }
+.card-cover-frame {
+  position: relative; overflow: hidden; width: min(450px, 100%); margin-inline: auto;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
+  box-shadow: 0 44px 96px rgba(63, 155, 145, 0.3), 0 0 0 1px rgba(63, 155, 145, 0.12);
+  animation: slideFromEnvelope 620ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+.card-cover-frame img { background: #f9f6f0; }
+.card-cover-frame.is-return { animation: none; }
+.open-card {
+  overflow: hidden; width: min(450px, 100%); aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
+  margin: 0 auto; border: 1px solid rgba(63, 155, 145, 0.2); background: #fff;
+  box-shadow: 0 44px 96px rgba(63, 155, 145, 0.3), 0 0 0 1px rgba(63, 155, 145, 0.12);
+  transform-origin: left center; animation: openBook 720ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+.card-open-scene {
+  display: grid; place-items: center; width: 100%; border: 0; padding: 48px 28px; border-radius: 30px;
+  color: inherit;
+  background:
+    radial-gradient(circle at top, rgba(245, 158, 51, 0.22), transparent 35%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(143, 208, 201, 0.2));
+  cursor: pointer; perspective: 1600px;
+}
+.card-view-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px;
+  color: var(--gcu-grey); font-size: 0.92rem; font-weight: 850;
+}
+.card-view-toggle button {
+  border: 0; padding: 0; color: var(--gcu-dark-teal); background: transparent; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.card-view-toggle button.is-selected { color: var(--gcu-ink); text-decoration: none; cursor: default; }
+
+@keyframes floatIn { from { opacity: 0; transform: translateY(26px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes envelopeOpenAndFade {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  28% { opacity: 1; transform: translateY(0) scale(1); }
+  66% { opacity: 1; transform: translateY(34px) scale(0.99); }
+  78% { opacity: 1; transform: translateY(48px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(86px) scale(0.96); }
+}
+@keyframes envelopeLayerFade { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes envelopeFrontFlipOut {
+  0% { opacity: 1; visibility: visible; transform: perspective(1200px) rotateY(0deg) scaleX(1); }
+  49.9% { opacity: 1; visibility: visible; transform: perspective(1200px) rotateY(82deg) scaleX(0.04); }
+  50%, 100% { opacity: 0; visibility: hidden; transform: perspective(1200px) rotateY(90deg) scaleX(0.02); }
+}
+@keyframes envelopeBackFlipIn {
+  0%, 49.9% { opacity: 0; visibility: hidden; transform: perspective(1200px) rotateY(-90deg) scaleX(0.02); }
+  50% { opacity: 1; visibility: visible; transform: perspective(1200px) rotateY(-82deg) scaleX(0.04); }
+  100% { opacity: 1; visibility: visible; transform: perspective(1200px) rotateY(0deg) scaleX(1); }
+}
+@keyframes frontAddressFlipCutoff { 0%, 29% { visibility: visible; opacity: 1; } 29.1%, 100% { visibility: hidden; opacity: 0; } }
+@keyframes backEnvelopeLayerReveal { 0%, 14.9% { visibility: hidden; opacity: 0; } 15%, 100% { visibility: visible; opacity: 1; } }
+@keyframes flapPeek { 0%, 100% { transform: rotateX(0deg); } 50% { transform: rotateX(16deg); } }
+@keyframes flapOpen {
+  0% { opacity: 1; transform: rotateX(0deg) translateZ(0px); }
+  36% { opacity: 1; transform: rotateX(118deg) translateY(-8px) translateZ(0px); }
+  78% { opacity: 1; transform: rotateX(118deg) translateY(-8px) translateZ(0px); }
+  100% { opacity: 0; transform: rotateX(118deg) translateY(-8px) translateZ(0px); }
+}
+@keyframes slideFromEnvelope { from { opacity: 0; transform: translateY(80px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes openBook {
+  from { opacity: 0; transform: perspective(1000px) rotateY(-5deg) scale(0.96); }
+  to { opacity: 1; transform: perspective(1000px) rotateY(0deg) scale(1); }
+}
+
+/* The card slides out from inside the envelope: a sleeve (clipped at the envelope's bottom edge)
+   holds the card, and a pocket layer with the envelope's V opening sits in front of it. Both ride
+   along with the envelope's drop. Portrait cards are taller than the envelope, so they start lower
+   and travel further. --card-w is shared with the cover/inside views so the card never resizes. */
+body { --card-w: 64%; --rise-start: 42%; --rise-peek: 36%; --rise-near: -46%; --rise-end: -50%; }
+body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-near: -72%; --rise-end: -76%; }
+.card-sleeve, .envelope-pocket {
+  position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
+  animation: envelopeOpenAndFade 4.6s ease forwards;
+}
+.card-sleeve { top: -200%; z-index: 5; overflow: hidden; }
+.envelope-pocket {
+  --envelope-paper:
+    linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(-32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(145deg, #fff8ef, #eaf8f6);
+  top: 0; z-index: 7; background: var(--envelope-paper);
+  clip-path: polygon(0 0, 50% 62%, 100% 0, 100% 100%, 0 100%);
+  filter: drop-shadow(0 -1px 0 rgba(63, 155, 145, 0.18));
+}
+.sleeve-card {
+  position: absolute; left: 50%; bottom: 6px; width: var(--card-w);
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
+  background: #fff; box-shadow: 0 18px 40px rgba(63, 155, 145, 0.22);
+  animation: cardSlideOut 4.6s cubic-bezier(0.3, 0.8, 0.25, 1) forwards;
+}
+.sleeve-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@keyframes cardSlideOut {
+  0%, 22% { opacity: 0; transform: translateX(-50%) translateY(var(--rise-start)); }
+  30% { opacity: 1; transform: translateX(-50%) translateY(var(--rise-peek)); }
+  84% { opacity: 1; transform: translateX(-50%) translateY(var(--rise-near)); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(var(--rise-end)); }
+}
+/* Envelope is min(520px, 88vw) wide; the card is --card-w of that. */
+.card-cover-frame, .open-card { width: min(333px, 56.3vw); }
+.is-landscape .card-cover-frame, .is-landscape .open-card { width: min(468px, 79vw); }
+.envelope-ghost { position: absolute; margin: 0; z-index: 1; pointer-events: none; }
+
+@media (max-width: 640px) {
+  .envelope-scene { padding: 56px 16px 20px; grid-template-rows: 220px auto; }
+  .envelope, .opening-stack { height: 220px; }
+  .envelope-from { top: 22px; left: 22px; }
+  .envelope-stamp { width: 60px; }
+}
+
+.gcu-loading {
+  display: grid; justify-items: center; gap: 14px; padding: 72px 32px 64px; border-radius: 30px; text-align: center;
+  background:
+    radial-gradient(circle at top, rgba(245, 158, 51, 0.22), transparent 40%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(143, 208, 201, 0.22));
+  box-shadow: 0 26px 60px rgba(63, 155, 145, 0.16);
+}
+.gcu-loading h1 {
+  margin: 10px 0 0; font-family: "Playfair Display", Georgia, serif; font-size: clamp(1.4rem, 4vw, 2rem);
+  line-height: 1.2; color: var(--gcu-ink);
+}
+.gcu-title { margin: 0; max-width: 34ch; color: var(--gcu-dark-grey); font-size: 0.86rem; font-weight: 600; min-height: 1.3em; }
+.gcu-status { margin: 4px 0 0; color: var(--gcu-grey); font-size: 0.78rem; letter-spacing: 0.04em; }
+.gcu-error { color: #b4442a; font-weight: 700; }
+.gcu-orbit { position: relative; width: 84px; height: 84px; }
+.gcu-orbit::before, .gcu-orbit::after { content: ""; position: absolute; inset: 0; border-radius: 50%; }
+.gcu-orbit::before { border: 6px solid rgba(143, 208, 201, 0.35); }
+.gcu-orbit::after {
+  border: 6px solid transparent; border-top-color: var(--gcu-orange); border-right-color: var(--gcu-orange);
+  animation: gcuSpin 900ms linear infinite;
+}
+.gcu-orbit span {
+  position: absolute; inset: 20px; display: grid; place-items: center; border-radius: 6px;
+  background: linear-gradient(145deg, #fff8ef, #eaf8f6); box-shadow: inset 0 0 0 1px rgba(63, 155, 145, 0.25);
+  animation: gcuPulse 1.6s ease-in-out infinite;
+}
+.gcu-orbit span::before { content: ""; width: 60%; height: 2px; background: var(--gcu-dark-teal); box-shadow: 0 6px 0 var(--gcu-teal), 0 -6px 0 var(--gcu-teal); }
+@keyframes gcuSpin { to { transform: rotate(360deg); } }
+@keyframes gcuPulse { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.04); } }
+.gcu-footer { margin-top: 18px; text-align: center; font-size: 0.78rem; color: var(--gcu-grey); }
+.gcu-footer a { color: var(--gcu-dark-teal); font-weight: 700; }
+</style>
+</head>
+<body>
+<main id="stage"></main>
+<script>
+const PID = "__PID__";
+const API_ORIGIN = "__API__";
+const API = `${API_ORIGIN}/gcu/${PID}`;
+const KNOWN_TITLE = "__TITLE__";
+const stage = document.getElementById("stage");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- Progress screen ----------
+stage.innerHTML = `
+  <section class="gcu-loading" aria-live="polite">
+    <div class="gcu-orbit" aria-hidden="true"><span></span></div>
+    <h1>Creating animation for GCU Card# ${esc(PID)}</h1>
+    <p class="gcu-title">${esc(KNOWN_TITLE)}</p>
+    <p class="gcu-status">Finding the card…</p>
+  </section>`;
+const setTitle = (t) => { const el = stage.querySelector(".gcu-title"); if (el && t) el.textContent = t; };
+const setStatus = (t, error = false) => {
+  const el = stage.querySelector(".gcu-status");
+  if (!el) return;
+  el.textContent = t;
+  el.classList.toggle("gcu-error", error);
+  if (error) stage.querySelector(".gcu-orbit")?.remove();
+};
+if (KNOWN_TITLE) document.title = `${KNOWN_TITLE} · GCU ${PID}`;
+
+// ---------- Inside image (port of gcu-inside/gcu_card.py) ----------
+// GCU's supported inside fonts, each drawn with the closest freely available web font.
+const FONTS = {
+  "Arial": { family: "Arimo" },
+  "Avant Garde": { family: "Questrial" },
+  "BernhardFashion BT": { family: "Poiret One" },
+  "BibleScrT": { family: "Courgette" },
+  "Comic Sans": { family: "Comic Neue" },
+  "Curlz": { family: "Emilys Candy" },
+  "Edwardian": { family: "Pinyon Script" },
+  "Efflorescence": { family: "Kalam" },
+  "Felt Tip Roman": { family: "Gochi Hand" },
+  "Freehand591": { family: "Yellowtail" },
+  "Helvetica Neue CN": { family: "Roboto Condensed" },
+  "Jokerman": { family: "Chewy" },
+  "Marydale": { family: "Patrick Hand" },
+  "Optima": { family: "Tenor Sans" },
+  "Snell Roundhand": { family: "Great Vibes" },
+  "Times New Roman": { family: "Tinos" },
+};
+const PRINT_LONG = 2100, PRINT_SHORT = 1500;
+const fontCss = (name, px) => {
+  const f = FONTS[name];
+  return `${f.style || "normal"} ${f.weight || 400} ${px}px "${f.family}"`;
+};
+const loadFonts = () => Promise.all(Object.keys(FONTS).map((n) => document.fonts.load(fontCss(n, 40), "Happy Birthday")))
+  .catch(() => {});
+
+const loadImage = (src, cors = false) => new Promise((resolve, reject) => {
+  const img = new Image();
+  if (cors) img.crossOrigin = "anonymous";
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error("Couldn't load the card images. Please try again."));
+  img.src = src;
+});
+
+const work = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+const sized = (w, h) => { work.canvas.width = w; work.canvas.height = h; return work; };
+
+function messagePanel(img) {
+  const W0 = img.naturalWidth, H0 = img.naturalHeight;
+  const ctx = sized(W0, H0);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W0, H0); ctx.drawImage(img, 0, 0);
+  const rgba = ctx.getImageData(0, 0, W0, H0).data;
+  const gray = new Float32Array(W0 * H0);
+  for (let i = 0; i < gray.length; i++) gray[i] = (rgba[i * 4] * 299 + rgba[i * 4 + 1] * 587 + rgba[i * 4 + 2] * 114) / 1000;
+  // Portrait cards open left-right (message on the right half); landscape ones fold top-bottom.
+  const landscape = H0 > W0;
+  const tw = landscape ? H0 : W0, th = landscape ? W0 : H0;
+  const at = (x, y) => (landscape ? gray[x * W0 + y] : gray[y * W0 + x]);
+  const isRule = (x) => { let n = 0; for (let y = 0; y < th; y += 2) if (at(x, y) < 200) n++; return n > (th * 0.3) / 2; };
+  let x0 = Math.floor(tw / 2);
+  for (let x = Math.floor(tw * 0.4); x < Math.floor(tw * 0.6); x++) {
+    if (isRule(x)) { x0 = x; while (x0 < tw && isRule(x0)) x0++; x0++; break; }
+  }
+  const [cx, cy, cw, ch] = landscape ? [0, x0, W0, H0 - x0] : [x0, 0, W0 - x0, H0];
+  const pg = new Float32Array(cw * ch), prgb = new Uint8ClampedArray(cw * ch * 3);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const s = (y + cy) * W0 + x + cx, d = y * cw + x;
+    pg[d] = gray[s]; prgb[d * 3] = rgba[s * 4]; prgb[d * 3 + 1] = rgba[s * 4 + 1]; prgb[d * 3 + 2] = rgba[s * 4 + 2];
+  }
+  return { landscape, panel: { w: cw, h: ch, gray: pg, rgb: prgb } };
+}
+
+function minOf(arr) { let m = 255; for (const v of arr) if (v < m) m = v; return m; }
+
+// Ink boxes of each text line: slivers merge into neighbours, and blocks of touching lines are
+// split at the emptiest rows until the count matches the page's text.
+function lineBoxes(panel, expected) {
+  const { w, h, gray } = panel;
+  const threshold = (minOf(gray) + 255) / 2;
+  const ink = new Uint8Array(w * h);
+  const rowInk = new Array(h).fill(0);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (gray[y * w + x] < threshold) { ink[y * w + x] = 1; rowInk[y]++; }
+  const groups = [];
+  let start = null;
+  for (let y = 0; y <= h; y++) {
+    const on = y < h && rowInk[y] > 0;
+    if (on && start === null) start = y;
+    else if (!on && start !== null) { groups.push([start, y]); start = null; }
+  }
+  if (!groups.length) return [];
+  const tall = groups.map(([a, b]) => b - a).sort((p, q) => p - q)[Math.floor(groups.length / 2)];
+  let merged = [];
+  for (const g of groups) {
+    if (merged.length && g[1] - g[0] < tall * 0.45) merged[merged.length - 1][1] = g[1];
+    else merged.push([...g]);
+  }
+  while (merged.length > expected) {
+    let i = 0;
+    for (let k = 1; k < merged.length - 1; k++) if (merged[k + 1][0] - merged[k][1] < merged[i + 1][0] - merged[i][1]) i = k;
+    merged[i][1] = merged.splice(i + 1, 1)[0][1];
+  }
+  if (merged.length < expected) {
+    const heights = merged.map(([a, b]) => b - a);
+    const pitch = heights.reduce((s, v) => s + v, 0) / expected;
+    const counts = heights.map((hh) => Math.max(1, Math.round(hh / pitch)));
+    const total = () => counts.reduce((s, v) => s + v, 0);
+    while (total() !== expected) {
+      const step = total() < expected ? 1 : -1;
+      let k = -1, best = -Infinity;
+      counts.forEach((c, j) => {
+        const v = c + step >= 1 ? step * (heights[j] / pitch - c) : -Infinity;
+        if (v > best) { best = v; k = j; }
+      });
+      if (k < 0) break;
+      counts[k] += step;
+    }
+    const split = [];
+    merged.forEach(([a, b], idx) => {
+      const n = counts[idx], stepH = (b - a) / n;
+      let prev = a;
+      for (let j = 1; j < n; j++) {
+        const guess = Math.round(a + j * stepH);
+        const lo = Math.max(prev + 1, guess - Math.round(stepH * 0.3)), hi = Math.min(b - 1, guess + Math.round(stepH * 0.3));
+        let cut = guess;
+        if (lo <= hi) {
+          cut = lo;
+          for (let y = lo; y <= hi; y++) {
+            if (rowInk[y] < rowInk[cut] || (rowInk[y] === rowInk[cut] && Math.abs(y - guess) < Math.abs(cut - guess))) cut = y;
+          }
+        }
+        split.push([prev, cut]);
+        prev = cut + 1;
+      }
+      split.push([prev, b]);
+    });
+    merged = split;
+  }
+  return merged.map(([a, b]) => {
+    let x0 = w, x1 = 0;
+    for (let y = a; y < b; y++) for (let x = 0; x < w; x++) if (ink[y * w + x]) { if (x < x0) x0 = x; if (x + 1 > x1) x1 = x + 1; }
+    return x1 > x0 ? [x0, a, x1, b] : [0, a, w, b];
+  });
+}
+
+function inkColor(panel, boxes) {
+  const { w, gray, rgb } = panel;
+  const picks = [];
+  for (const [x0, y0, x1, y1] of boxes) {
+    let darkest = 255;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) darkest = Math.min(darkest, gray[y * w + x]);
+    const cut = darkest + (255 - darkest) * 0.25;
+    const ch = [[], [], []];
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = y * w + x;
+      if (gray[i] <= cut) for (let c = 0; c < 3; c++) ch[c].push(rgb[i * 3 + c]);
+    }
+    if (ch[0].length) picks.push(ch.map((v) => v.sort((p, q) => p - q)[Math.floor(v.length / 2)]));
+  }
+  if (!picks.length) return "#111111";
+  const [r, g, b] = [0, 1, 2].map((c) => picks.map((p) => p[c]).sort((p, q) => p - q)[Math.floor(picks.length / 2)]);
+  if (Math.max(r, g, b) < 60 && Math.max(r, g, b) - Math.min(r, g, b) < 20) return "#111111";
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+// Tight ink mask of one line (0-255). originX/baseline locate the text origin inside the mask.
+function lineMask(name, text, px) {
+  work.font = fontCss(name, px);
+  const m = work.measureText(text);
+  const left = Math.ceil(m.actualBoundingBoxLeft) + 4, asc = Math.ceil(m.actualBoundingBoxAscent) + 4;
+  const w = Math.max(1, left + Math.ceil(m.actualBoundingBoxRight) + 4), h = Math.max(1, asc + Math.ceil(m.actualBoundingBoxDescent) + 4);
+  const ctx = sized(w, h);
+  ctx.font = fontCss(name, px);
+  ctx.fillStyle = "#000";
+  ctx.fillText(text, left, asc);
+  const a = ctx.getImageData(0, 0, w, h).data;
+  let bx0 = w, by0 = h, bx1 = 0, by1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (a[(y * w + x) * 4 + 3] > 0) {
+    if (x < bx0) bx0 = x; if (y < by0) by0 = y; if (x >= bx1) bx1 = x + 1; if (y >= by1) by1 = y + 1;
+  }
+  if (bx1 <= bx0) { bx0 = 0; by0 = 0; bx1 = w; by1 = h; }
+  const mw = bx1 - bx0, mh = by1 - by0, d = new Float32Array(mw * mh);
+  for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) d[y * mw + x] = a[((y + by0) * w + x + bx0) * 4 + 3];
+  return { w: mw, h: mh, d, originX: left - bx0, baseline: asc - by0 };
+}
+
+const fitPx = (name, text, targetW, start = 40) => Math.max(4, Math.round((start * targetW) / Math.max(1, lineMask(name, text, start).w)));
+
+function boxBlur(d, w, h) {
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = Math.min(w - 1, Math.max(0, x + dx)), yy = Math.min(h - 1, Math.max(0, y + dy));
+      s += d[yy * w + xx];
+    }
+    out[y * w + x] = s / 9;
+  }
+  return out;
+}
+
+// 0 = identical ink, 1 = no overlap. Masks are centred on a shared canvas, then nudged a couple of
+// pixels to the best overlap, since preview text is only ~15px tall.
+function overlayError(a, b) {
+  const pad = 3, w = Math.max(a.w, b.w) + 2 * pad, h = Math.max(a.h, b.h) + 2 * pad;
+  const place = (m) => {
+    const out = new Float32Array(w * h), ox = Math.floor((w - m.w) / 2), oy = Math.floor((h - m.h) / 2);
+    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) out[(y + oy) * w + x + ox] = m.d[y * m.w + x];
+    return boxBlur(out, w, h);
+  };
+  const ca = place(a), cb = place(b);
+  let total = 0;
+  for (let i = 0; i < ca.length; i++) total += ca[i] + cb[i];
+  let best = Infinity;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    let s = 0;
+    for (let y = 0; y < h; y++) {
+      const sy = (((y - dy) % h) + h) % h;
+      for (let x = 0; x < w; x++) s += Math.abs(ca[sy * w + ((((x - dx) % w) + w) % w)] - cb[y * w + x]);
+    }
+    if (s < best) best = s;
+  }
+  return best / Math.max(1, total);
+}
+
+function resizeMask(m, nw, nh) {
+  const src = document.createElement("canvas");
+  src.width = m.w; src.height = m.h;
+  const sctx = src.getContext("2d");
+  const img = sctx.createImageData(m.w, m.h);
+  for (let i = 0; i < m.d.length; i++) img.data[i * 4 + 3] = m.d[i];
+  sctx.putImageData(img, 0, 0);
+  const ctx = sized(nw, nh);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, 0, 0, nw, nh);
+  const a = ctx.getImageData(0, 0, nw, nh).data, d = new Float32Array(nw * nh);
+  for (let i = 0; i < d.length; i++) d[i] = a[i * 4 + 3];
+  return { w: nw, h: nh, d };
+}
+
+const SHEARS = Array.from({ length: 17 }, (_, i) => (i - 8) / 20);
+// Horizontal shear that makes the strokes most vertical (0 upright, >0 leaning right).
+function slant(m) {
+  const { w, h, d } = m, pad = Math.round(h * 0.4), W2 = w + 2 * pad;
+  let best = -1, bestK = 0;
+  for (const k of SHEARS) {
+    const cols = new Float32Array(W2);
+    for (let y = 0; y < h; y++) {
+      const shift = -k * (y + 0.5) - pad + (k * h) / 2;
+      for (let x = 0; x < W2; x++) {
+        const sx = x + 0.5 + shift - 0.5, x0 = Math.floor(sx), f = sx - x0;
+        const v0 = x0 >= 0 && x0 < w ? d[y * w + x0] : 0, v1 = x0 + 1 >= 0 && x0 + 1 < w ? d[y * w + x0 + 1] : 0;
+        cols[x] += v0 * (1 - f) + v1 * f;
+      }
+    }
+    let peak = 0;
+    for (const c of cols) peak += (c / h) * (c / h);
+    if (peak > best) { best = peak; bestK = k; }
+  }
+  return bestK;
+}
+
+function cropTarget(panel, [x0, y0, x1, y1], gain) {
+  const w = x1 - x0, h = y1 - y0, d = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = Math.min(255, Math.round((255 - panel.gray[(y + y0) * panel.w + x + x0]) * gain));
+  return { w, h, d };
+}
+
+function pickFont(panel, boxes, lines) {
+  let widest = 0;
+  boxes.forEach((b, i) => { if (b[2] - b[0] > boxes[widest][2] - boxes[widest][0]) widest = i; });
+  // Full-strength ink should read as 255 whatever the colour, so light colours aren't mistaken for thin strokes.
+  const gain = 255 / Math.max(1, 255 - minOf(panel.gray));
+  const targets = boxes.map((b) => cropTarget(panel, b, gain));
+  const targetSlant = targets.reduce((s, t) => s + slant(t), 0) / targets.length;
+  const scores = {};
+  for (const name of Object.keys(FONTS)) {
+    const px = fitPx(name, lines[widest], boxes[widest][2] - boxes[widest][0]);
+    // Drawn 4x larger and shrunk, like the site's own preview; drawing straight at ~15px lets the
+    // browser's hinting distort the shapes enough to tip close calls.
+    const masks = lines.map((t) => {
+      const big = lineMask(name, t, px * 4);
+      return resizeMask(big, Math.max(1, Math.round(big.w / 4)), Math.max(1, Math.round(big.h / 4)));
+    });
+    let err = 0;
+    masks.forEach((m, i) => {
+      const [x0, y0, x1, y1] = boxes[i], bw = x1 - x0, bh = y1 - y0;
+      err += overlayError(m, targets[i]) + 0.5 * (Math.abs(m.w - bw) / bw + Math.abs(m.h - bh) / bh);
+    });
+    // Slant at preview size; italic vs upright is the clearest tell at ~15px.
+    const fontSlant = masks.reduce((s, m, i) => {
+      const bh = boxes[i][3] - boxes[i][1];
+      return s + slant(resizeMask(m, Math.max(1, Math.round((m.w * bh) / Math.max(1, m.h))), bh));
+    }, 0) / masks.length;
+    scores[name] = [err / lines.length + 1.5 * Math.abs(fontSlant - targetSlant), px];
+  }
+  const best = Object.keys(scores).reduce((p, q) => (scores[q][0] < scores[p][0] ? q : p));
+  return { font: best, px: scores[best][1] };
+}
+
+function alignment(boxes, panelW) {
+  if (boxes.length < 2) {
+    const c = (boxes[0][0] + boxes[0][2]) / 2;
+    return Math.abs(c - panelW / 2) < panelW * 0.15 ? "center" : c < panelW / 2 ? "left" : "right";
+  }
+  const spread = (vals) => Math.max(...vals) - Math.min(...vals);
+  const s = { left: spread(boxes.map((b) => b[0])), center: spread(boxes.map((b) => (b[0] + b[2]) / 2)), right: spread(boxes.map((b) => b[2])) };
+  return Object.keys(s).reduce((p, q) => (s[q] < s[p] ? q : p));
+}
+
+function blankPage(landscape) {
+  const c = document.createElement("canvas");
+  c.width = landscape ? PRINT_LONG : PRINT_SHORT;
+  c.height = landscape ? PRINT_SHORT : PRINT_LONG;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  return { c, ctx };
+}
+
+// Default layout when there's no preview to match: 22pt Times, centred a bit above the middle.
+function renderDefault(lines, landscape) {
+  const { c, ctx } = blankPage(landscape);
+  const name = "Times New Roman", px = Math.round(22 * (300 / 72) * 0.95), pitch = px * 1.03;
+  ctx.font = fontCss(name, px);
+  const capH = ctx.measureText("H").actualBoundingBoxAscent;
+  const top = 0.394 * c.height - (capH + pitch * (lines.length - 1)) / 2;
+  ctx.fillStyle = "#111111"; ctx.textAlign = "center";
+  lines.forEach((t, i) => ctx.fillText(t, 0.483 * c.width, top + capH + i * pitch));
+  return { canvas: c, meta: { font: name, color: "#111111", align: "center" } };
+}
+
+function renderInside(preview, lines, frontLandscape) {
+  const textLines = lines.filter(Boolean);
+  if (!preview) return textLines.length ? renderDefault(lines, frontLandscape) : { canvas: blankPage(frontLandscape).c, meta: {} };
+  const { landscape, panel } = messagePanel(preview);
+  if (!textLines.length) return { canvas: blankPage(landscape).c, meta: {}, landscape };
+  const boxes = lineBoxes(panel, textLines.length);
+  if (boxes.length !== textLines.length) return { ...renderDefault(lines, landscape), landscape };
+  const { font, px: previewPx } = pickFont(panel, boxes, textLines);
+  const { c, ctx } = blankPage(landscape);
+  const sx = c.width / panel.w, sy = c.height / panel.h, scale = (sx + sy) / 2;
+  const align = alignment(boxes, panel.w), color = inkColor(panel, boxes);
+  const px = Math.round(previewPx * scale);
+  const masks = textLines.map((t) => lineMask(font, t, px));
+  // Baselines are evenly spaced (blank lines count as a step), so fit one baseline grid to all
+  // lines instead of trusting each line's ink centre, which ascenders and descenders pull around.
+  const steps = [];
+  lines.forEach((s, i) => { if (s) steps.push(i); });
+  const seen = masks.map((m, i) => ((boxes[i][1] + boxes[i][3]) / 2) * sy - m.h / 2 + m.baseline);
+  let baselines = seen;
+  const n = steps.length;
+  if (n > 1) {
+    const ms = steps.reduce((s, v) => s + v, 0) / n, mb = seen.reduce((s, v) => s + v, 0) / n;
+    const pitch = steps.reduce((s, v, i) => s + (v - ms) * (seen[i] - mb), 0) / steps.reduce((s, v) => s + (v - ms) ** 2, 0);
+    baselines = steps.map((s) => mb + pitch * (s - ms));
+  }
+  ctx.font = fontCss(font, px);
+  ctx.fillStyle = color;
+  masks.forEach((m, i) => {
+    const [x0, , x1] = boxes[i];
+    const left = align === "left" ? x0 * sx : align === "right" ? x1 * sx - m.w : ((x0 + x1) / 2) * sx - m.w / 2;
+    ctx.fillText(textLines[i], left + m.originX, baselines[i]);
+  });
+  return { canvas: c, meta: { font, color, align }, landscape };
+}
+
+// ---------- Build ----------
+async function prepare() {
+  const res = await fetch(`${API}/info`);
+  const info = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(info.error || `Couldn't look up GCU Card# ${PID}.`);
+  setTitle(info.title);
+  if (info.title) document.title = `${info.title} · GCU ${PID}`;
+  if (info.inside) {
+    setStatus("Loading the card…");
+    const [front] = await Promise.all([loadImage(info.front), loadImage(API_ORIGIN + info.inside)]);
+    return { front: info.front, inside: API_ORIGIN + info.inside, w: front.naturalWidth, h: front.naturalHeight };
+  }
+  setStatus("Getting the card images…");
+  const [front, preview] = await Promise.all([
+    loadImage(info.front),
+    info.hasPreview ? loadImage(`${API}/preview`, true).catch(() => null) : null,
+    loadFonts(),
+  ]);
+  setStatus("Creating the inside page…");
+  await new Promise((r) => setTimeout(r, 30));
+  const frontLandscape = front.naturalWidth > front.naturalHeight;
+  const { canvas, meta, landscape = frontLandscape } = renderInside(preview, info.lines || [], frontLandscape);
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
+  const q = new URLSearchParams({ w: front.naturalWidth, h: front.naturalHeight, landscape: landscape ? "1" : "0", ...meta });
+  fetch(`${API}/inside?${q}`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob }).catch(() => {});
+  return { front: info.front, inside: URL.createObjectURL(blob), w: front.naturalWidth, h: front.naturalHeight };
+}
+
+// ---------- Envelope reveal (mirrors gcu-inside/animation_template.html) ----------
+function startAnimation(CARD) {
+  document.documentElement.style.setProperty("--card-cover-width", CARD.w);
+  document.documentElement.style.setProperty("--card-cover-height", CARD.h);
+  if (CARD.w > CARD.h) document.body.classList.add("is-landscape");
+  const address = `To ${CARD.to}`;
+  const sizeClass = address.length > 34 ? " is-long" : address.length > 22 ? " is-medium" : "";
+  const frontFace = `
+    <div class="envelope-front-face">
+      <img class="envelope-stamp" src="https://www.card-genie.com/stamp.webp" alt="" aria-hidden="true">
+      <span class="envelope-from">From ${esc(CARD.from)}</span>
+      <span class="envelope-front-address${sizeClass}">${esc(address)}</span>
+    </div>`;
+  const placeholder = `<span class="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">Reveal your card</span>`;
+  const toggle = (step) => `
+    <nav class="card-view-toggle" aria-label="Card view">
+      <button class="${step === "front" ? "is-selected" : ""}" data-go="front" type="button">Cover</button>
+      <span aria-hidden="true">|</span>
+      <button class="${step === "inside" ? "is-selected" : ""}" data-go="inside" type="button">Inside</button>
+      <span aria-hidden="true">|</span>
+      <button data-go="envelope" type="button">Replay</button>
+    </nav>`;
+  const views = {
+    envelope: () => `
+      <button class="proof-stage envelope-scene" type="button" data-go="envelopeFlip">
+        <div class="envelope">${frontFace}</div>
+        <span class="envelope-prompt">Reveal your card</span>
+      </button>`,
+    envelopeFlip: () => `
+      <div class="proof-stage envelope-scene">
+        <div class="envelope is-flipping">
+          ${frontFace}
+          <div class="envelope-back-face">
+            <div class="envelope-back"></div><div class="envelope-liner"></div>
+            <div class="envelope-flap envelope-flap-static"></div><div class="envelope-body"></div>
+          </div>
+        </div>${placeholder}
+      </div>`,
+    envelopeBack: (opening = false) => `
+      <div class="proof-stage envelope-scene${opening ? " opening-scene" : ""}">
+        <div class="opening-stack">
+          <div class="envelope envelope-static${opening ? " is-opening" : ""}">
+            <div class="envelope-back-face is-static"><div class="envelope-back"></div><div class="envelope-body"></div></div>
+            <div class="envelope-liner"></div>
+            <div class="envelope-flap${opening ? "" : " envelope-flap-static"}"></div>
+          </div>
+          ${opening ? `<div class="card-sleeve"><div class="sleeve-card"><img src="${CARD.front}" alt="Card front"></div></div>
+                       <div class="envelope-pocket"></div>` : ""}
+        </div>${placeholder}
+      </div>`,
+    opening: () => views.envelopeBack(true),
+    front: (fromEnvelope) => `
+      <button class="proof-stage card-reveal front-reveal" type="button" data-go="inside">
+        <div class="card-cover-frame${fromEnvelope ? "" : " is-return"}"><img src="${CARD.front}" alt="Card front"></div>
+      </button>${toggle("front")}`,
+    inside: () => `
+      <button class="proof-stage card-open-scene is-static-inside" type="button" data-go="front">
+        <div class="open-card"><img src="${CARD.inside}" alt="Card inside"></div>
+      </button>${toggle("inside")}`,
+  };
+
+  // Copy of the opening scene frozen at its last frame, so the envelope can fade out while the
+  // card glides to its resting spot.
+  function frozenCopy(scene, skip) {
+    const copy = scene.cloneNode(true);
+    const src = [scene, ...scene.querySelectorAll("*")];
+    const dst = [copy, ...copy.querySelectorAll("*")];
+    src.forEach((el, i) => {
+      const cs = getComputedStyle(el);
+      Object.assign(dst[i].style, { animation: "none", transform: cs.transform, opacity: cs.opacity, clipPath: cs.clipPath });
+    });
+    copy.querySelectorAll(skip).forEach((el) => el.remove());
+    copy.classList.add("envelope-ghost");
+    return copy;
+  }
+
+  const timers = [];
+  function go(step, fromEnvelope = false) {
+    if (step === "envelope") timers.splice(0).forEach(clearTimeout);
+    const settle = step === "front" && fromEnvelope && stage.querySelector(".sleeve-card");
+    let cardWas, sceneWas, ghost;
+    if (settle) {
+      cardWas = stage.querySelector(".sleeve-card").getBoundingClientRect();
+      sceneWas = stage.firstElementChild.getBoundingClientRect();
+      ghost = frozenCopy(stage.firstElementChild, ".card-sleeve");
+    }
+    stage.innerHTML = views[step](fromEnvelope && !settle);
+    if (settle) {
+      const frame = stage.querySelector(".card-cover-frame");
+      const now = frame.getBoundingClientRect();
+      const box = stage.getBoundingClientRect();
+      Object.assign(ghost.style, {
+        left: `${sceneWas.left - box.left}px`, top: `${sceneWas.top - box.top}px`,
+        width: `${sceneWas.width}px`, height: `${sceneWas.height}px`,
+      });
+      stage.appendChild(ghost);
+      Object.assign(frame.style, { zIndex: 2, transformOrigin: "top left" });
+      frame.animate([
+        { transform: `translate(${cardWas.left - now.left}px, ${cardWas.top - now.top}px) scale(${cardWas.width / now.width})` },
+        { transform: "none" },
+      ], { duration: 1100, easing: "cubic-bezier(0.3, 0.8, 0.25, 1)" });
+      ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 700, easing: "ease", fill: "forwards" })
+        .finished.then(() => ghost.remove());
+      stage.querySelector(".card-view-toggle")
+        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 1100 });
+    }
+    if (step === "envelopeFlip") timers.push(setTimeout(() => go("envelopeBack"), 1200));
+    if (step === "envelopeBack") timers.push(setTimeout(() => go("opening"), 350));
+    if (step === "opening") timers.push(setTimeout(() => go("front", true), 4600));
+  }
+  stage.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-go]");
+    if (el && !el.disabled) go(el.dataset.go);
+  });
+  go("envelope");
+}
+
+prepare()
+  .then((card) => startAnimation({ ...card, to: "You", from: "Greeting Card Universe" }))
+  .catch((err) => setStatus(err.message || "Something went wrong.", true));
+</script>
+</body>
+</html>

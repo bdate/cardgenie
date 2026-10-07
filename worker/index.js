@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import Stripe from 'stripe'
+import { handleGcuRequest, matchGcuPath } from './gcu.js'
 import {
   accountDbReady,
   applyCreditChange,
@@ -6586,6 +6587,11 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/health') {
     return jsonResponse(request, env, { ok: true })
+  }
+
+  const gcuPath = matchGcuPath(url.pathname)
+  if (gcuPath) {
+    return handleGcuRequest(request, env, url, gcuPath, getCorsHeaders(request, env))
   }
 
   const sharePath = request.method === 'GET' ? getSharePathParts(url.pathname) : null

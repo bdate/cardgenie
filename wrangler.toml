@@ -23,6 +23,23 @@ zone_name = "card-genie.com"
 pattern = "card-genie.com/c/*"
 zone_name = "card-genie.com"
 
+# GCU card animations: www.card-genie.com/gcu/<card#> (route paths are case-sensitive).
+[[routes]]
+pattern = "www.card-genie.com/gcu/*"
+zone_name = "card-genie.com"
+
+[[routes]]
+pattern = "www.card-genie.com/GCU/*"
+zone_name = "card-genie.com"
+
+[[routes]]
+pattern = "card-genie.com/gcu/*"
+zone_name = "card-genie.com"
+
+[[routes]]
+pattern = "card-genie.com/GCU/*"
+zone_name = "card-genie.com"
+
 [triggers]
 crons = ["*/15 * * * *"]
 
