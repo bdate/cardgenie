@@ -9415,10 +9415,30 @@ function App() {
               }`.trim()}
             >
               {creditNotice ||
-                (accountFirstName
-                  ? `Welcome back, ${accountFirstName}. Ready to make another card?`
-                  : 'Ready to make your next card?')}
+                (!isSignedIn
+                  ? 'Try creating a card in seconds!'
+                  : accountFirstName
+                    ? `Welcome back, ${accountFirstName}. Ready to make another card?`
+                    : 'Ready to make your next card?')}
             </p>
+            {!isSignedIn ? (
+              <div className="credit-wallet is-guest">
+                <div>
+                  <strong>Your first card is free!</strong>
+                  <small>
+                    Returning member,{' '}
+                    <button
+                      className="text-action-link credit-details-toggle"
+                      type="button"
+                      disabled={isLoadingAccountHistory}
+                      onClick={() => void openAccountPage()}
+                    >
+                      sign in here.
+                    </button>
+                  </small>
+                </div>
+              </div>
+            ) : (
             <div className="credit-wallet" aria-label="Wish balance">
               <div>
                 <strong>{creditsSummary}</strong>
@@ -9492,6 +9512,7 @@ function App() {
                 )}
               </div>
             </div>
+            )}
             {showCreditDetails && (
               <div className="credit-details-panel" role="region" aria-label="Credit details">
                 <button

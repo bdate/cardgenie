@@ -5723,6 +5723,16 @@ select.is-placeholder option {
   grid-area: actions;
 }
 
+.credit-wallet.is-guest {
+  justify-content: center;
+  text-align: center;
+}
+
+.credit-wallet.is-guest > div {
+  display: grid;
+  gap: 4px;
+}
+
 .nav-leave-hint {
   position: fixed;
   left: 50%;
