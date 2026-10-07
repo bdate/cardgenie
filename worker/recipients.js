@@ -1,3 +1,5 @@
+import { deleteAsset, getAsset, putAsset } from './assets.js'
+
 const RECIPIENT_PHOTO_PREFIX = 'recipient-photo:'
 export const MAX_RECIPIENT_PHOTOS = 3
 const MAX_TRACKED_CARD_IDS = 100
@@ -45,7 +47,14 @@ const sameStreetAddress = (left, right) =>
       String(left.zip || '').slice(0, 5) === String(right.zip || '').slice(0, 5),
   )
 
-const photoKey = (recipientId, index) => `${RECIPIENT_PHOTO_PREFIX}${recipientId}:${index}`
+// Photos are stored as their data URLs.
+const photoAsset = (recipientId, index) => ({
+  r2Key: `recipient-photos/${recipientId}/${index}`,
+  kvKey: `${RECIPIENT_PHOTO_PREFIX}${recipientId}:${index}`,
+})
+const putPhoto = (env, recipientId, index, photo) => putAsset(env, photoAsset(recipientId, index), photo, 'text/plain')
+const getPhoto = async (env, recipientId, index) => (await getAsset(env, photoAsset(recipientId, index), 'text'))?.value ?? null
+const deletePhoto = (env, recipientId, index) => deleteAsset(env, photoAsset(recipientId, index))
 
 export const ensureRecipientsTable = async (db) => {
   await db
@@ -107,12 +116,12 @@ const storeRecipientPhotos = async (env, recipientId, photos, previousCount) => 
   const valid = (Array.isArray(photos) ? photos : [])
     .filter((photo) => typeof photo === 'string' && /^data:image\/[a-z+.-]+;base64,/i.test(photo))
     .slice(0, MAX_RECIPIENT_PHOTOS)
-  if (!valid.length || !env.CARD_STORE) {
+  if (!valid.length || !(env.CARD_ASSETS || env.CARD_STORE)) {
     return previousCount
   }
-  await Promise.all(valid.map((photo, index) => env.CARD_STORE.put(photoKey(recipientId, index), photo)))
+  await Promise.all(valid.map((photo, index) => putPhoto(env, recipientId, index, photo)))
   for (let index = valid.length; index < Math.max(previousCount, MAX_RECIPIENT_PHOTOS); index += 1) {
-    await env.CARD_STORE.delete(photoKey(recipientId, index))
+    await deletePhoto(env, recipientId, index)
   }
   return valid.length
 }
@@ -296,7 +305,7 @@ export const deleteRecipient = async (env, userId, recipientId) => {
     return false
   }
   for (let index = 0; index < MAX_RECIPIENT_PHOTOS; index += 1) {
-    await env.CARD_STORE?.delete(photoKey(recipientId, index))
+    await deletePhoto(env, recipientId, index)
   }
   await env.ACCOUNT_DB.prepare('DELETE FROM recipients WHERE id = ? AND user_id = ?').bind(recipientId, userId).run()
   return true
@@ -305,14 +314,14 @@ export const deleteRecipient = async (env, userId, recipientId) => {
 export const deleteRecipientPhoto = async (env, userId, recipientId, index) => {
   await ensureRecipientsTable(env.ACCOUNT_DB)
   const existing = await getRecipientRow(env.ACCOUNT_DB, userId, recipientId)
-  if (!existing || !env.CARD_STORE) {
+  if (!existing || !(env.CARD_ASSETS || env.CARD_STORE)) {
     return null
   }
   const count = existing.photo_count || 0
   const kept = []
   for (let current = 0; current < count; current += 1) {
     if (current !== index) {
-      const photo = await env.CARD_STORE.get(photoKey(recipientId, current))
+      const photo = await getPhoto(env, recipientId, current)
       if (photo) {
         kept.push(photo)
       }
@@ -320,9 +329,9 @@ export const deleteRecipientPhoto = async (env, userId, recipientId, index) => {
   }
   for (let current = 0; current < MAX_RECIPIENT_PHOTOS; current += 1) {
     if (kept[current]) {
-      await env.CARD_STORE.put(photoKey(recipientId, current), kept[current])
+      await putPhoto(env, recipientId, current, kept[current])
     } else {
-      await env.CARD_STORE.delete(photoKey(recipientId, current))
+      await deletePhoto(env, recipientId, current)
     }
   }
   await env.ACCOUNT_DB.prepare('UPDATE recipients SET photo_count = ?, updated_at = ? WHERE id = ?')
@@ -333,7 +342,7 @@ export const deleteRecipientPhoto = async (env, userId, recipientId, index) => {
 
 /** Returns the photo data URL. Pass userId = null for admin access. */
 export const getRecipientPhoto = async (env, userId, recipientId, index) => {
-  if (!env.ACCOUNT_DB || !env.CARD_STORE) {
+  if (!env.ACCOUNT_DB || !(env.CARD_ASSETS || env.CARD_STORE)) {
     return null
   }
   await ensureRecipientsTable(env.ACCOUNT_DB)
@@ -343,7 +352,7 @@ export const getRecipientPhoto = async (env, userId, recipientId, index) => {
   if (!row || index < 0 || index >= (row.photo_count || 0)) {
     return null
   }
-  return env.CARD_STORE.get(photoKey(recipientId, index))
+  return getPhoto(env, recipientId, index)
 }
 
 /** One-time fill of every shopper's recipients from past sends and printed orders. */

@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import Stripe from 'stripe'
+import { migrateAssetsToR2 } from './assets.js'
 import { handleGcuRequest, matchGcuPath } from './gcu.js'
 import {
   accountDbReady,
@@ -6126,6 +6127,21 @@ const requireDeployOrAdminSecret = async (request, env) => {
   return jsonResponse(request, env, { error: 'Not found.' }, 404)
 }
 
+const handleMigrateAssets = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  const body = (await readJson(request).catch(() => null)) || {}
+  const result = await migrateAssetsToR2(env, {
+    kind: Number(body.kind) || 0,
+    cursor: typeof body.cursor === 'string' ? body.cursor : undefined,
+    deleteKv: body.deleteKv === true,
+    limit: Math.min(100, Math.max(1, Number(body.limit) || 50)),
+  })
+  return jsonResponse(request, env, result)
+}
+
 const handleAdminLampSessions = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) {
@@ -6726,6 +6742,10 @@ const handleRequest = async (request, env, ctx) => {
     return adminPrintOrderMatch[2] === 'shipping'
       ? handleAdminUpdatePrintOrderShipping(request, env, Number(adminPrintOrderMatch[1]))
       : handleAdminSendShipmentEmail(request, env, Number(adminPrintOrderMatch[1]))
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/migrate-assets') {
+    return handleMigrateAssets(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-cover-thumbs') {

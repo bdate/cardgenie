@@ -50,3 +50,35 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # Enabled once the CLOUDFLARE_API_TOKEN secret exists and the repo variable CF_PAGES_DEPLOY is "true".
+  cloudflare-pages:
+    if: vars.CF_PAGES_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      # 404.html and CNAME are GitHub Pages-only; Cloudflare Pages does its own SPA fallback.
+      - name: Strip GitHub Pages files
+        run: rm -f dist/404.html dist/CNAME
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy dist --project-name cardgenie --branch main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 945874cb1a5ca1455d9630e8af8ce43d

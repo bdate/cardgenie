@@ -2,13 +2,14 @@
 // envelope reveal for a GreetingCardUniverse card.
 // The worker scrapes the product once and keeps it in D1; the visitor's browser re-typesets the
 // inside message at print size (it needs canvas + web fonts) and uploads it to KV for next time.
+import { getAsset, putAsset } from './assets.js'
 import pageHtml from './gcu-page.html'
 
 const SITE = 'https://www.greetingcarduniverse.com'
 // Bump when the browser-side inside renderer changes so stored inside images are rebuilt.
 const INSIDE_VERSION = 4
 const MAX_INSIDE_BYTES = 6 * 1024 * 1024
-const insideKey = (pid) => `gcu:inside:${pid}`
+const insideAsset = (pid) => ({ r2Key: `gcu/inside/${pid}.jpg`, kvKey: `gcu:inside:${pid}` })
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
 const GCU_HEADERS = { 'User-Agent': 'CardGenie/1.0 (+https://www.card-genie.com)', Accept: '*/*' }
 
@@ -191,7 +192,7 @@ const handleInsideUpload = async (request, env, pid, url) => {
     return Number.isFinite(n) && n > 0 && n < 20000 ? n : null
   }
   const text = (k) => (q.get(k) || '').slice(0, 60) || null
-  await env.CARD_STORE.put(insideKey(pid), bytes)
+  await putAsset(env, insideAsset(pid), bytes, 'image/jpeg')
   await db
     .prepare(
       `UPDATE gcu_cards SET inside_ready = 1, inside_version = ?, landscape = ?, front_w = ?, front_h = ?,
@@ -213,9 +214,9 @@ const handleInsideUpload = async (request, env, pid, url) => {
 }
 
 const handleInsideImage = async (env, pid) => {
-  const bytes = await env.CARD_STORE.get(insideKey(pid), 'arrayBuffer')
-  if (!bytes) return json({ error: 'Not built yet.' }, 404)
-  return new Response(bytes, {
+  const found = await getAsset(env, insideAsset(pid))
+  if (!found) return json({ error: 'Not built yet.' }, 404)
+  return new Response(found.value, {
     headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' },
   })
 }

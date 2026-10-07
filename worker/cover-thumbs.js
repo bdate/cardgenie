@@ -1,10 +1,11 @@
 /** Durable cover thumbnails for account history hover previews. */
 
+import { getAsset, hasAsset, putAsset } from './assets.js'
+
 export const COVER_THUMB_MAX_EDGE = 320
 export const COVER_THUMB_JPEG_QUALITY = 72
 
-const r2ThumbKey = (cardId) => `thumbs/${cardId}.jpg`
-const kvThumbKey = (cardId) => `thumb:${cardId}`
+const thumbAsset = (cardId) => ({ r2Key: `thumbs/${cardId}.jpg`, kvKey: `thumb:${cardId}` })
 
 export const getCoverThumbUrl = (request, env, cardId) => {
   if (!cardId) {
@@ -19,43 +20,15 @@ export const getCoverThumbUrl = (request, env, cardId) => {
   return `${base}/c/${encodeURIComponent(cardId)}/thumb`
 }
 
-export const hasCoverThumb = async (env, cardId) => {
-  if (!cardId) {
-    return false
-  }
-
-  if (env.CARD_ASSETS) {
-    const object = await env.CARD_ASSETS.head(r2ThumbKey(cardId))
-    return Boolean(object)
-  }
-
-  if (env.CARD_STORE) {
-    const existing = await env.CARD_STORE.get(kvThumbKey(cardId))
-    return existing !== null
-  }
-
-  return false
-}
+export const hasCoverThumb = async (env, cardId) => (cardId ? hasAsset(env, thumbAsset(cardId)) : false)
 
 export const putCoverThumbBytes = async (env, cardId, bytes, contentType = 'image/jpeg') => {
   if (!cardId || !bytes?.byteLength) {
     return false
   }
 
-  if (env.CARD_ASSETS) {
-    await env.CARD_ASSETS.put(r2ThumbKey(cardId), bytes, {
-      httpMetadata: { contentType },
-    })
-    return true
-  }
-
-  if (env.CARD_STORE) {
-    // No expirationTtl — keep thumbs for account history after shared cards expire.
-    await env.CARD_STORE.put(kvThumbKey(cardId), bytes)
-    return true
-  }
-
-  return false
+  // No expiry — thumbs are kept for account history after shared cards expire.
+  return putAsset(env, thumbAsset(cardId), bytes, contentType)
 }
 
 export const getCoverThumbBytes = async (env, cardId) => {
@@ -63,26 +36,8 @@ export const getCoverThumbBytes = async (env, cardId) => {
     return null
   }
 
-  if (env.CARD_ASSETS) {
-    const object = await env.CARD_ASSETS.get(r2ThumbKey(cardId))
-    if (!object) {
-      return null
-    }
-    return {
-      bytes: new Uint8Array(await object.arrayBuffer()),
-      contentType: object.httpMetadata?.contentType || 'image/jpeg',
-    }
-  }
-
-  if (env.CARD_STORE) {
-    const buffer = await env.CARD_STORE.get(kvThumbKey(cardId), 'arrayBuffer')
-    if (!buffer) {
-      return null
-    }
-    return { bytes: new Uint8Array(buffer), contentType: 'image/jpeg' }
-  }
-
-  return null
+  const found = await getAsset(env, thumbAsset(cardId))
+  return found ? { bytes: new Uint8Array(found.value), contentType: found.contentType || 'image/jpeg' } : null
 }
 
 const parseDataImage = (imageUrl) => {
