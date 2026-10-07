@@ -2016,23 +2016,52 @@ textarea:focus {
   transform: none;
 }
 
-.envelope-card-rise {
+/* The card slides out from inside the envelope: a sleeve clipped at the envelope's bottom edge
+   holds the card, and a pocket with the envelope's V opening sits in front of it. Both ride
+   along with the envelope's drop. The card is taller than the envelope, so it starts low in the
+   pocket and rises until most of it is out. */
+.card-sleeve,
+.envelope-pocket {
   position: absolute;
-  left: 50%;
-  bottom: 118px;
-  z-index: 9;
-  overflow: hidden;
-  width: min(360px, 60%);
-  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
-  background: #fff;
-  box-shadow: 0 34px 72px rgba(63, 155, 145, 0.22);
-  clip-path: inset(0 0 68% 0);
-  transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
-  -webkit-transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
-  animation: cardToastRise 4.6s cubic-bezier(0.18, 0.88, 0.24, 1) forwards;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  animation: envelopeOpenAndFade 4.6s ease forwards;
 }
 
-.envelope-card-rise img {
+.card-sleeve {
+  top: -200%;
+  z-index: 7;
+  overflow: hidden;
+}
+
+.envelope-pocket {
+  --envelope-paper:
+    linear-gradient(32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(-32deg, transparent 49.6%, rgba(63, 155, 145, 0.15) 50%, transparent 50.7%),
+    linear-gradient(145deg, #fff8ef, #eaf8f6);
+  top: 0;
+  z-index: 8;
+  background: var(--envelope-paper);
+  -webkit-clip-path: polygon(0 0, 50% 62%, 100% 0, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, 50% 62%, 100% 0, 100% 100%, 0 100%);
+  filter: drop-shadow(0 -1px 0 rgba(63, 155, 145, 0.18));
+}
+
+.sleeve-card {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  overflow: hidden;
+  width: 64%;
+  aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(63, 155, 145, 0.22);
+  animation: cardSlideOut 4.6s cubic-bezier(0.3, 0.8, 0.25, 1) forwards;
+}
+
+.sleeve-card img {
   display: block;
   width: 100%;
   height: 100%;
@@ -4926,34 +4955,23 @@ select.is-placeholder option {
   }
 }
 
-@keyframes cardToastRise {
+@keyframes cardSlideOut {
   0%,
-  20% {
+  22% {
     opacity: 0;
-    clip-path: inset(0 0 68% 0);
-    transform: translateX(-50%) translateY(120px) scale(0.86) translateZ(2px);
+    transform: translateX(-50%) translateY(42%);
   }
-  32% {
+  30% {
     opacity: 1;
-    clip-path: inset(0 0 55% 0);
-    transform: translateX(-50%) translateY(80px) scale(0.88) translateZ(2px);
+    transform: translateX(-50%) translateY(36%);
   }
-  50% {
-    clip-path: inset(0 0 30% 0);
-    transform: translateX(-50%) translateY(10px) scale(0.92) translateZ(2px);
-  }
-  68% {
-    clip-path: inset(0 0 8% 0);
-    transform: translateX(-50%) translateY(-42px) scale(0.96) translateZ(2px);
-  }
-  82% {
-    clip-path: inset(0 0 0 0);
-    transform: translateX(-50%) translateY(-86px) scale(0.98) translateZ(2px);
+  84% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-46%);
   }
   100% {
     opacity: 1;
-    clip-path: inset(0 0 0 0);
-    transform: translateX(-50%) translateY(-102px) scale(1) translateZ(2px);
+    transform: translateX(-50%) translateY(-50%);
   }
 }
 
@@ -5331,11 +5349,6 @@ select.is-placeholder option {
     width: 58px;
   }
 
-  .envelope-card-rise {
-    bottom: 78px;
-    width: min(250px, 62%);
-  }
-
   .card-cover-frame,
   .card-open-stage,
   .open-card {
@@ -5508,11 +5521,6 @@ select.is-placeholder option {
     width: min(90vw, 320px);
     height: 196px;
     transform-style: flat;
-  }
-
-  .envelope-card-rise {
-    bottom: 66px;
-    width: min(220px, 62%);
   }
 
   .card-cover-frame,

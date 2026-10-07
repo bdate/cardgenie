@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
   connectLampGenieRealtime,
@@ -1727,10 +1727,110 @@ const canExportImageSource = (source: CanvasImageSource) => {
 
 const getShareCoverImageUrl = (cardId: string) => apiUrl(`/c/${encodeURIComponent(cardId)}/cover`)
 
+type EnvelopeSettle = { play: () => () => void }
+
+// Snapshot the end of the envelope-opening scene so the card can glide from where it left the
+// envelope to the cover view while the envelope fades, instead of jumping between the two.
+// Ghosts are fixed-position copies on <body>, so they don't depend on the app's layout or
+// stacking while the real cover is hidden underneath.
+const captureEnvelopeSettle = (): EnvelopeSettle | null => {
+  const scene = document.querySelector<HTMLElement>('.opening-scene')
+  const card = scene?.querySelector<HTMLElement>('.sleeve-card')
+  if (!scene || !card) {
+    return null
+  }
+  const sceneRect = scene.getBoundingClientRect()
+  const cardRect = card.getBoundingClientRect()
+
+  const sceneGhost = scene.cloneNode(true) as HTMLElement
+  const sources = [scene, ...Array.from(scene.querySelectorAll<HTMLElement>('*'))]
+  const copies = [sceneGhost, ...Array.from(sceneGhost.querySelectorAll<HTMLElement>('*'))]
+  sources.forEach((source, index) => {
+    const computed = getComputedStyle(source)
+    Object.assign(copies[index].style, {
+      animation: 'none',
+      transform: computed.transform,
+      opacity: computed.opacity,
+      clipPath: computed.clipPath,
+    })
+  })
+  sceneGhost.querySelector('.card-sleeve')?.remove()
+  sceneGhost.setAttribute('aria-hidden', 'true')
+  sceneGhost.removeAttribute('aria-live')
+  Object.assign(sceneGhost.style, {
+    position: 'fixed',
+    left: `${sceneRect.left}px`,
+    top: `${sceneRect.top}px`,
+    width: `${sceneRect.width}px`,
+    height: `${sceneRect.height}px`,
+    margin: '0',
+    boxSizing: 'border-box',
+    zIndex: '20',
+    pointerEvents: 'none',
+  })
+
+  const cardGhost = card.cloneNode(true) as HTMLElement
+  cardGhost.setAttribute('aria-hidden', 'true')
+
+  return {
+    play: () => {
+      const frame = document.querySelector<HTMLElement>('.front-reveal .card-cover-frame')
+      if (!frame) {
+        return () => undefined
+      }
+      const target = frame.getBoundingClientRect()
+      Object.assign(cardGhost.style, {
+        position: 'fixed',
+        left: `${target.left}px`,
+        top: `${target.top}px`,
+        width: `${target.width}px`,
+        height: `${target.height}px`,
+        bottom: 'auto',
+        margin: '0',
+        animation: 'none',
+        transform: 'none',
+        transformOrigin: 'top left',
+        zIndex: '21',
+        pointerEvents: 'none',
+      })
+      frame.style.visibility = 'hidden'
+      document.body.append(sceneGhost, cardGhost)
+
+      const glide = cardGhost.animate(
+        [
+          {
+            transform: `translate(${cardRect.left - target.left}px, ${cardRect.top - target.top}px) scale(${cardRect.width / target.width})`,
+          },
+          { transform: 'none' },
+        ],
+        { duration: 1100, easing: 'cubic-bezier(0.3, 0.8, 0.25, 1)' },
+      )
+      const fade = sceneGhost.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: 700,
+        easing: 'ease',
+        fill: 'forwards',
+      })
+      document
+        .querySelector<HTMLElement>('.card-view-toggle')
+        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 1100 })
+
+      const cleanup = () => {
+        glide.cancel()
+        fade.cancel()
+        sceneGhost.remove()
+        cardGhost.remove()
+        frame.style.visibility = ''
+      }
+      glide.finished.then(cleanup, () => undefined)
+      return cleanup
+    },
+  }
+}
+
 const findDisplayedCoverImage = (imageUrl?: string): HTMLImageElement | null => {
   const selectors = [
     '.card-cover-frame img',
-    '.envelope-card-rise img',
+    '.sleeve-card img',
     '.card-opening-cover img',
     '.editor-cover-frame img',
     '.editor-cover-thumb img',
@@ -2623,6 +2723,15 @@ function App() {
   const [details, setDetails] = useState<CardDetails>(() => initialFormDraft?.details || initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
+  const pendingEnvelopeSettleRef = useRef<EnvelopeSettle | null>(null)
+  useLayoutEffect(() => {
+    const settle = pendingEnvelopeSettleRef.current
+    pendingEnvelopeSettleRef.current = null
+    if (step !== 'front' || !settle) {
+      return undefined
+    }
+    return settle.play()
+  }, [step])
   const [hasViewedFront, setHasViewedFront] = useState(false)
   const [hasViewedInside, setHasViewedInside] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -7184,7 +7293,10 @@ function App() {
 
   const openEnvelope = () => {
     setStep('opening')
-    window.setTimeout(() => setStep('front'), 4600)
+    window.setTimeout(() => {
+      pendingEnvelopeSettleRef.current = captureEnvelopeSettle()
+      setStep('front')
+    }, 4600)
   }
 
   const playEnvelopeBack = () => {
@@ -11906,9 +12018,14 @@ function App() {
                       <div className={`envelope-flap${step === 'opening' ? '' : ' envelope-flap-static'}`} />
                     </div>
                     {step === 'opening' && (
-                      <div className={coverPreviewClass('envelope-card-rise')}>
-                        <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
-                      </div>
+                      <>
+                        <div className="card-sleeve">
+                          <div className={coverPreviewClass('sleeve-card')}>
+                            <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
+                          </div>
+                        </div>
+                        <div className="envelope-pocket" />
+                      </>
                     )}
                   </div>
                   <span className="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">
