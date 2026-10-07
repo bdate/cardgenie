@@ -7880,7 +7880,9 @@ function App() {
 
   // Browser Back steps back through Card Genie screens instead of leaving the site.
   const navKey = isRecipientView
-    ? 'base'
+    ? showKeepsakeForm
+      ? 'keepsake'
+      : 'base'
     : [
         adminView
           ? `admin:${adminView}${adminView === 'shoppers' && selectedShopperId ? `:${selectedShopperId}` : ''}`
@@ -7889,6 +7891,8 @@ function App() {
             : '',
         printOrderStep !== 'closed' ? `print:${printOrderStep}` : '',
         showEditor ? 'editor' : '',
+        showCreditMenu ? 'credits' : '',
+        showCreditDetails ? 'credit-info' : '',
       ]
         .filter(Boolean)
         .join('|') || 'base'
@@ -7904,6 +7908,13 @@ function App() {
     const overlay = parts.find((part) => part === 'account' || part.startsWith('admin:')) || ''
     const targetPrintStep = (parts.find((part) => part.startsWith('print:'))?.slice(6) || 'closed') as PrintOrderStep
     const targetEditor = parts.includes('editor')
+
+    if (isRecipientView) {
+      setShowKeepsakeForm(parts.includes('keepsake'))
+      return
+    }
+    setShowCreditMenu(parts.includes('credits'))
+    setShowCreditDetails(parts.includes('credit-info'))
 
     if (!overlay) {
       setShowAccountPage(false)
@@ -7947,14 +7958,12 @@ function App() {
   const navInteractedRef = useRef(false)
   const navIgnorePopsRef = useRef(0)
   const navLeaveHintTimerRef = useRef<number | null>(null)
+  const navLoadIdRef = useRef(Math.random().toString(36).slice(2))
   const [showNavLeaveHint, setShowNavLeaveHint] = useState(false)
-  const navStateRef = useRef({ navKey, hasWorkToProtect, applyNavKey })
-  navStateRef.current = { navKey, hasWorkToProtect, applyNavKey }
+  const navStateRef = useRef({ navKey, hasWorkToProtect, applyNavKey, isRecipientView })
+  navStateRef.current = { navKey, hasWorkToProtect, applyNavKey, isRecipientView }
 
   const syncNavHistory = () => {
-    if (isRecipientView) {
-      return
-    }
     const { navKey: key, hasWorkToProtect: hasWork } = navStateRef.current
     if (!navArmedRef.current) {
       if (!navInteractedRef.current || (!hasWork && key === 'base')) {
@@ -7963,7 +7972,10 @@ function App() {
       navArmedRef.current = true
       navStackRef.current = ['', key]
       navIndexRef.current = 1
-      window.history.pushState({ ...(window.history.state || {}), cardGenieNav: 1 }, '')
+      window.history.pushState(
+        { ...(window.history.state || {}), cardGenieNav: 1, cardGenieLoad: navLoadIdRef.current },
+        '',
+      )
       return
     }
     const stack = navStackRef.current
@@ -7980,7 +7992,10 @@ function App() {
     }
     navStackRef.current = [...stack.slice(0, index + 1), key]
     navIndexRef.current = index + 1
-    window.history.pushState({ ...(window.history.state || {}), cardGenieNav: index + 1 }, '')
+    window.history.pushState(
+      { ...(window.history.state || {}), cardGenieNav: index + 1, cardGenieLoad: navLoadIdRef.current },
+      '',
+    )
   }
 
   useEffect(() => {
@@ -7989,9 +8004,6 @@ function App() {
   }, [navKey, hasWorkToProtect, isRecipientView])
 
   useEffect(() => {
-    if (isRecipientView) {
-      return
-    }
     const markInteraction = () => {
       if (!navInteractedRef.current) {
         navInteractedRef.current = true
@@ -8006,13 +8018,20 @@ function App() {
       if (!navArmedRef.current) {
         return
       }
-      const target = Number((event.state as { cardGenieNav?: number } | null)?.cardGenieNav) || 0
+      const popped = event.state as { cardGenieNav?: number; cardGenieLoad?: string } | null
+      const target =
+        popped?.cardGenieLoad === navLoadIdRef.current && navStackRef.current[Number(popped.cardGenieNav)] !== undefined
+          ? Number(popped.cardGenieNav)
+          : 0
       if (target <= 0) {
         navArmedRef.current = false
         navInteractedRef.current = false
         navStackRef.current = []
         navIndexRef.current = 0
         navStateRef.current.applyNavKey('base')
+        if (navStateRef.current.isRecipientView) {
+          return
+        }
         setShowNavLeaveHint(true)
         if (navLeaveHintTimerRef.current) {
           window.clearTimeout(navLeaveHintTimerRef.current)
