@@ -9416,7 +9416,7 @@ function App() {
             >
               {creditNotice ||
                 (!isSignedIn
-                  ? 'Try creating a card in seconds!'
+                  ? ''
                   : accountFirstName
                     ? `Welcome back, ${accountFirstName}. Ready to make another card?`
                     : 'Ready to make your next card?')}
@@ -9424,6 +9424,7 @@ function App() {
             {!isSignedIn ? (
               <div className="credit-wallet is-guest">
                 <div>
+                  <span className="guest-wallet-kicker">Try creating a card in seconds!</span>
                   <strong>Your first card is free!</strong>
                   <small>
                     Returning member,{' '}
