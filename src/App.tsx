@@ -9266,11 +9266,7 @@ function App() {
     setDeliveryDestinations(validatedDestinations.map((entry) => entry.display))
 
     if (deliveryMethod === 'text' && !smsConsentConfirmed) {
-      setDeliveryNotice(
-        validatedDestinations.length > 1
-          ? 'Confirm each recipient agreed to receive this one-time card delivery text.'
-          : 'Confirm the recipient agreed to receive this one-time card delivery text.',
-      )
+      setDeliveryNotice('Check the box to send this card by text.')
       return
     }
 
@@ -12549,9 +12545,8 @@ function App() {
                       onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
                     />
                     <span>
-                      I confirm {plannedRecipientCount > 1 ? 'each recipient' : 'the recipient'} agreed to get one text
-                      from Card Genie with a link to this card. Msg & data rates may apply. Reply STOP to opt out, HELP
-                      for help.{' '}
+                      OK to text {plannedRecipientCount > 1 ? 'each of them' : 'them'} this card — one message, no
+                      marketing. Msg & data rates may apply. Reply STOP to opt out, HELP for help.{' '}
                       <button
                         className="sms-consent-more"
                         type="button"

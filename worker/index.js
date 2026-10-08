@@ -4159,12 +4159,7 @@ const handleDeliverCard = async (request, env) => {
     return jsonResponse(
       request,
       env,
-      {
-        error:
-          destinationList.length > 1
-            ? 'Confirm each recipient agreed to receive this one-time card delivery text.'
-            : 'Confirm the recipient agreed to receive this one-time card delivery text.',
-      },
+      { error: 'Check the box to send this card by text.' },
       400,
     )
   }

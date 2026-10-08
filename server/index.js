@@ -289,12 +289,7 @@ app.post('/api/deliver-card', async (req, res) => {
   }
 
   if (method === 'text' && recipientConsentConfirmed !== true) {
-    return res.status(400).json({
-      error:
-        destinationList.length > 1
-          ? 'Confirm each recipient agreed to receive this one-time card delivery text.'
-          : 'Confirm the recipient agreed to receive this one-time card delivery text.',
-    })
+    return res.status(400).json({ error: 'Check the box to send this card by text.' })
   }
 
   const shareUrl = getShareUrl(req, record.id)
