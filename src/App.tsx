@@ -372,6 +372,7 @@ const styleOptions = [
   'Vintage greeting card illustration',
 ]
 const initialCreditBalance = 2
+const phoneVerifyBonusCredits = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
 const formDraftMaxAgeMs = 7 * 24 * 60 * 60 * 1000
@@ -12594,14 +12595,14 @@ function App() {
                           setDeliveryNotice('')
                         }}
                       />
-                      <span>Confirm my number</span>
+                      <span className="sender-copy-nowrap">Confirm my number for {phoneVerifyBonusCredits} credits</span>
                     </label>
                     {showAccountConfirm && (
                       <div className="account-gate">
                         <span className="field-title">Your mobile number</span>
                         <p className="field-help">
-                          Confirm your number to send. We’ll text a one-time code. New accounts get 2 extra credits when
-                          you confirm. Recipients will not see this number.
+                          Confirm your number to send. We’ll text a one-time code. New accounts get{' '}
+                          {phoneVerifyBonusCredits} extra credits when you confirm.
                         </p>
                         <label>
                           Mobile number

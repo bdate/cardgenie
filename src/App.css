@@ -3082,6 +3082,16 @@ textarea:focus {
   cursor: pointer;
 }
 
+.sender-copy-nowrap {
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .sender-copy-nowrap {
+    font-size: 0.86rem;
+  }
+}
+
 .sender-copy input {
   width: 18px;
   height: 18px;
