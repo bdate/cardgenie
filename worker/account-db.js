@@ -974,10 +974,10 @@ const adminPhoneNumbers = new Set(['+19259637453'])
 
 export const isAdminPhone = (phoneE164) => Boolean(phoneE164 && adminPhoneNumbers.has(phoneE164))
 
-const METRICS_TIME_ZONE = 'America/Los_Angeles'
-const METRICS_EARLIEST_DAY = '2026-09-13'
+export const METRICS_TIME_ZONE = 'America/Los_Angeles'
+export const METRICS_EARLIEST_DAY = '2026-09-13'
 
-const pacificDayKeyFromDate = (value = new Date()) => {
+export const pacificDayKeyFromDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) {
     return String(value || '').slice(0, 10)

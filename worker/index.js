@@ -38,6 +38,7 @@ import {
   updateTestimonialStatus,
   upsertUserOnLogin,
 } from './account-db.js'
+import { USAGE_KINDS, getAdminCosts, recordUsage, smsSegmentCount } from './costs.js'
 import {
   ensureCoverThumbForRecord,
   getCoverThumbBytes,
@@ -859,10 +860,40 @@ const trimToWordLimit = (message, maxWords) => {
   return `${words.slice(0, maxWords).join(' ').replace(/[,\s]+$/, '')}.`
 }
 
-const getOpenAI = (env) =>
-  new OpenAI({
+const imageUsageKind = (method, params) => {
+  const files = Array.isArray(params?.image) ? params.image : params?.image ? [params.image] : []
+  const names = files.map((file) => String(file?.name || ''))
+  const isRevision = names.includes('current-cover.png')
+  const hasPhoto = names.some((name) => name.startsWith('reference-'))
+  if (method === 'generate' || !isRevision) {
+    return hasPhoto ? USAGE_KINDS.imageNewWithPhoto : USAGE_KINDS.imageNew
+  }
+  return hasPhoto ? USAGE_KINDS.imageReviseWithPhoto : USAGE_KINDS.imageRevise
+}
+
+const trackOpenAIMethod = (env, resource, method, kindFor) => {
+  const original = resource?.[method]?.bind(resource)
+  if (!original) {
+    return
+  }
+  resource[method] = async (params, ...rest) => {
+    const result = await original(params, ...rest)
+    await recordUsage(env, kindFor(params))
+    return result
+  }
+}
+
+const getOpenAI = (env) => {
+  const client = new OpenAI({
     apiKey: env.OPENAI_API_KEY,
   })
+  trackOpenAIMethod(env, client.responses, 'create', () => USAGE_KINDS.textModel)
+  trackOpenAIMethod(env, client.images, 'generate', (params) => imageUsageKind('generate', params))
+  trackOpenAIMethod(env, client.images, 'edit', (params) => imageUsageKind('edit', params))
+  trackOpenAIMethod(env, client.audio?.speech, 'create', () => USAGE_KINDS.tts)
+  trackOpenAIMethod(env, client.audio?.transcriptions, 'create', () => USAGE_KINDS.transcription)
+  return client
+}
 
 const getMessageText = (response) => {
   if (response.output_text) {
@@ -1643,11 +1674,15 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
 
 const sendEmailDelivery = async ({ env, to, copy, attachments = [] }) => {
   if (env.SENDGRID_API_KEY) {
-    return sendSendGridEmailDelivery({ env, to, copy, attachments })
+    const sentTo = await sendSendGridEmailDelivery({ env, to, copy, attachments })
+    await recordUsage(env, USAGE_KINDS.email)
+    return sentTo
   }
 
   if (env.POSTMARK_SERVER_TOKEN) {
-    return sendPostmarkEmailDelivery({ env, to, copy, attachments })
+    const sentTo = await sendPostmarkEmailDelivery({ env, to, copy, attachments })
+    await recordUsage(env, USAGE_KINDS.email)
+    return sentTo
   }
 
   throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
@@ -2114,6 +2149,7 @@ const sendTextDelivery = async ({ env, to, copy }) => {
     throw new Error(`Twilio could not send the card. ${errorText}`)
   }
 
+  await recordUsage(env, USAGE_KINDS.smsCard, { units: smsSegmentCount(copy.text) })
   return normalizedTo
 }
 
@@ -2810,6 +2846,8 @@ const sendAccountSms = async ({ env, to, body }) => {
     const errorText = await response.text()
     throw new Error(`Twilio could not send the sign-in code. ${errorText}`)
   }
+
+  await recordUsage(env, USAGE_KINDS.smsAccount, { units: smsSegmentCount(body) })
 }
 
 const readAccountToken = (request) => {
@@ -3784,6 +3822,24 @@ const handleGetAdminMetrics = async (request, env) => {
   }
 
   return jsonResponse(request, env, { ok: true, ...metrics })
+}
+
+const handleGetAdminCosts = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+
+  if (!accountDbReady(env)) {
+    return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
+  }
+
+  const costs = await getAdminCosts(env)
+  if (!costs) {
+    return jsonResponse(request, env, { error: 'Unable to load cost estimates.' }, 500)
+  }
+
+  return jsonResponse(request, env, { ok: true, ...costs })
 }
 
 const handleListAdminTestimonials = async (request, env) => {
@@ -5907,6 +5963,7 @@ const handleRealtimeSession = async (request, env) => {
       )
     }
 
+    await recordUsage(env, USAGE_KINDS.realtimeSession)
     return jsonResponse(request, env, {
       ok: true,
       value,
@@ -5934,6 +5991,26 @@ const normalizeLampSessionId = (value) =>
     .trim()
     .slice(0, 80)
     .replace(/[^a-zA-Z0-9_-]/g, '')
+
+const LAMP_SESSION_MAX_BILLED_SECONDS = 30 * 60
+
+const lampSessionElapsedSeconds = (record) => {
+  if (!record || record.mode !== 'lamp') {
+    return 0
+  }
+  const times = (Array.isArray(record.turns) ? record.turns : [])
+    .map((turn) => Date.parse(turn?.at))
+    .filter((value) => Number.isFinite(value))
+  const ended = Date.parse(record.endedAt || '')
+  if (Number.isFinite(ended)) {
+    times.push(ended)
+  }
+  if (times.length < 2) {
+    return 0
+  }
+  const elapsed = (Math.max(...times) - Math.min(...times)) / 1000
+  return Math.min(LAMP_SESSION_MAX_BILLED_SECONDS, Math.max(0, elapsed))
+}
 
 const handleRealtimeSessionLog = async (request, env) => {
   if (!env.CARD_STORE) {
@@ -5999,6 +6076,11 @@ const handleRealtimeSessionLog = async (request, env) => {
   await env.CARD_STORE.put(key, JSON.stringify(record), {
     expirationTtl: LAMP_SESSION_TTL_SECONDS,
   })
+
+  const addedSeconds = lampSessionElapsedSeconds(record) - lampSessionElapsedSeconds(existing)
+  if (addedSeconds > 0) {
+    await recordUsage(env, USAGE_KINDS.realtimeSeconds, { events: 0, units: addedSeconds })
+  }
 
   const index = (await env.CARD_STORE.get(LAMP_SESSION_INDEX_KEY, 'json')) || []
   const nextIndex = [
@@ -6749,6 +6831,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/admin/metrics') {
     return handleGetAdminMetrics(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/costs') {
+    return handleGetAdminCosts(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/admin/testimonials') {

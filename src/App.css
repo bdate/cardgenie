@@ -3485,6 +3485,120 @@ select.is-placeholder option {
   border-bottom: 0;
 }
 
+.admin-costs {
+  margin-top: 22px;
+}
+
+.admin-costs h3 {
+  margin: 0 0 8px;
+  color: var(--gcu-dark-teal);
+}
+
+.admin-analytics-heading > small {
+  color: var(--gcu-grey);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.admin-cost-summary div > small {
+  line-height: 1.35;
+}
+
+.admin-cost-summary b {
+  font-weight: 750;
+}
+
+.admin-cost-positive {
+  color: var(--gcu-dark-teal);
+}
+
+.admin-cost-negative {
+  color: #b4471b;
+}
+
+.admin-cost-table td small,
+.admin-cost-daily td small {
+  display: block;
+  color: var(--gcu-grey);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.admin-cost-table tr.admin-cost-total td {
+  font-weight: 750;
+  background: rgba(63, 155, 145, 0.06);
+}
+
+.admin-cost-subheading {
+  margin: 18px 0 6px;
+  color: var(--gcu-dark-teal);
+  font-size: 1rem;
+}
+
+.admin-cost-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--gcu-grey);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.admin-cost-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.admin-cost-swatch:first-child {
+  margin-left: 0;
+}
+
+.admin-cost-swatch.is-cost,
+.admin-cost-bar.is-cost {
+  background: var(--gcu-orange);
+}
+
+.admin-cost-swatch.is-revenue,
+.admin-cost-bar.is-revenue {
+  background: var(--gcu-teal);
+}
+
+.admin-daily-table th.admin-cost-bar-head {
+  text-align: left;
+}
+
+.admin-daily-table td.admin-cost-bar-cell {
+  width: 40%;
+  min-width: 120px;
+  text-align: left;
+}
+
+.admin-cost-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.admin-cost-bar + .admin-cost-bar {
+  margin-top: 3px;
+}
+
+.admin-cost-footnote {
+  margin: 12px 0 0;
+  color: var(--gcu-grey);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.admin-cost-footnote a {
+  color: var(--gcu-dark-teal);
+  font-weight: 700;
+}
+
 .admin-reviews {
   margin-top: 18px;
 }
@@ -3801,8 +3915,12 @@ select.is-placeholder option {
   left: 0;
   right: 0;
   z-index: 20;
+  max-height: min(18rem, 45vh);
   margin: 4px 0 0;
   padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   list-style: none;
   border-radius: 12px;
   background: #fff;
@@ -3813,9 +3931,11 @@ select.is-placeholder option {
 
 .recipient-suggestions button {
   display: grid;
+  align-content: center;
   gap: 1px;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 48px;
+  padding: 8px 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -3823,11 +3943,28 @@ select.is-placeholder option {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.recipient-suggestions li + li {
+  border-top: 1px solid rgba(63, 155, 145, 0.1);
 }
 
 .recipient-suggestions button:hover,
-.recipient-suggestions button:focus-visible {
+.recipient-suggestions button:focus-visible,
+.recipient-suggestions button.is-active {
   background: rgba(63, 155, 145, 0.1);
+}
+
+@media (hover: none) {
+  .recipient-suggestions button:hover:not(.is-active) {
+    background: transparent;
+  }
+
+  .recipient-suggestions button:active {
+    background: rgba(63, 155, 145, 0.1);
+  }
 }
 
 .recipient-suggestions strong {

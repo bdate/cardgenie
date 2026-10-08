@@ -96,6 +96,14 @@ type SavedRecipient = {
   lastSentAt: string
 }
 
+type AutoFilledRecipient = {
+  id: string
+  name: string
+  details: Partial<CardDetails>
+  delivery: string
+  shipLine1: string
+}
+
 type RecipientDraft = {
   name: string
   relation: string
@@ -411,6 +419,48 @@ type MailingAddress = {
   country: 'US'
 }
 type PrintOrderStep = 'closed' | 'ship-to' | 'mail-from' | 'review'
+type AdminCostSummary = {
+  days: number
+  startDay: string
+  endDay: string
+  cost: number
+  revenue: number
+  net: number
+  cardsCreated: number
+  costPerCard: number | null
+  categories: Record<string, { cost: number; units: number }>
+  detail: Record<string, number>
+}
+type AdminCosts = {
+  today: string
+  trackingStartedOn: string | null
+  earliestDay: string
+  unitPrices: Record<string, number>
+  categoryInfo: Array<{ id: string; label: string; unitLabel: string }>
+  summaries: Record<'today' | 'last7' | 'last30' | 'month', AdminCostSummary>
+  daily: Array<{
+    day: string
+    tracked: boolean
+    cost: number
+    revenue: number
+    net: number
+    cardsCreated: number
+    categories: Record<string, number>
+  }>
+}
+const adminCostColumns = [
+  { id: 'today', label: 'Today' },
+  { id: 'last7', label: 'Last 7 days' },
+  { id: 'last30', label: 'Last 30 days' },
+  { id: 'month', label: 'This month' },
+] as const
+const adminCostDashboards = [
+  { label: 'OpenAI', url: 'https://platform.openai.com/usage' },
+  { label: 'Twilio', url: 'https://console.twilio.com' },
+  { label: 'Cloudflare', url: 'https://dash.cloudflare.com' },
+  { label: 'SendGrid', url: 'https://app.sendgrid.com' },
+  { label: 'Stripe', url: 'https://dashboard.stripe.com' },
+]
 
 const emptyMailingAddress = (): MailingAddress => ({
   name: '',
@@ -3074,6 +3124,9 @@ function App() {
     periodStats?: Record<string, number>
     daily?: Record<string, Array<{ day: string; count: number }>>
   } | null>(null)
+  const [adminCosts, setAdminCosts] = useState<AdminCosts | null>(null)
+  const [isLoadingAdminCosts, setIsLoadingAdminCosts] = useState(false)
+  const [adminCostsError, setAdminCostsError] = useState('')
   const [adminMetricsPeriod, setAdminMetricsPeriod] = useState<'today' | '7d' | '30d' | 'ytd'>('7d')
   const [isLoadingAdminMetrics, setIsLoadingAdminMetrics] = useState(false)
   const [adminMetricsError, setAdminMetricsError] = useState('')
@@ -3144,6 +3197,10 @@ function App() {
   const [savedRecipients, setSavedRecipients] = useState<SavedRecipient[]>([])
   const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false)
   const [selectedRecipientId, setSelectedRecipientId] = useState('')
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
+  const recipientFieldRef = useRef<HTMLLabelElement | null>(null)
+  const recipientApplyTokenRef = useRef(0)
+  const autoFilledRecipientRef = useRef<AutoFilledRecipient | null>(null)
   const [saveRecipientPhotosOptIn, setSaveRecipientPhotosOptIn] = useState(false)
   const [editingRecipientId, setEditingRecipientId] = useState('')
   const [recipientDraft, setRecipientDraft] = useState<RecipientDraft | null>(null)
@@ -3320,6 +3377,20 @@ function App() {
       return '$0.00'
     }
     return `$${amount.toFixed(2)}`
+  }
+  const formatAdminCost = (value: unknown) => {
+    const amount = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(amount) || amount === 0) {
+      return '$0.00'
+    }
+    return Math.abs(amount) < 1 ? `$${amount.toFixed(3)}` : `$${amount.toFixed(2)}`
+  }
+  const formatAdminSignedDollars = (value: unknown) => {
+    const amount = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(amount)) {
+      return '$0.00'
+    }
+    return `${amount < 0 ? '−' : ''}$${Math.abs(amount).toFixed(2)}`
   }
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
   const showSendActions = step === 'front' || step === 'inside'
@@ -5515,6 +5586,9 @@ function App() {
     setInterviewMode('quick')
 
     setDetails(initialDetails)
+    setSelectedRecipientId('')
+    autoFilledRecipientRef.current = null
+    recipientApplyTokenRef.current += 1
     setReferencePhotos([])
     setReferencePhotoNotice('')
     setError('')
@@ -5924,46 +5998,108 @@ function App() {
     return savedRecipients
       .filter((recipient) => !query || recipient.name.toLowerCase().includes(query))
       .filter((recipient) => recipient.name.toLowerCase() !== query || recipient.id !== selectedRecipientId)
-      .slice(0, 6)
   }, [savedRecipients, details.recipientName, selectedRecipientId])
 
+  useEffect(() => {
+    setActiveSuggestionIndex(-1)
+  }, [recipientSuggestions])
+
+  useEffect(() => {
+    if (!showRecipientSuggestions) {
+      return
+    }
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!recipientFieldRef.current?.contains(event.target as Node)) {
+        setShowRecipientSuggestions(false)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [showRecipientSuggestions])
+
   const applySavedRecipient = async (recipient: SavedRecipient, { fresh = false } = {}) => {
+    const token = recipientApplyTokenRef.current + 1
+    recipientApplyTokenRef.current = token
+    const previous = autoFilledRecipientRef.current
+    const replace = fresh || Boolean(previous && previous.id !== recipient.id)
+    const base = fresh ? initialDetails : details
     setShowRecipientSuggestions(false)
+    setActiveSuggestionIndex(-1)
     setSelectedRecipientId(recipient.id)
     setError('')
-    setDetails((current) => ({
-      ...current,
-      recipientName: recipient.name,
-      recipientType: recipient.relation || current.recipientType,
-      keyDetails: current.keyDetails.trim() ? current.keyDetails : recipient.keyDetails || current.keyDetails,
-      tone: recipient.tone && current.tone === initialDetails.tone ? recipient.tone : current.tone,
-      imageStyle:
-        recipient.imageStyle && current.imageStyle === initialDetails.imageStyle
-          ? recipient.imageStyle
-          : current.imageStyle,
-    }))
-    setDeliveryDestinations((current) => {
-      if (current.some((entry) => entry.trim())) {
-        return current
-      }
-      const value =
-        deliveryMethod === 'text'
-          ? recipient.phoneE164
-            ? formatPhoneNumberDisplay(recipient.phoneE164)
-            : ''
-          : recipient.email
-      return value ? [value] : current
-    })
-    if (recipient.mailingAddress?.line1) {
-      setPrintShipTo((current) =>
-        current.line1.trim() ? current : { ...emptyMailingAddress(), ...recipient.mailingAddress, name: recipient.mailingAddress?.name || recipient.name },
-      )
+
+    const nextDetails: Partial<CardDetails> = replace
+      ? {
+          recipientName: recipient.name,
+          recipientType: recipient.relation || '',
+          keyDetails: recipient.keyDetails || '',
+          tone: recipient.tone || initialDetails.tone,
+          imageStyle: recipient.imageStyle || initialDetails.imageStyle,
+        }
+      : {
+          recipientName: recipient.name,
+          recipientType: recipient.relation || base.recipientType,
+          keyDetails: base.keyDetails.trim() ? base.keyDetails : recipient.keyDetails || base.keyDetails,
+          tone: recipient.tone && base.tone === initialDetails.tone ? recipient.tone : base.tone,
+          imageStyle:
+            recipient.imageStyle && base.imageStyle === initialDetails.imageStyle ? recipient.imageStyle : base.imageStyle,
+        }
+    setDetails((current) => ({ ...current, ...nextDetails }))
+    const recipientValues: Partial<CardDetails> = {
+      recipientType: recipient.relation,
+      keyDetails: recipient.keyDetails,
+      tone: recipient.tone,
+      imageStyle: recipient.imageStyle,
     }
-    if (recipient.photoCount > 0 && (fresh || referencePhotos.length === 0)) {
+    const filledDetails = Object.fromEntries(
+      (Object.entries(recipientValues) as Array<[keyof CardDetails, string]>).filter(
+        ([field, value]) => value && nextDetails[field] === value,
+      ),
+    ) as Partial<CardDetails>
+
+    const deliveryValue =
+      deliveryMethod === 'text'
+        ? recipient.phoneE164
+          ? formatPhoneNumberDisplay(recipient.phoneE164)
+          : ''
+        : recipient.email
+    const fillDelivery = replace || !deliveryDestinations.some((entry) => entry.trim())
+    if (replace) {
+      setDeliveryDestinations(deliveryValue ? [deliveryValue] : [''])
+    } else if (fillDelivery && deliveryValue) {
+      setDeliveryDestinations([deliveryValue])
+    }
+
+    const recipientShipTo = recipient.mailingAddress?.line1
+      ? { ...emptyMailingAddress(), ...recipient.mailingAddress, name: recipient.mailingAddress?.name || recipient.name }
+      : null
+    const fillShipTo = replace || !printShipTo.line1.trim()
+    if (replace) {
+      setPrintShipTo(recipientShipTo || emptyMailingAddress())
+    } else if (fillShipTo && recipientShipTo) {
+      setPrintShipTo(recipientShipTo)
+    }
+
+    autoFilledRecipientRef.current = {
+      id: recipient.id,
+      name: recipient.name,
+      details: filledDetails,
+      delivery: fillDelivery ? deliveryValue : '',
+      shipLine1: fillShipTo && recipientShipTo ? recipientShipTo.line1 : '',
+    }
+
+    if (replace) {
+      setReferencePhotos([])
+      setReferencePhotoNotice('')
+    }
+    if (recipient.photoCount > 0 && (replace || referencePhotos.length === 0)) {
       try {
         const photos: ReferencePhoto[] = []
         for (let index = 0; index < Math.min(recipient.photoCount, maxReferencePhotos); index += 1) {
           const blob = await fetchRecipientPhotoBlob(recipient.id, index)
+          if (recipientApplyTokenRef.current !== token) {
+            return
+          }
           if (blob) {
             photos.push({
               id: `saved-${recipient.id}-${index}`,
@@ -5972,12 +6108,63 @@ function App() {
             })
           }
         }
+        if (recipientApplyTokenRef.current !== token) {
+          return
+        }
         if (photos.length) {
-          setReferencePhotos((current) => (current.length ? current : photos))
+          setReferencePhotos((current) =>
+            replace ? [...photos, ...current].slice(0, maxReferencePhotos) : current.length ? current : photos,
+          )
         }
       } catch {
-        setReferencePhotoNotice('We couldn’t load the saved photos. You can add them again.')
+        if (recipientApplyTokenRef.current === token) {
+          setReferencePhotoNotice('We couldn’t load the saved photos. You can add them again.')
+        }
       }
+    }
+  }
+
+  const clearAutoFilledRecipient = () => {
+    const previous = autoFilledRecipientRef.current
+    if (!previous) {
+      return
+    }
+    autoFilledRecipientRef.current = null
+    recipientApplyTokenRef.current += 1
+    setDetails((current) => {
+      const next = { ...current }
+      for (const [field, value] of Object.entries(previous.details) as Array<[keyof CardDetails, string]>) {
+        if (current[field] === value) {
+          next[field] = initialDetails[field]
+        }
+      }
+      return next
+    })
+    if (previous.delivery) {
+      setDeliveryDestinations((current) => {
+        const remaining = current.filter((entry) => entry.trim() !== previous.delivery)
+        return remaining.length ? remaining : ['']
+      })
+    }
+    if (previous.shipLine1) {
+      setPrintShipTo((current) => (current.line1 === previous.shipLine1 ? emptyMailingAddress() : current))
+    }
+    setReferencePhotos((current) => current.filter((photo) => !photo.id.startsWith(`saved-${previous.id}-`)))
+  }
+
+  const handleRecipientNameBlur = (typedName: string) => {
+    const typed = typedName.trim().toLowerCase()
+    const matches = typed ? savedRecipients.filter((recipient) => recipient.name.trim().toLowerCase() === typed) : []
+    if (matches.length === 1) {
+      if (matches[0].id !== selectedRecipientId) {
+        void applySavedRecipient(matches[0])
+      }
+      return
+    }
+    const previous = autoFilledRecipientRef.current
+    const previousFirstName = previous?.name.trim().toLowerCase().split(/\s+/)[0] || ''
+    if (previous && (!typed || !typed.includes(previousFirstName))) {
+      clearAutoFilledRecipient()
     }
   }
 
@@ -6493,6 +6680,26 @@ function App() {
     }
   }
 
+  const loadAdminCosts = async (token: string) => {
+    setIsLoadingAdminCosts(true)
+    setAdminCostsError('')
+    try {
+      const response = await fetch(apiUrl('/api/admin/costs'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load cost estimates.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load cost estimates.')
+      }
+      setAdminCosts(data)
+    } catch (caughtError) {
+      setAdminCosts(null)
+      setAdminCostsError(caughtError instanceof Error ? caughtError.message : 'Unable to load cost estimates.')
+    } finally {
+      setIsLoadingAdminCosts(false)
+    }
+  }
+
   const selectAdminMetricsPeriod = async (period: 'today' | '7d' | '30d' | 'ytd') => {
     setAdminMetricsPeriod(period)
     if (!accountSession?.token) {
@@ -6598,7 +6805,7 @@ function App() {
     setAdminMetricsPeriod('7d')
     setThumbBackfillNotice('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    await loadAdminMetrics(accountSession.token, '7d')
+    await Promise.all([loadAdminMetrics(accountSession.token, '7d'), loadAdminCosts(accountSession.token)])
   }
 
   const runCoverThumbBackfill = async () => {
@@ -10512,16 +10719,21 @@ function App() {
           <div className="panel-heading">
             <div>
               <h2>Analytics</h2>
-              <p>Today and all-time site activity.</p>
+              <p>Today and all-time site activity, revenue, and estimated costs.</p>
             </div>
             <div className="admin-page-actions">
               <button
                 className="text-action-link"
                 type="button"
-                disabled={isLoadingAdminMetrics || !accountSession?.token}
-                onClick={() => accountSession?.token && void loadAdminMetrics(accountSession.token)}
+                disabled={isLoadingAdminMetrics || isLoadingAdminCosts || !accountSession?.token}
+                onClick={() => {
+                  if (accountSession?.token) {
+                    void loadAdminMetrics(accountSession.token)
+                    void loadAdminCosts(accountSession.token)
+                  }
+                }}
               >
-                {isLoadingAdminMetrics ? 'Refreshing...' : 'Refresh'}
+                {isLoadingAdminMetrics || isLoadingAdminCosts ? 'Refreshing...' : 'Refresh'}
               </button>
               <button
                 className="text-action-link"
@@ -10713,6 +10925,173 @@ function App() {
               </div>
             </div>
           )}
+          <div className="account-block admin-costs" aria-label="Estimated costs">
+            <div className="admin-analytics-heading">
+              <h3>Costs</h3>
+              {adminCosts && <small>Pacific days · through {adminCosts.today}</small>}
+            </div>
+            {adminCostsError && <div className="field-notice">{adminCostsError}</div>}
+            {isLoadingAdminCosts && !adminCosts && <p>Loading cost estimates...</p>}
+            {adminCosts && (
+              <>
+                <p className="admin-analytics-note">
+                  Estimated spend from what the app did, next to Stripe revenue.{' '}
+                  {adminCosts.trackingStartedOn
+                    ? `Detailed usage tracking started ${adminCosts.trackingStartedOn}; `
+                    : 'Detailed usage tracking starts with the next tracked activity; '}
+                  earlier days only include what was already recorded (cards, sends, prints, payments). Genie voice
+                  minutes are estimated from session logs.
+                </p>
+                <div className="admin-stat-grid admin-cost-summary">
+                  {adminCostColumns.map((column) => {
+                    const summary = adminCosts.summaries[column.id]
+                    return (
+                      <div key={column.id}>
+                        <span>
+                          {column.label}
+                          <small> · Est. cost</small>
+                        </span>
+                        <strong>{formatAdminCost(summary.cost)}</strong>
+                        <small>
+                          Revenue {formatAdminDollars(summary.revenue)} ·{' '}
+                          <b className={summary.net < 0 ? 'admin-cost-negative' : 'admin-cost-positive'}>
+                            Net {formatAdminSignedDollars(summary.net)}
+                          </b>
+                        </small>
+                        <small>
+                          {summary.cardsCreated} cards ·{' '}
+                          {summary.costPerCard == null ? 'no cards yet' : `${formatAdminCost(summary.costPerCard)} per card`}
+                        </small>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="admin-daily-table-wrap">
+                  <table className="admin-daily-table admin-cost-table">
+                    <thead>
+                      <tr>
+                        <th>Category</th>
+                        {adminCostColumns.map((column) => (
+                          <th key={column.id}>{column.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminCosts.categoryInfo.map((category) => (
+                        <tr key={category.id}>
+                          <td>{category.label}</td>
+                          {adminCostColumns.map((column) => {
+                            const entry = adminCosts.summaries[column.id].categories[category.id]
+                            return (
+                              <td key={column.id}>
+                                {formatAdminCost(entry?.cost)}
+                                <small>
+                                  {entry?.units ?? 0} {category.unitLabel}
+                                </small>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                      <tr className="admin-cost-total">
+                        <td>Est. cost</td>
+                        {adminCostColumns.map((column) => (
+                          <td key={column.id}>{formatAdminCost(adminCosts.summaries[column.id].cost)}</td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td>Revenue</td>
+                        {adminCostColumns.map((column) => (
+                          <td key={column.id}>{formatAdminDollars(adminCosts.summaries[column.id].revenue)}</td>
+                        ))}
+                      </tr>
+                      <tr className="admin-cost-total">
+                        <td>Net</td>
+                        {adminCostColumns.map((column) => {
+                          const net = adminCosts.summaries[column.id].net
+                          return (
+                            <td key={column.id} className={net < 0 ? 'admin-cost-negative' : 'admin-cost-positive'}>
+                              {formatAdminSignedDollars(net)}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                      <tr>
+                        <td>Cost per card</td>
+                        {adminCostColumns.map((column) => {
+                          const perCard = adminCosts.summaries[column.id].costPerCard
+                          return <td key={column.id}>{perCard == null ? '—' : formatAdminCost(perCard)}</td>
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <h4 className="admin-cost-subheading">Last 30 days</h4>
+                <div className="admin-cost-legend">
+                  <span className="admin-cost-swatch is-cost" /> Est. cost
+                  <span className="admin-cost-swatch is-revenue" /> Revenue
+                </div>
+                <div className="admin-daily-table-wrap">
+                  <table className="admin-daily-table admin-cost-daily">
+                    <thead>
+                      <tr>
+                        <th>Day</th>
+                        <th className="admin-cost-bar-head">Cost vs revenue</th>
+                        <th>Cost</th>
+                        <th>Revenue</th>
+                        <th>Net</th>
+                        <th>Cards</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const maxValue = Math.max(
+                          0.01,
+                          ...adminCosts.daily.map((row) => Math.max(row.cost, row.revenue)),
+                        )
+                        return adminCosts.daily.map((row) => (
+                          <tr key={row.day}>
+                            <td>
+                              {row.day.slice(5)}
+                              {!row.tracked && <small title="Before detailed tracking">est.</small>}
+                            </td>
+                            <td className="admin-cost-bar-cell">
+                              <span
+                                className="admin-cost-bar is-cost"
+                                style={{ width: `${Math.max(1, (row.cost / maxValue) * 100)}%` }}
+                              />
+                              <span
+                                className="admin-cost-bar is-revenue"
+                                style={{ width: `${row.revenue > 0 ? Math.max(1, (row.revenue / maxValue) * 100) : 0}%` }}
+                              />
+                            </td>
+                            <td>{formatAdminCost(row.cost)}</td>
+                            <td>{formatAdminDollars(row.revenue)}</td>
+                            <td className={row.net < 0 ? 'admin-cost-negative' : 'admin-cost-positive'}>
+                              {formatAdminSignedDollars(row.net)}
+                            </td>
+                            <td>{row.cardsCreated}</td>
+                          </tr>
+                        ))
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="admin-cost-footnote">
+                  Estimates based on list prices; check provider dashboards for exact bills:{' '}
+                  {adminCostDashboards.map((dashboard, index) => (
+                    <span key={dashboard.url}>
+                      {index > 0 && ' · '}
+                      <a href={dashboard.url} target="_blank" rel="noreferrer">
+                        {dashboard.label}
+                      </a>
+                    </span>
+                  ))}
+                  . Days marked “est.” predate detailed tracking. Days before {adminCosts.earliestDay} aren’t counted.
+                </p>
+              </>
+            )}
+          </div>
         </section>
       )}
 
@@ -11621,7 +12000,7 @@ function App() {
               />
             </label>
 
-            <label className="recipient-name-field">
+            <label className="recipient-name-field" ref={recipientFieldRef}>
               To
               <input
                 value={details.recipientName}
@@ -11632,41 +12011,77 @@ function App() {
                 }}
                 onFocus={() => setShowRecipientSuggestions(true)}
                 onBlur={(event) => {
-                  const typed = event.currentTarget.value.trim().toLowerCase()
-                  const matches = typed
-                    ? savedRecipients.filter((recipient) => recipient.name.trim().toLowerCase() === typed)
-                    : []
-                  if (matches.length === 1 && matches[0].id !== selectedRecipientId) {
-                    void applySavedRecipient(matches[0])
-                  }
-                  window.setTimeout(() => setShowRecipientSuggestions(false), 150)
+                  const input = event.currentTarget
+                  handleRecipientNameBlur(input.value)
+                  window.setTimeout(() => {
+                    if (document.activeElement !== input) {
+                      setShowRecipientSuggestions(false)
+                    }
+                  }, 150)
                 }}
                 onKeyDown={(event) => {
+                  const listOpen = showRecipientSuggestions && recipientSuggestions.length > 0
                   if (event.key === 'Escape') {
                     setShowRecipientSuggestions(false)
+                  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    if (!listOpen) {
+                      setShowRecipientSuggestions(true)
+                      return
+                    }
+                    const step = event.key === 'ArrowDown' ? 1 : -1
+                    setActiveSuggestionIndex((current) =>
+                      current < 0 && step < 0
+                        ? recipientSuggestions.length - 1
+                        : (current + step + recipientSuggestions.length) % recipientSuggestions.length,
+                    )
+                  } else if (event.key === 'Enter' && listOpen && recipientSuggestions[activeSuggestionIndex]) {
+                    event.preventDefault()
+                    void applySavedRecipient(recipientSuggestions[activeSuggestionIndex])
                   }
                 }}
                 placeholder={savedRecipients.length ? 'Type or pick a saved recipient' : 'Example: Jamie'}
                 autoComplete="off"
+                role="combobox"
                 aria-autocomplete="list"
+                aria-controls="recipient-suggestions"
                 aria-expanded={showRecipientSuggestions && recipientSuggestions.length > 0}
+                aria-activedescendant={
+                  recipientSuggestions[activeSuggestionIndex]
+                    ? `recipient-suggestion-${recipientSuggestions[activeSuggestionIndex].id}`
+                    : undefined
+                }
               />
               {showRecipientSuggestions && recipientSuggestions.length > 0 && (
-                <ul className="recipient-suggestions" role="listbox" aria-label="Saved recipients">
-                  {recipientSuggestions.map((recipient) => (
-                    <li key={recipient.id} role="option" aria-selected={false}>
+                <ul
+                  id="recipient-suggestions"
+                  className="recipient-suggestions"
+                  role="listbox"
+                  aria-label="Saved recipients"
+                >
+                  {recipientSuggestions.map((recipient, index) => (
+                    <li
+                      key={recipient.id}
+                      id={`recipient-suggestion-${recipient.id}`}
+                      role="option"
+                      aria-selected={index === activeSuggestionIndex}
+                      ref={(element) => {
+                        if (element && index === activeSuggestionIndex) {
+                          element.scrollIntoView({ block: 'nearest' })
+                        }
+                      }}
+                    >
                       <button
                         type="button"
-                        onMouseDown={(event) => event.preventDefault()}
+                        tabIndex={-1}
+                        className={index === activeSuggestionIndex ? 'is-active' : undefined}
                         onPointerDown={(event) => {
-                          event.preventDefault()
-                          void applySavedRecipient(recipient)
-                        }}
-                        onClick={(event) => {
-                          if (event.detail === 0) {
-                            void applySavedRecipient(recipient)
+                          if (event.pointerType === 'mouse') {
+                            event.preventDefault()
                           }
                         }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => void applySavedRecipient(recipient)}
                       >
                         <strong>{recipient.name}</strong>
                         <span>
