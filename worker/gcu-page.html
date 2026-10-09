@@ -30,7 +30,8 @@
   -webkit-font-smoothing: antialiased;
 }
 * { box-sizing: border-box; }
-body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px 16px; }
+[hidden] { display: none !important; }
+body { min-height: 100vh; margin: 0; display: grid; place-items: center; align-content: center; padding: 24px 16px; }
 main { position: relative; width: min(680px, 100%); }
 button { font: inherit; }
 
@@ -268,28 +269,161 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
 @keyframes gcuPulse { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.04); } }
 .gcu-footer { margin-top: 18px; text-align: center; font-size: 0.78rem; color: var(--gcu-grey); }
 .gcu-footer a { color: var(--gcu-dark-teal); font-weight: 700; }
+.gcu-back { display: inline-block; margin: 0 0 12px; border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font-size: 0.86rem; font-weight: 700; cursor: pointer; }
+
+/* ---------- Product page (styled after greetingcarduniverse.com) ---------- */
+body.product-mode { display: block; padding: 0; background: #fff; color: #454545; font-family: Arial, Arimo, Helvetica, sans-serif; font-size: 14px; }
+body.product-mode main { width: 100%; }
+.shop { --gcu-blue: #849bcd; --gcu-blue-dark: #6178ad; max-width: 1000px; margin: 0 auto; padding: 0 16px 32px; }
+.shop a { color: var(--gcu-blue); text-decoration: none; }
+.shop a:hover { text-decoration: underline; }
+.shop-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 12px; }
+.shop-logo {
+  display: inline-grid; padding: 10px 18px 8px; border-radius: 3px; color: #fff !important; text-decoration: none !important;
+  background: linear-gradient(160deg, #f8b25a, #f39125 70%); box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.12);
+}
+.shop-logo b { font-family: Courgette, "Brush Script MT", cursive; font-size: 1.55rem; font-weight: 400; line-height: 1.1; letter-spacing: 0.01em; }
+.shop-logo small { justify-self: end; font-size: 0.68rem; opacity: 0.95; }
+.shop-head-side { text-align: right; color: #7d7d7d; font-size: 0.82rem; line-height: 1.5; }
+.shop-head-side strong { color: var(--gcu-orange); }
+.shop-nav { display: flex; overflow-x: auto; background: var(--gcu-blue); scrollbar-width: none; }
+.shop-nav a { flex: 1 0 auto; padding: 7px 14px; border-right: 1px solid rgba(255, 255, 255, 0.55); color: #fff !important; font-size: 0.86rem; text-align: center; white-space: nowrap; }
+.shop-nav a:last-child { border-right: 0; }
+.shop-promo { margin: 9px 0 0; color: #555; font-size: 0.86rem; text-align: center; }
+.shop-promo b { color: #e0251b; font-weight: 400; }
+.shop-promo i { display: inline-block; width: 7px; height: 7px; margin: 0 10px 1px; border-radius: 50%; background: #7d7d7d; vertical-align: middle; }
+.shop-title { margin: 22px 0 2px; color: var(--gcu-orange); font-family: Helvetica, Arial, Arimo, sans-serif; font-size: 22px; font-weight: 700; line-height: 1.25; }
+.shop-crumbs { font-size: 0.86rem; color: #7d7d7d; }
+.shop-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; margin-top: 18px; align-items: start; }
+.shop-media { text-align: center; color: #7d7d7d; }
+.shop-image { display: grid; place-items: center; min-height: 360px; }
+.shop-image img { display: block; max-width: 100%; max-height: 520px; object-fit: contain; }
+.shop-image.is-flat img { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18); }
+.shop-views { margin-top: 8px; font-size: 0.86rem; }
+.shop-views button { border: 0; padding: 0 2px; background: none; color: var(--gcu-blue); font: inherit; cursor: pointer; }
+.shop-views button.is-selected { color: #454545; font-weight: 700; cursor: default; }
+.shop-caption { margin: 10px 0 0; color: #7d7d7d; font-weight: 700; }
+.shop-buy { display: grid; gap: 12px; }
+.shop-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; color: #7d7d7d; }
+.shop-price .amt { color: #454545; font-size: 1.7rem; font-weight: 700; }
+.shop-send {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 56px;
+  border: 0; border-radius: 4px; padding: 12px 18px; cursor: pointer;
+  color: #fff; background: linear-gradient(180deg, #f8a94a, #f08a1c); box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.18);
+  font-family: Arial, Arimo, sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: 0.01em;
+}
+.shop-send:hover { background: linear-gradient(180deg, #f59e33, #e47c10); }
+.shop-send svg { width: 26px; height: 26px; flex: none; }
+.shop-send-sub { margin: -4px 0 0; color: #7d7d7d; font-size: 0.82rem; text-align: center; }
+.shop-print {
+  display: block; padding: 10px 14px; border: 1px solid var(--gcu-blue); border-radius: 4px; text-align: center;
+  font-weight: 700; background: #f5f7fc;
+}
+.shop-print span { display: block; color: #7d7d7d; font-size: 0.78rem; font-weight: 400; }
+.shop-tabs { display: flex; gap: 3px; margin-top: 6px; border-bottom: 1px solid #ccc; }
+.shop-tabs span { padding: 5px 16px; border: 1px solid #ccc; border-bottom: 0; background: #fff; color: var(--gcu-blue); font-weight: 700; margin-bottom: -1px; }
+.shop-details { margin: 0; padding: 4px 12px 8px; border: 1px solid #ccc; border-top: 0; }
+.shop-details div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px; padding: 7px 0; }
+.shop-details dt { color: #7d7d7d; font-weight: 700; }
+.shop-details dd { margin: 0; overflow-wrap: anywhere; }
+.shop-loading { display: grid; justify-items: center; gap: 14px; padding: 90px 16px; color: #7d7d7d; text-align: center; }
+.shop-spinner { width: 42px; height: 42px; border: 5px solid rgba(132, 155, 205, 0.3); border-top-color: var(--gcu-orange); border-radius: 50%; animation: gcuSpin 900ms linear infinite; }
+.shop-foot { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e3e3e3; color: #7d7d7d; font-size: 0.78rem; text-align: center; }
+@media (max-width: 760px) {
+  .shop-head { flex-direction: column; align-items: center; padding-bottom: 10px; }
+  .shop-head-side { text-align: center; }
+  .shop-nav { justify-content: flex-start; }
+  .shop-promo { font-size: 0.78rem; }
+  .shop-promo i { margin: 0 6px 1px; }
+  .shop-title { margin-top: 16px; font-size: 19px; }
+  .shop-grid { grid-template-columns: 1fr; gap: 16px; }
+  .shop-image { min-height: 0; }
+  .shop-image img { max-height: 420px; }
+}
+
+/* ---------- Send form (after the envelope plays) ---------- */
+#after { width: min(680px, 100%); }
+.send-panel, .gift-note {
+  margin-top: 18px; padding: 22px 22px 20px; border-radius: 24px; background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 44px rgba(63, 155, 145, 0.16), 0 0 0 1px rgba(63, 155, 145, 0.12);
+  animation: floatIn 500ms ease both;
+}
+.send-panel h2, .gift-note h2 { margin: 0; font-family: "Playfair Display", Georgia, serif; font-size: 1.5rem; color: var(--gcu-ink); }
+.send-sub { margin: 4px 0 14px; color: var(--gcu-grey); font-size: 0.9rem; }
+.send-method { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 12px; border-radius: 999px; padding: 4px; background: #eef6f5; }
+.send-method button { border: 0; border-radius: 999px; padding: 9px 10px; background: transparent; color: var(--gcu-dark-teal); font-weight: 800; cursor: pointer; }
+.send-method button.is-selected { background: #fff; color: var(--gcu-ink); box-shadow: 0 2px 8px rgba(63, 155, 145, 0.22); }
+.send-panel label { display: grid; gap: 4px; margin-bottom: 10px; color: var(--gcu-ink); font-size: 0.86rem; font-weight: 700; }
+.send-panel label small { color: var(--gcu-grey); font-weight: 600; }
+.send-panel input:not([type="checkbox"]), .send-panel textarea {
+  width: 100%; border: 1px solid rgba(63, 155, 145, 0.35); border-radius: 12px; padding: 10px 12px;
+  background: #fff; color: #222; font: inherit; font-size: 16px; font-weight: 400;
+}
+.send-panel textarea { resize: vertical; min-height: 64px; }
+.send-panel input:focus, .send-panel textarea:focus { outline: 2px solid rgba(245, 158, 51, 0.6); outline-offset: 1px; }
+.send-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.send-panel label.sms-consent { display: flex; align-items: flex-start; gap: 8px; color: var(--gcu-dark-grey); font-size: 0.8rem; font-weight: 500; line-height: 1.4; }
+.sms-consent input { margin-top: 2px; width: 18px; height: 18px; flex: none; accent-color: var(--gcu-dark-teal); }
+.sms-consent a, .send-account a { color: var(--gcu-dark-teal); font-weight: 700; }
+.send-account { margin: 4px 0 10px; padding: 12px 14px; border-radius: 14px; background: #f3faf9; font-size: 0.86rem; }
+.send-account p { margin: 0 0 8px; }
+.send-account .ok { margin: 0; color: var(--gcu-ink); font-weight: 700; }
+.send-account .code-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.send-account .code-row label { flex: 1 1 150px; margin: 0; }
+.send-secondary { border: 1px solid var(--gcu-dark-teal); border-radius: 999px; padding: 9px 14px; background: #fff; color: var(--gcu-dark-teal); font-weight: 800; cursor: pointer; }
+.send-secondary:disabled { opacity: 0.55; cursor: default; }
+.send-cost { margin: 0 0 8px; color: var(--gcu-grey); font-size: 0.82rem; }
+.send-notice { min-height: 1.2em; margin: 0 0 10px; color: #b4442a; font-size: 0.86rem; font-weight: 700; }
+.send-notice.is-ok { color: var(--gcu-dark-teal); }
+.send-submit {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px;
+  border: 0; border-radius: 999px; background: var(--gcu-orange); color: #fff; font-size: 1.05rem; font-weight: 900; cursor: pointer;
+  box-shadow: 0 10px 22px rgba(245, 158, 51, 0.32);
+}
+.send-submit:disabled { opacity: 0.6; cursor: default; }
+/* On the orange button the spinner is white. */
+.btn-spinner { width: 18px; height: 18px; border: 3px solid rgba(255, 255, 255, 0.4); border-top-color: #fff; border-radius: 50%; animation: gcuSpin 800ms linear infinite; }
+.send-done { text-align: center; }
+.send-done .big { font-size: 2.2rem; line-height: 1; }
+.send-done a { color: var(--gcu-dark-teal); font-weight: 700; overflow-wrap: anywhere; }
+.gift-note p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1.05rem; color: var(--gcu-ink); }
+.gift-note .sig { color: var(--gcu-grey); font-size: 0.9rem; }
+@media (max-width: 520px) {
+  .send-row { grid-template-columns: 1fr; gap: 0; }
+  .send-panel, .gift-note { padding: 18px 16px; border-radius: 20px; }
+}
 </style>
 </head>
 <body>
 <main id="stage"></main>
+<div id="after"></div>
 <script>
 const PID = "__PID__";
 const API_ORIGIN = "__API__";
+const APP_URL = "__APP__";
 const API = `${API_ORIGIN}/gcu/${PID}`;
 const KNOWN_TITLE = "__TITLE__";
+const KNOWN_INFO = "__INFO__";
+const GIFT_ID = (new URLSearchParams(location.search).get("s") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
 const stage = document.getElementById("stage");
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const after = document.getElementById("after");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ---------- Progress screen ----------
-stage.innerHTML = `
-  <section class="gcu-loading" aria-live="polite">
-    <div class="gcu-orbit" aria-hidden="true"><span></span></div>
-    <h1>Creating animation for GCU Card# ${esc(PID)}</h1>
-    <p class="gcu-title">${esc(KNOWN_TITLE)}</p>
-    <p class="gcu-status">Finding the card…</p>
-  </section>`;
+function showLoader(heading = `Creating animation for GCU Card# ${PID}`, title = KNOWN_TITLE) {
+  document.body.classList.remove("product-mode");
+  after.innerHTML = "";
+  stage.innerHTML = `
+    <section class="gcu-loading" aria-live="polite">
+      <div class="gcu-orbit" aria-hidden="true"><span></span></div>
+      <h1>${esc(heading)}</h1>
+      <p class="gcu-title">${esc(title)}</p>
+      <p class="gcu-status">Finding the card…</p>
+    </section>`;
+}
 const setTitle = (t) => { const el = stage.querySelector(".gcu-title"); if (el && t) el.textContent = t; };
 const setStatus = (t, error = false) => {
+  if (error && /failed to fetch|load failed|networkerror/i.test(t)) t = "Couldn’t reach Card Genie. Check your connection and try again.";
   const el = stage.querySelector(".gcu-status");
   if (!el) return;
   el.textContent = t;
@@ -677,12 +811,28 @@ function renderInside(preview, lines, frontLandscape) {
 }
 
 // ---------- Build ----------
-async function prepare() {
-  const res = await fetch(`${API}/info`);
-  const info = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(info.error || `Couldn't look up GCU Card# ${PID}.`);
+let infoPromise = null;
+const getInfo = () => {
+  if (KNOWN_INFO) return Promise.resolve(KNOWN_INFO);
+  infoPromise ||= fetch(`${API}/info`).then(async (res) => {
+    const info = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(info.error || `Couldn't look up GCU Card# ${PID}.`);
+    return info;
+  });
+  infoPromise.catch(() => { infoPromise = null; });
+  return infoPromise;
+};
+
+let builtCard = null;
+async function prepare(info) {
   setTitle(info.title);
   if (info.title) document.title = `${info.title} · GCU ${PID}`;
+  if (builtCard) return builtCard;
+  builtCard = await buildCard(info);
+  return builtCard;
+}
+
+async function buildCard(info) {
   if (info.inside) {
     setStatus("Loading the card…");
     const [front] = await Promise.all([loadImage(info.front), loadImage(API_ORIGIN + info.inside)]);
@@ -706,18 +856,21 @@ async function prepare() {
 }
 
 // ---------- Envelope reveal (mirrors gcu-inside/animation_template.html) ----------
-function startAnimation(CARD) {
+// CARD.from / CARD.to may change later (the send form previews the sender's names on Replay).
+function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } = {}) {
   document.documentElement.style.setProperty("--card-cover-width", CARD.w);
   document.documentElement.style.setProperty("--card-cover-height", CARD.h);
-  if (CARD.w > CARD.h) document.body.classList.add("is-landscape");
-  const address = `To ${CARD.to}`;
-  const sizeClass = address.length > 34 ? " is-long" : address.length > 22 ? " is-medium" : "";
-  const frontFace = `
+  document.body.classList.toggle("is-landscape", CARD.w > CARD.h);
+  const frontFace = () => {
+    const address = `To ${CARD.to}`;
+    const sizeClass = address.length > 34 ? " is-long" : address.length > 22 ? " is-medium" : "";
+    return `
     <div class="envelope-front-face">
       <img class="envelope-stamp" src="https://www.card-genie.com/stamp.webp" alt="" aria-hidden="true">
       <span class="envelope-from">From ${esc(CARD.from)}</span>
       <span class="envelope-front-address${sizeClass}">${esc(address)}</span>
     </div>`;
+  };
   const placeholder = `<span class="envelope-prompt envelope-prompt-placeholder" aria-hidden="true">Reveal your card</span>`;
   const toggle = (step) => `
     <nav class="card-view-toggle" aria-label="Card view">
@@ -730,13 +883,13 @@ function startAnimation(CARD) {
   const views = {
     envelope: () => `
       <button class="proof-stage envelope-scene" type="button" data-go="envelopeFlip">
-        <div class="envelope">${frontFace}</div>
+        <div class="envelope">${frontFace()}</div>
         <span class="envelope-prompt">Reveal your card</span>
       </button>`,
     envelopeFlip: () => `
       <div class="proof-stage envelope-scene">
         <div class="envelope is-flipping">
-          ${frontFace}
+          ${frontFace()}
           <div class="envelope-back-face">
             <div class="envelope-back"></div><div class="envelope-liner"></div>
             <div class="envelope-flap envelope-flap-static"></div><div class="envelope-body"></div>
@@ -788,10 +941,11 @@ function startAnimation(CARD) {
     let cardWas, sceneWas, ghost;
     if (settle) {
       cardWas = stage.querySelector(".sleeve-card").getBoundingClientRect();
-      sceneWas = stage.firstElementChild.getBoundingClientRect();
-      ghost = frozenCopy(stage.firstElementChild, ".card-sleeve");
+      const scene = stage.querySelector(".proof-stage");
+      sceneWas = scene.getBoundingClientRect();
+      ghost = frozenCopy(scene, ".card-sleeve");
     }
-    stage.innerHTML = views[step](fromEnvelope && !settle);
+    stage.innerHTML = top + views[step](fromEnvelope && !settle);
     if (settle) {
       const frame = stage.querySelector(".card-cover-frame");
       const now = frame.getBoundingClientRect();
@@ -814,17 +968,349 @@ function startAnimation(CARD) {
     if (step === "envelopeFlip") timers.push(setTimeout(() => go("envelopeBack"), 1200));
     if (step === "envelopeBack") timers.push(setTimeout(() => go("opening"), 350));
     if (step === "opening") timers.push(setTimeout(() => go("front", true), 4600));
+    if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
   }
-  stage.addEventListener("click", (e) => {
+  stage.onclick = (e) => {
+    if (e.target.closest("[data-back]")) { timers.splice(0).forEach(clearTimeout); renderProduct(); return; }
     const el = e.target.closest("[data-go]");
     if (el && !el.disabled) go(el.dataset.go);
-  });
+  };
+  stopAnimation = () => timers.splice(0).forEach(clearTimeout);
   go("envelope");
+  if (autoPlay) timers.push(setTimeout(() => go("envelopeFlip"), 1100));
+}
+let stopAnimation = () => {};
+
+// ---------- Product page ----------
+const money = (p) => (p ? `$${p}` : "");
+const orientationOf = (info) => {
+  const m = String(info.size || "").match(/(\d+(?:\.\d+)?)"\s*x\s*(\d+(?:\.\d+)?)"/);
+  if (m) return Number(m[1]) > Number(m[2]) ? "Landscape" : Number(m[1]) < Number(m[2]) ? "Portrait" : "Square";
+  return info.landscape == null ? "" : info.landscape ? "Landscape" : "Portrait";
+};
+const GCU_LINKS = [
+  ["All Cards", "/community/"], ["Birthday Cards", "/birthday-cards"], ["Thank You Cards", "/thank-you-cards"],
+  ["Holidays", "/holiday-cards"], ["Invitations", "/invitations"], ["Photo Cards", "/photo-cards"],
+];
+const ENVELOPE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>`;
+
+function shopShell(inner) {
+  return `
+  <div class="shop">
+    <header class="shop-head">
+      <a class="shop-logo" href="https://www.greetingcarduniverse.com/" target="_blank" rel="noopener"><b>Greeting Card Universe</b><small>any card imaginable</small></a>
+      <div class="shop-head-side">Send any GCU card <strong>digitally</strong> in seconds<br>with <strong>Card Genie</strong></div>
+    </header>
+    <nav class="shop-nav" aria-label="GreetingCardUniverse categories">
+      ${GCU_LINKS.map(([t, href]) => `<a href="https://www.greetingcarduniverse.com${href}" target="_blank" rel="noopener">${t}</a>`).join("")}
+    </nav>
+    <p class="shop-promo"><b>Send digitally</b> by text or email<i></i>Printed cards mailed <b>the next business day</b></p>
+    ${inner}
+    <footer class="shop-foot">GCU Card# ${esc(PID)} · Digital delivery by <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Card Genie</a> · Printed cards by <a href="https://www.greetingcarduniverse.com/" target="_blank" rel="noopener">GreetingCardUniverse</a></footer>
+  </div>`;
 }
 
-prepare()
-  .then((card) => startAnimation({ ...card, to: "You", from: "Greeting Card Universe" }))
-  .catch((err) => setStatus(err.message || "Something went wrong.", true));
+let productInfo = null;
+function renderProduct() {
+  stopAnimation();
+  const info = productInfo;
+  document.body.classList.add("product-mode");
+  document.body.classList.remove("is-landscape");
+  after.innerHTML = "";
+  if (info.title) document.title = `${info.title} · GCU ${PID}`;
+  const orientation = orientationOf(info);
+  const crumbs = (info.categories || []).map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a>`).join(" &gt; ");
+  const insideSrc = info.inside ? API_ORIGIN + info.inside : info.hasPreview ? `${API}/preview` : "";
+  const views = [["front", "Front", info.image3d || info.front], ...(info.image3d ? [["cover", "Cover", info.front]] : []), ...(insideSrc ? [["inside", "Inside", insideSrc]] : [])];
+  const row = (label, value) => (value ? `<div><dt>${label}:</dt><dd>${value}</dd></div>` : "");
+  const buyUrl = info.productUrl || `https://www.greetingcarduniverse.com/${PID}`;
+  stage.innerHTML = shopShell(`
+    <h1 class="shop-title">${esc(info.title || `GCU Card# ${PID}`)}</h1>
+    ${crumbs ? `<nav class="shop-crumbs" aria-label="Category">${crumbs}</nav>` : ""}
+    <div class="shop-grid">
+      <div class="shop-media">
+        <div class="shop-image${info.image3d ? "" : " is-flat"}"><img id="shopImg" src="${esc(views[0][2])}" alt="${esc(info.title)} (${esc(PID)})"></div>
+        ${views.length > 1 ? `<div class="shop-views" role="group" aria-label="Card view">🔍 ${views.map(([k, t], i) => `<button type="button" data-view="${k}" data-src="${esc(views[i][2])}" class="${i ? "" : "is-selected"}">${t}</button>`).join(" | ")}</div>` : ""}
+        <p class="shop-caption">${esc(info.title)}</p>
+      </div>
+      <div class="shop-buy">
+        ${info.price ? `<div class="shop-price"><span class="amt">${esc(money(info.price))}</span> printed card (includes envelope)</div>` : ""}
+        <button class="shop-send" type="button" data-send>${ENVELOPE_ICON}Send Card Digitally Now</button>
+        <p class="shop-send-sub">Watch it open in an animated envelope, then send it by text or email.</p>
+        <a class="shop-print" href="${esc(buyUrl)}" target="_blank" rel="noopener">Buy printed card on GreetingCardUniverse${info.price ? ` · ${esc(money(info.price))}` : ""}<span>Printed, personalized &amp; mailed by GreetingCardUniverse</span></a>
+        <div class="shop-tabs"><span>Details</span></div>
+        <dl class="shop-details">
+          ${row("Price", info.price ? `${esc(money(info.price))} (printed card, includes envelope)` : "")}
+          ${row("Inside Text", (info.lines || []).filter((l, i, a) => l || (i && a[i - 1])).map(esc).join("<br>"))}
+          ${row("Customize", esc(info.customize))}
+          ${row("Artist", info.artist ? (info.artistUrl ? `<a href="${esc(info.artistUrl)}" target="_blank" rel="noopener">${esc(info.artist)}</a>` : esc(info.artist)) : "")}
+          ${row("Product ID", esc(PID))}
+          ${row("Size", esc(info.size))}
+          ${row("Orientation", esc(orientation))}
+          ${row("Artist Notes", esc(info.artistNotes))}
+        </dl>
+      </div>
+    </div>`);
+  stage.onclick = (e) => {
+    const view = e.target.closest("[data-view]");
+    if (view) {
+      stage.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("is-selected", b === view));
+      const img = stage.querySelector("#shopImg");
+      img.src = view.dataset.src;
+      img.parentElement.classList.toggle("is-flat", view.dataset.view !== "front" || !info.image3d);
+      return;
+    }
+    if (e.target.closest("[data-send]")) startSendFlow();
+  };
+}
+
+function productLoading(message, error = false) {
+  document.body.classList.add("product-mode");
+  stage.innerHTML = shopShell(`
+    <div class="shop-loading" aria-live="polite">
+      ${error ? "" : `<div class="shop-spinner" aria-hidden="true"></div>`}
+      <p class="${error ? "gcu-error" : ""}">${esc(message)}</p>
+      ${error ? `<a href="https://www.greetingcarduniverse.com/${esc(PID)}" target="_blank" rel="noopener">View GCU Card# ${esc(PID)} on GreetingCardUniverse</a>` : ""}
+    </div>`);
+}
+
+// ---------- Sender: build + play, then the send form ----------
+let sendCard = null;
+async function startSendFlow() {
+  window.scrollTo(0, 0);
+  showLoader(`Creating animation for GCU Card# ${PID}`, productInfo.title);
+  try {
+    const card = await prepare(productInfo);
+    sendCard = { ...card, to: "You", from: "Greeting Card Universe" };
+    after.innerHTML = "";
+    startAnimation(sendCard, {
+      autoPlay: true,
+      top: `<button class="gcu-back" type="button" data-back>‹ Back to card details</button>`,
+      onSettled: showSendForm,
+    });
+  } catch (err) {
+    setStatus(err.message || "Something went wrong.", true);
+    stage.querySelector(".gcu-loading")?.insertAdjacentHTML("afterbegin", `<button class="gcu-back" type="button" data-back>‹ Back to card details</button>`);
+    stage.onclick = (e) => { if (e.target.closest("[data-back]")) renderProduct(); };
+  }
+}
+
+const SESSION_KEY = "cardGenieAccountSession";
+const CREDITS_KEY = "cardGenieCredits";
+const readSession = () => {
+  try { const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); return s?.token && s?.phoneE164 ? s : null; } catch { return null; }
+};
+const formatPhone = (e164) => {
+  const d = String(e164 || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : e164;
+};
+const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+const phoneDigits = (v) => { const d = String(v).replace(/\D/g, ""); return d.length === 11 && d[0] === "1" ? d.slice(1) : d; };
+const postJson = async (path, body, token) => {
+  const res = await fetch(`${API_ORIGIN}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+};
+
+const SEND_COST = 3;
+const form = { method: "email", session: readSession(), credits: null, codeSent: false, busy: "" };
+
+function showSendForm() {
+  if (after.querySelector(".send-panel")) return;
+  after.innerHTML = `
+    <section class="send-panel" aria-labelledby="sendTitle">
+      <h2 id="sendTitle">Send this card</h2>
+      <p class="send-sub">They’ll get a link that opens this envelope and card.</p>
+      <div class="send-method" role="radiogroup" aria-label="Send by">
+        <button type="button" role="radio" data-method="email">Email</button>
+        <button type="button" role="radio" data-method="text">Text message</button>
+      </div>
+      <label><span data-dest-label>Their email</span><input id="sendDest" autocomplete="off"></label>
+      <div class="send-row">
+        <label><span>To <small>(their name, optional)</small></span><input id="sendTo" maxlength="40" autocomplete="off" placeholder="Jamie"></label>
+        <label><span>From <small>(your name)</small></span><input id="sendFrom" maxlength="40" autocomplete="name" placeholder="Alex"></label>
+      </div>
+      <label><span>Short note <small>(optional, shown after they open the card)</small></span><textarea id="sendNote" maxlength="300" rows="2"></textarea></label>
+      <label class="sms-consent" hidden>
+        <input type="checkbox" id="sendConsent">
+        <span>OK to text them this card — one message, no marketing. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
+          <a href="${esc(APP_URL)}/privacy/index.html" target="_blank" rel="noopener">Privacy</a> · <a href="${esc(APP_URL)}/terms/index.html" target="_blank" rel="noopener">Terms</a></span>
+      </label>
+      <div class="send-account" id="sendAccount"></div>
+      <p class="send-cost">Sending uses ${SEND_COST} Card Genie credits.</p>
+      <p class="send-notice" id="sendNotice" role="alert"></p>
+      <button class="send-submit" type="button" id="sendSubmit">Send card</button>
+    </section>`;
+  const $ = (s) => after.querySelector(s);
+  const notice = (t, ok = false) => { const n = $("#sendNotice"); n.textContent = t; n.classList.toggle("is-ok", ok); };
+  const setMethod = (m) => {
+    form.method = m;
+    after.querySelectorAll("[data-method]").forEach((b) => { const on = b.dataset.method === m; b.classList.toggle("is-selected", on); b.setAttribute("aria-checked", on); });
+    const dest = $("#sendDest");
+    $("[data-dest-label]").textContent = m === "email" ? "Their email" : "Their cellphone";
+    Object.assign(dest, m === "email"
+      ? { type: "email", inputMode: "email", placeholder: "jamie@example.com", autocomplete: "off" }
+      : { type: "tel", inputMode: "tel", placeholder: "(925) 555-1234", autocomplete: "off" });
+    $(".sms-consent").hidden = m !== "text";
+    notice("");
+  };
+  const renderAccount = () => {
+    const box = $("#sendAccount");
+    if (form.session) {
+      const credits = form.credits == null ? "" : ` · ${form.credits} credit${form.credits === 1 ? "" : "s"}`;
+      const low = form.credits != null && form.credits < SEND_COST;
+      box.innerHTML = `<p class="ok">✓ Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}${esc(credits)}</p>
+        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits on Card Genie</a>, then come back and tap Send.</p>` : ""}`;
+      return;
+    }
+    box.innerHTML = `
+      <p>Confirm your mobile number to send. We’ll text a one-time code. New Card Genie accounts get free credits when they confirm.</p>
+      <div class="code-row">
+        <label>Mobile number<input id="acctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(925) 555-1234"></label>
+        <button class="send-secondary" type="button" data-code-start ${form.busy === "start" ? "disabled" : ""}>${form.busy === "start" ? "Sending code…" : form.codeSent ? "Text a new code" : "Text me a code"}</button>
+      </div>
+      ${form.codeSent ? `<div class="code-row" style="margin-top:8px">
+        <label>Text code<input id="acctCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="8"></label>
+        <button class="send-secondary" type="button" data-code-verify ${form.busy === "verify" ? "disabled" : ""}>${form.busy === "verify" ? "Checking…" : "Confirm number"}</button>
+      </div>` : ""}`;
+    if (form.phone) $("#acctPhone").value = form.phone;
+  };
+  const refreshAccount = async () => {
+    if (!form.session) return renderAccount();
+    renderAccount();
+    try {
+      const res = await fetch(`${API_ORIGIN}/api/account`, { headers: { Authorization: `Bearer ${form.session.token}` } });
+      if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; return renderAccount(); }
+      const data = await res.json().catch(() => ({}));
+      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+    } catch {}
+    renderAccount();
+  };
+  const startCode = async () => {
+    form.phone = $("#acctPhone").value.trim();
+    if (phoneDigits(form.phone).length !== 10) return notice("Enter your 10-digit mobile number, like (925) 555-1234.");
+    form.busy = "start"; renderAccount(); notice("");
+    try {
+      const { res, data } = await postJson("/api/auth/otp/start", { phone: form.phone });
+      if (!res.ok) throw new Error(data.error || "Couldn’t send a code. Try again.");
+      form.codeSent = true; notice(data.message || "We texted you a 6-digit code.", true);
+    } catch (err) { notice(err.message); }
+    form.busy = ""; renderAccount();
+    $("#acctCode")?.focus();
+  };
+  const verifyCode = async () => {
+    const code = ($("#acctCode")?.value || "").replace(/\D/g, "");
+    if (code.length !== 6) return notice("Enter the 6-digit code from the text message.");
+    form.busy = "verify"; renderAccount(); notice("");
+    try {
+      const { res, data } = await postJson("/api/auth/otp/verify", { phone: form.phone, code });
+      if (!res.ok || !data.token) throw new Error(data.error || "That code didn’t work. Try again.");
+      form.session = { token: data.token, phoneE164: data.phoneE164, copyEmail: data.email || undefined };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(form.session));
+      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+      notice(data.message || "Your number is confirmed.", true);
+    } catch (err) { notice(err.message); }
+    form.busy = ""; renderAccount();
+  };
+  const submit = async () => {
+    const method = form.method;
+    const destRaw = $("#sendDest").value.trim();
+    const fromName = $("#sendFrom").value.trim();
+    const toName = $("#sendTo").value.trim();
+    const note = $("#sendNote").value.trim();
+    if (method === "email" && !validEmail(destRaw)) return notice("Enter their email address, like jamie@example.com.");
+    if (method === "text" && phoneDigits(destRaw).length !== 10) return notice("Enter their 10-digit US cellphone number, like (925) 555-1234.");
+    if (!fromName) return notice("Enter your name so they know who it’s from.");
+    if (method === "text" && !$("#sendConsent").checked) return notice("Check the box to send this card by text.");
+    if (!form.session) return notice("Confirm your mobile number before sending. We’ll text you a one-time code.");
+    if (form.credits != null && form.credits < SEND_COST) return notice(`Sending uses ${SEND_COST} credits and you have ${form.credits}. Buy more credits on Card Genie to send.`);
+    const btn = $("#sendSubmit");
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span>Sending…`;
+    notice("");
+    try {
+      const { res, data } = await postJson(`/gcu/${PID}/send`, {
+        method, destination: destRaw, fromName, toName, note, recipientConsentConfirmed: method === "text" ? true : undefined,
+      }, form.session.token);
+      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+      if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; renderAccount(); }
+      if (!res.ok) { renderAccount(); throw new Error(data.error || "Couldn’t send the card. Please try again."); }
+      const shown = method === "email" ? data.deliveredTo : formatPhone(data.deliveredTo);
+      after.innerHTML = `
+        <section class="send-panel send-done" aria-live="polite">
+          <div class="big" aria-hidden="true">💌</div>
+          <h2>Card sent!</h2>
+          <p class="send-sub">We ${method === "email" ? "emailed" : "texted"} ${esc(shown)} a link to open it. ${SEND_COST} credits used${typeof data.creditBalance === "number" ? ` · ${data.creditBalance} left` : ""}.</p>
+          <p><a href="${esc(data.shareUrl)}" target="_blank" rel="noopener">${esc(data.shareUrl)}</a></p>
+          <p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+            <button class="send-secondary" type="button" data-again>Send to someone else</button>
+            <button class="send-secondary" type="button" data-back-product>Back to card details</button>
+          </p>
+        </section>`;
+      return;
+    } catch (err) {
+      notice(err.message);
+      btn.disabled = false;
+      btn.textContent = "Send card";
+    }
+  };
+  const previewNames = () => {
+    sendCard.from = $("#sendFrom").value.trim() || "Greeting Card Universe";
+    sendCard.to = $("#sendTo").value.trim() || "You";
+  };
+  after.onclick = (e) => {
+    const m = e.target.closest("[data-method]");
+    if (m) return setMethod(m.dataset.method);
+    if (e.target.closest("[data-code-start]")) return startCode();
+    if (e.target.closest("[data-code-verify]")) return verifyCode();
+    if (e.target.closest("#sendSubmit")) return submit();
+    if (e.target.closest("[data-again]")) { after.innerHTML = ""; return showSendForm(); }
+    if (e.target.closest("[data-back-product]")) return renderProduct();
+  };
+  after.oninput = (e) => { if (e.target.id === "sendFrom" || e.target.id === "sendTo") previewNames(); };
+  setMethod(form.method);
+  refreshAccount();
+}
+
+// ---------- Recipient: open the card that was sent ----------
+async function openGift() {
+  showLoader("Opening your card…", "");
+  try {
+    const [info, gift] = await Promise.all([
+      getInfo(),
+      fetch(`${API}/gift/${GIFT_ID}`).then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || "This card link isn’t working."); return d; }),
+    ]);
+    const heading = stage.querySelector(".gcu-loading h1");
+    if (heading) heading.textContent = `Opening your card from ${gift.from}…`;
+    const card = await prepare(info);
+    const buyUrl = info.productUrl || `https://www.greetingcarduniverse.com/${PID}`;
+    startAnimation({ ...card, from: gift.from, to: gift.to || "You" }, {
+      onSettled: () => {
+        after.innerHTML = `
+          ${gift.note ? `<section class="gift-note"><h2>A note from ${esc(gift.from)}</h2><p>${esc(gift.note)}</p></section>` : ""}
+          <p class="gcu-footer">Sent with <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Card Genie</a> · This card is GCU Card# ${esc(PID)} — <a href="${esc(buyUrl)}" target="_blank" rel="noopener">get it printed${info.price ? ` (${esc(money(info.price))})` : ""}</a></p>`;
+      },
+    });
+  } catch (err) {
+    setStatus(err.message || "Something went wrong.", true);
+  }
+}
+
+if (GIFT_ID) {
+  openGift();
+} else if (KNOWN_INFO) {
+  productInfo = KNOWN_INFO;
+  renderProduct();
+} else {
+  productLoading(`Loading GCU Card# ${PID}…`);
+  getInfo()
+    .then((info) => { productInfo = info; renderProduct(); })
+    .catch((err) => productLoading(err.message || "Something went wrong.", true));
+}
 </script>
 </body>
 </html>

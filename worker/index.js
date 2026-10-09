@@ -6684,7 +6684,14 @@ const handleRequest = async (request, env, ctx) => {
 
   const gcuPath = matchGcuPath(url.pathname)
   if (gcuPath) {
-    return handleGcuRequest(request, env, url, gcuPath, getCorsHeaders(request, env))
+    return handleGcuRequest(request, env, url, gcuPath, getCorsHeaders(request, env), {
+      getSession: (req) => getAccountSession(env, readAccountToken(req)),
+      normalizeEmailAddress,
+      normalizePhoneNumber,
+      sendEmailDelivery,
+      sendTextDelivery,
+      escapeHtml,
+    })
   }
 
   const sharePath = request.method === 'GET' ? getSharePathParts(url.pathname) : null
