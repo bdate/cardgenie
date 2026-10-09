@@ -1164,6 +1164,38 @@ function renderCustom(style, message, signature) {
   return c;
 }
 
+// Print-size text is tiny on a phone, so the digital inside scales the whole message up to fill
+// most of the page (at most 2x), keeping its font, colour, alignment and relative position.
+const ENLARGE_FILL = 0.8, ENLARGE_MAX = 2;
+function enlargeText(c) {
+  const W = c.width, H = c.height;
+  const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0, i = y * W * 4; x < W; x++, i += 4) {
+      if (d[i] + d[i + 1] + d[i + 2] > 735) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      y1 = y;
+    }
+  }
+  if (x1 < 0) return c;
+  x0 = Math.max(0, x0 - 4); y0 = Math.max(0, y0 - 4); x1 = Math.min(W - 1, x1 + 4); y1 = Math.min(H - 1, y1 + 4);
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const k = Math.min(ENLARGE_MAX, (ENLARGE_FILL * W) / bw, (ENLARGE_FILL * H) / bh);
+  if (k < 1.05) return c;
+  const nw = bw * k, nh = bh * k;
+  const left = W > bw ? ((W - nw) * x0) / (W - bw) : 0, top = H > bh ? ((H - nh) * y0) / (H - bh) : 0;
+  const out = document.createElement("canvas");
+  out.width = W; out.height = H;
+  const ctx = out.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(c, x0, y0, bw, bh, left, top, nw, nh);
+  return out;
+}
+
 // ---------- Build ----------
 let infoPromise = null;
 const getInfo = () => {
@@ -1215,7 +1247,7 @@ async function buildCard(info) {
   const frontLandscape = front.naturalWidth > front.naturalHeight;
   const { canvas, meta, landscape = frontLandscape, style } = renderInside(preview, info.lines || [], frontLandscape);
   if (fontsOk) insideStyle = Promise.resolve(style);
-  const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
+  const blob = await new Promise((r) => enlargeText(canvas).toBlob(r, "image/jpeg", 0.92));
   const q = new URLSearchParams({ w: front.naturalWidth, h: front.naturalHeight, landscape: landscape ? "1" : "0", ...meta });
   // A page drawn with fallback fonts or without the preview is still shown, but not kept for the next visitor.
   if (fontsOk && (preview || !info.hasPreview)) fetch(`${API}/inside?${q}`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob }).catch(() => {});
@@ -2024,7 +2056,7 @@ function showSendForm() {
       }
       const style = await getInsideStyle(productInfo);
       if (seq !== edit.seq) return;
-      const blob = await new Promise((r) => renderCustom(style, edit.message, edit.signature).toBlob(r, "image/jpeg", 0.9));
+      const blob = await new Promise((r) => enlargeText(renderCustom(style, edit.message, edit.signature)).toBlob(r, "image/jpeg", 0.9));
       if (seq !== edit.seq) return;
       if (edit.url) URL.revokeObjectURL(edit.url);
       edit.blob = blob;

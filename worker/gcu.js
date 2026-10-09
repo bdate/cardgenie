@@ -10,7 +10,7 @@ import pageHtml from './gcu-page.html'
 
 const SITE = 'https://www.greetingcarduniverse.com'
 // Bump when the browser-side inside renderer changes so stored inside images are rebuilt.
-const INSIDE_VERSION = 4
+const INSIDE_VERSION = 5
 // Bump when scrape() collects new product-page fields so cached rows are refreshed on next visit.
 const DETAILS_VERSION = 3
 const MAX_INSIDE_BYTES = 6 * 1024 * 1024
