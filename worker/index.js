@@ -1581,7 +1581,7 @@ const sendSendGridEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
         subject: copy.subject,
       },
     ],
-    from: parseEmailSender(env.EMAIL_FROM),
+    from: { ...parseEmailSender(env.EMAIL_FROM), ...(copy.fromName ? { name: copy.fromName } : {}) },
     content: [
       { type: 'text/plain', value: copy.text },
       { type: 'text/html', value: copy.html },
@@ -1630,7 +1630,7 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
   }
 
   const payload = {
-    From: env.EMAIL_FROM,
+    From: copy.fromName ? `${copy.fromName} <${parseEmailSender(env.EMAIL_FROM).email}>` : env.EMAIL_FROM,
     To: to,
     Subject: copy.subject,
     TextBody: copy.text,

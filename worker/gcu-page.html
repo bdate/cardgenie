@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GCU Card# __PID__ · Card Genie</title>
-<link rel="icon" href="https://www.card-genie.com/favicon.svg">
+<title>GCU Card# __PID__ · Greeting Card Universe</title>
+<link rel="icon" href="https://www.greetingcarduniverse.com/favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Playfair+Display:wght@700;800&family=Arimo&family=Questrial&family=Poiret+One&family=Tinos&family=Courgette&family=Comic+Neue&family=Emilys+Candy&family=Pinyon+Script&family=Kalam&family=Gochi+Hand&family=Yellowtail&family=Roboto+Condensed&family=Chewy&family=Patrick+Hand&family=Tenor+Sans&family=Great+Vibes&display=swap">
@@ -267,6 +267,22 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
 .gcu-orbit span::before { content: ""; width: 60%; height: 2px; background: var(--gcu-dark-teal); box-shadow: 0 6px 0 var(--gcu-teal), 0 -6px 0 var(--gcu-teal); }
 @keyframes gcuSpin { to { transform: rotate(360deg); } }
 @keyframes gcuPulse { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.04); } }
+.gift-buy {
+  margin-top: 18px; padding: 22px 22px 20px; border-radius: 24px; text-align: center; background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 44px rgba(63, 155, 145, 0.16), 0 0 0 1px rgba(63, 155, 145, 0.12);
+  animation: floatIn 500ms ease both;
+}
+.gift-buy-kicker { color: var(--gcu-dark-teal); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.gift-buy h2 { margin: 4px 0 6px; font-family: "Playfair Display", Georgia, serif; font-size: 1.5rem; color: var(--gcu-ink); }
+.gift-buy p { margin: 0 auto 14px; max-width: 34em; color: var(--gcu-dark-grey); font-size: 0.92rem; }
+.gift-buy-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: min(100%, 340px); min-height: 50px; padding: 0 18px;
+  border-radius: 999px; background: var(--gcu-orange); color: #fff; font-size: 1.05rem; font-weight: 900; text-decoration: none;
+  box-shadow: 0 10px 22px rgba(245, 158, 51, 0.32);
+}
+.gift-buy .gift-buy-links { margin: 12px auto 0; font-size: 0.88rem; }
+.gift-buy-links a { color: var(--gcu-dark-teal); font-weight: 700; }
+.gift-buy .gift-buy-fine { margin: 6px auto 0; color: var(--gcu-grey); font-size: 0.8rem; }
 .gcu-footer { margin-top: 18px; text-align: center; font-size: 0.78rem; color: var(--gcu-grey); }
 .gcu-footer a { color: var(--gcu-dark-teal); font-weight: 700; }
 .gcu-back { display: inline-block; margin: 0 0 12px; border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font-size: 0.86rem; font-weight: 700; cursor: pointer; }
@@ -712,7 +728,7 @@ function showLoader(heading = `Creating animation for GCU Card# ${PID}`, title =
 }
 const setTitle = (t) => { const el = stage.querySelector(".gcu-title"); if (el && t) el.textContent = t; };
 const setStatus = (t, error = false) => {
-  if (error && /failed to fetch|load failed|networkerror/i.test(t)) t = "Couldn’t reach Card Genie. Check your connection and try again.";
+  if (error && /failed to fetch|load failed|networkerror/i.test(t)) t = "Couldn’t connect. Check your connection and try again.";
   const el = stage.querySelector(".gcu-status");
   if (!el) return;
   el.textContent = t;
@@ -1207,7 +1223,7 @@ async function buildCard(info) {
 
 // ---------- Envelope reveal (mirrors gcu-inside/animation_template.html) ----------
 // CARD.from / CARD.to may change later (the send form previews the sender's names on Replay).
-function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } = {}) {
+function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = null, top = "" } = {}) {
   document.documentElement.style.setProperty("--card-cover-width", CARD.w);
   document.documentElement.style.setProperty("--card-cover-height", CARD.h);
   document.body.classList.toggle("is-landscape", CARD.w > CARD.h);
@@ -1319,6 +1335,7 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } =
     if (step === "envelopeBack") timers.push(setTimeout(() => go("opening"), 350));
     if (step === "opening") timers.push(setTimeout(() => go("front", true), 4600));
     if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
+    onStep?.(step);
   }
   stage.onclick = (e) => {
     if (e.target.closest("[data-back]")) { timers.splice(0).forEach(clearTimeout); backToProduct(); return; }
@@ -1879,11 +1896,11 @@ function showSendForm() {
       const low = form.credits != null && form.credits < SEND_COST;
       box.innerHTML = `<p class="ok"><span class="check" aria-hidden="true">✓</span>Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
         ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
-        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits on Card Genie</a>, then come back and tap Send.</p>` : ""}`;
+        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits</a>, then come back and tap Send.</p>` : ""}`;
       return;
     }
     box.innerHTML = `
-      <p>Confirm your mobile number to send. We’ll text a one-time code. New Card Genie accounts get free credits when they confirm.</p>
+      <p>Confirm your mobile number to send. We’ll text a one-time code. New accounts get free credits when they confirm.</p>
       <div class="code-row">
         <label>Mobile number<input id="acctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(925) 555-1234"></label>
         <button class="send-secondary" type="button" data-code-start ${form.busy === "start" ? "disabled" : ""}>${form.busy === "start" ? "Sending code…" : form.codeSent ? "Text a new code" : "Text me a code"}</button>
@@ -1941,7 +1958,7 @@ function showSendForm() {
     if (!fromName) return notice("Enter your name so they know who it’s from.");
     if (method === "text" && !$("#sendConsent").checked) return notice("Check the box to send this card by text.");
     if (!form.session) return notice("Confirm your mobile number before sending. We’ll text you a one-time code.");
-    if (form.credits != null && form.credits < SEND_COST) return notice(`Sending uses ${SEND_COST} credits and you have ${form.credits}. Buy more credits on Card Genie to send.`);
+    if (form.credits != null && form.credits < SEND_COST) return notice(`Sending uses ${SEND_COST} credits and you have ${form.credits}. Buy more credits to send.`);
     const btn = $("#sendSubmit");
     btn.disabled = true;
     btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span>Sending…`;
@@ -2061,12 +2078,26 @@ async function openGift() {
       card.inside = API_ORIGIN + gift.inside;
       await loadImage(card.inside).catch(() => {});
     }
-    const buyUrl = info.productUrl || `https://www.greetingcarduniverse.com/${PID}`;
+    const productUrl = info.productUrl || `${G}/${PID}`;
+    const footer = `<p class="gcu-footer">Sent with <a href="${G}/" target="_blank" rel="noopener">Greeting Card Universe</a> · GCU Card# ${esc(PID)}</p>`;
+    const note = gift.note ? `<section class="gift-note"><h2>A note from ${esc(gift.from)}</h2><p>${esc(gift.note)}</p></section>` : "";
+    // Like Card Genie's keepsake offer: shown once they've opened the card to the inside.
+    const buyPanel = `
+      <section class="gift-buy" aria-labelledby="buyTitle">
+        <span class="gift-buy-kicker">Want this card mailed to you?</span>
+        <h2 id="buyTitle">${info.price ? `Get it printed for ${esc(money(info.price))}` : "Get it printed"}</h2>
+        <p>Greeting Card Universe prints this card on premium cardstock, includes an envelope, and mails it to you or anyone you choose.</p>
+        <a class="gift-buy-btn" href="${esc(addToCartUrl(PID))}">Buy this card${info.price ? ` · ${esc(money(info.price))}` : ""}</a>
+        <p class="gift-buy-links"><a href="${esc(personalizeUrl(PID))}">Personalize the inside &amp; buy</a> · <a href="${esc(productUrl)}">See card details</a></p>
+        ${gift.inside ? `<p class="gift-buy-fine">You can type your own message inside when you personalize.</p>` : ""}
+      </section>`;
+    let offered = false;
     startAnimation({ ...card, from: gift.from, to: gift.to || "You" }, {
-      onSettled: () => {
-        after.innerHTML = `
-          ${gift.note ? `<section class="gift-note"><h2>A note from ${esc(gift.from)}</h2><p>${esc(gift.note)}</p></section>` : ""}
-          <p class="gcu-footer">Sent with <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Card Genie</a> · This card is GCU Card# ${esc(PID)} — <a href="${esc(buyUrl)}" target="_blank" rel="noopener">get it printed${info.price ? ` (${esc(money(info.price))})` : ""}</a></p>`;
+      onSettled: () => { after.innerHTML = note + footer; },
+      onStep: (step) => {
+        if (step !== "inside" || offered) return;
+        offered = true;
+        after.innerHTML = note + buyPanel + footer;
       },
     });
   } catch (err) {

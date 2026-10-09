@@ -498,6 +498,7 @@ const giftCopy = ({ fromName, toName, shareUrl, imageUrl, title, escapeHtml }) =
   const toFirst = toName.split(' ')[0]
   const openLine = toFirst ? `${toFirst}, open the card ${fromName} sent you.` : `Open the card ${fromName} sent you.`
   return {
+    fromName: 'Greeting Card Universe',
     subject: `${fromName} sent you a card`,
     text: `${openLine} ${shareUrl}`,
     html: `
@@ -506,7 +507,7 @@ const giftCopy = ({ fromName, toName, shareUrl, imageUrl, title, escapeHtml }) =
         <p>${escapeHtml(openLine)}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
-        <p style="margin-top: 18px; color: #666; font-size: 13px;">Sent with Card Genie · a GreetingCardUniverse card</p>
+        <p style="margin-top: 18px; color: #666; font-size: 13px;">Sent with <a href="${SITE}/" style="color:#666;">Greeting Card Universe</a></p>
       </div>
     `,
   }
