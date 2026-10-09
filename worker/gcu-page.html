@@ -651,7 +651,14 @@ body.product-mode .gcu-share a + a { margin-left: 20px; }
 .send-account .code-row label { flex: 1 1 150px; margin: 0; }
 .send-secondary { border: 1px solid var(--gcu-dark-teal); border-radius: 999px; padding: 9px 14px; background: #fff; color: var(--gcu-dark-teal); font-weight: 800; cursor: pointer; }
 .send-secondary:disabled { opacity: 0.55; cursor: default; }
-.send-cost { margin: 0 0 8px; color: var(--gcu-grey); font-size: 0.82rem; }
+.send-cost { margin: 8px 0 0; color: var(--gcu-grey); font-size: 0.86rem; font-weight: 700; text-align: center; }
+.send-account .credits { margin: 4px 0 0; color: var(--gcu-dark-teal); font-weight: 700; }
+.msg-edit { margin-bottom: 14px; }
+.msg-toggle { width: 100%; }
+.msg-edit textarea { min-height: 120px; text-align: center; }
+.msg-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -2px 0 0; font-size: 0.82rem; }
+.msg-status { color: var(--gcu-grey); }
+.link-btn { flex: none; border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .send-notice { min-height: 1.2em; margin: 0 0 10px; color: #b4442a; font-size: 0.86rem; font-weight: 700; }
 .send-notice.is-ok { color: var(--gcu-dark-teal); }
 .send-submit {
@@ -1049,17 +1056,18 @@ function renderDefault(lines, landscape) {
   const name = "Times New Roman", px = Math.round(22 * (300 / 72) * 0.95), pitch = px * 1.03;
   ctx.font = fontCss(name, px);
   const capH = ctx.measureText("H").actualBoundingBoxAscent;
-  const top = 0.394 * c.height - (capH + pitch * (lines.length - 1)) / 2;
+  const top = 0.394 * c.height - (capH + pitch * (Math.max(1, lines.length) - 1)) / 2;
   ctx.fillStyle = "#111111"; ctx.textAlign = "center";
   lines.forEach((t, i) => ctx.fillText(t, 0.483 * c.width, top + capH + i * pitch));
-  return { canvas: c, meta: { font: name, color: "#111111", align: "center" } };
+  const style = { landscape, font: name, px, pitch, color: "#111111", align: "center", anchorX: 0.483 * c.width, midBaseline: top + capH + (pitch * (Math.max(1, lines.length) - 1)) / 2 };
+  return { canvas: c, meta: { font: name, color: "#111111", align: "center" }, style };
 }
 
 function renderInside(preview, lines, frontLandscape) {
   const textLines = lines.filter(Boolean);
-  if (!preview) return textLines.length ? renderDefault(lines, frontLandscape) : { canvas: blankPage(frontLandscape).c, meta: {} };
+  if (!preview) return { ...renderDefault(textLines.length ? lines : [], frontLandscape), landscape: frontLandscape };
   const { landscape, panel } = messagePanel(preview);
-  if (!textLines.length) return { canvas: blankPage(landscape).c, meta: {}, landscape };
+  if (!textLines.length) return { ...renderDefault([], landscape), landscape };
   const boxes = lineBoxes(panel, textLines.length);
   if (boxes.length !== textLines.length) return { ...renderDefault(lines, landscape), landscape };
   const { font, px: previewPx } = pickFont(panel, boxes, textLines);
@@ -1075,9 +1083,10 @@ function renderInside(preview, lines, frontLandscape) {
   const seen = masks.map((m, i) => ((boxes[i][1] + boxes[i][3]) / 2) * sy - m.h / 2 + m.baseline);
   let baselines = seen;
   const n = steps.length;
+  let pitch = px * 1.25;
   if (n > 1) {
     const ms = steps.reduce((s, v) => s + v, 0) / n, mb = seen.reduce((s, v) => s + v, 0) / n;
-    const pitch = steps.reduce((s, v, i) => s + (v - ms) * (seen[i] - mb), 0) / steps.reduce((s, v) => s + (v - ms) ** 2, 0);
+    pitch = steps.reduce((s, v, i) => s + (v - ms) * (seen[i] - mb), 0) / steps.reduce((s, v) => s + (v - ms) ** 2, 0);
     baselines = steps.map((s) => mb + pitch * (s - ms));
   }
   ctx.font = fontCss(font, px);
@@ -1087,7 +1096,53 @@ function renderInside(preview, lines, frontLandscape) {
     const left = align === "left" ? x0 * sx : align === "right" ? x1 * sx - m.w : ((x0 + x1) / 2) * sx - m.w / 2;
     ctx.fillText(textLines[i], left + m.originX, baselines[i]);
   });
-  return { canvas: c, meta: { font, color, align }, landscape };
+  const anchorX = align === "left" ? Math.min(...boxes.map((b) => b[0])) * sx
+    : align === "right" ? Math.max(...boxes.map((b) => b[2])) * sx
+    : (boxes.reduce((s, b) => s + b[0] + b[2], 0) / (2 * boxes.length)) * sx;
+  const style = { landscape, font, px, pitch: Math.max(px, Math.abs(pitch)), color, align, anchorX, midBaseline: (baselines[0] + baselines[n - 1]) / 2 };
+  return { canvas: c, meta: { font, color, align }, landscape, style };
+}
+
+// A message the sender typed, laid out in the card's own font, colour, alignment and position.
+// Long lines wrap; if it still doesn't fit, everything shrinks together.
+const MAX_MESSAGE_CHARS = 400;
+function renderCustom(style, message, signature) {
+  const { c, ctx } = blankPage(style.landscape);
+  const margin = c.width * 0.08, maxW = c.width - 2 * margin, top = c.height * 0.08, bottom = c.height * 0.92;
+  const paragraphs = message.replace(/\r/g, "").split("\n").map((s) => s.replace(/\s+/g, " ").trim());
+  while (paragraphs.length && !paragraphs[0]) paragraphs.shift();
+  while (paragraphs.length && !paragraphs[paragraphs.length - 1]) paragraphs.pop();
+  const sig = signature.replace(/\s+/g, " ").trim();
+  let lines = [], px = style.px, pitch = style.pitch;
+  for (let scale = 1; scale > 0.3; scale *= 0.92) {
+    px = Math.max(8, Math.round(style.px * scale)); pitch = style.pitch * scale;
+    ctx.font = fontCss(style.font, px);
+    lines = [];
+    for (const p of paragraphs) {
+      if (!p) { lines.push(""); continue; }
+      let line = "";
+      for (const word of p.split(" ")) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(next).width > maxW) { lines.push(line); line = word; } else line = next;
+      }
+      lines.push(line);
+    }
+    if (sig) lines.push("", sig);
+    const widest = Math.max(0, ...lines.map((t) => ctx.measureText(t).width));
+    if (widest <= maxW && (lines.length - 1) * pitch + px <= bottom - top) break;
+  }
+  ctx.fillStyle = style.color;
+  let first = style.midBaseline - (pitch * (lines.length - 1)) / 2;
+  first = Math.max(first, top + px * 0.8);
+  first = Math.min(first, bottom - pitch * (lines.length - 1));
+  lines.forEach((t, i) => {
+    if (!t) return;
+    const w = ctx.measureText(t).width;
+    let left = style.align === "left" ? style.anchorX : style.align === "right" ? style.anchorX - w : style.anchorX - w / 2;
+    left = Math.min(Math.max(left, margin), c.width - margin - w);
+    ctx.fillText(t, left, first + i * pitch);
+  });
+  return c;
 }
 
 // ---------- Build ----------
@@ -1101,6 +1156,18 @@ const getInfo = () => {
   });
   infoPromise.catch(() => { infoPromise = null; });
   return infoPromise;
+};
+
+// Layout of the card's own message (font, size, colour, position), for drawing an edited one.
+let insideStyle = null;
+const getInsideStyle = (info) => {
+  insideStyle ||= Promise.all([
+    loadImage(info.front),
+    info.hasPreview ? loadImage(`${API}/preview?cors=1`, true).catch(() => null) : null,
+    loadFonts(),
+  ]).then(([front, preview]) => renderInside(preview, info.lines || [], front.naturalWidth > front.naturalHeight).style);
+  insideStyle.catch(() => { insideStyle = null; });
+  return insideStyle;
 };
 
 let builtCard = null;
@@ -1127,7 +1194,8 @@ async function buildCard(info) {
   setStatus("Creating the inside page…");
   await new Promise((r) => setTimeout(r, 30));
   const frontLandscape = front.naturalWidth > front.naturalHeight;
-  const { canvas, meta, landscape = frontLandscape } = renderInside(preview, info.lines || [], frontLandscape);
+  const { canvas, meta, landscape = frontLandscape, style } = renderInside(preview, info.lines || [], frontLandscape);
+  if (fontsOk) insideStyle = Promise.resolve(style);
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
   const q = new URLSearchParams({ w: front.naturalWidth, h: front.naturalHeight, landscape: landscape ? "1" : "0", ...meta });
   // A page drawn with fallback fonts or without the preview is still shown, but not kept for the next visitor.
@@ -1256,10 +1324,16 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } =
     if (el && !el.disabled) go(el.dataset.go);
   };
   stopAnimation = () => timers.splice(0).forEach(clearTimeout);
+  showCardInside = () => {
+    const img = stage.querySelector(".open-card img");
+    if (img) img.src = CARD.inside;
+    else { timers.splice(0).forEach(clearTimeout); go("inside"); }
+  };
   go("envelope");
   if (autoPlay) timers.push(setTimeout(() => go("envelopeFlip"), 1100));
 }
 let stopAnimation = () => {};
+let showCardInside = () => {};
 
 // ---------- Product page (a copy of GreetingCardUniverse's own card page) ----------
 const money = (p) => (p ? `$${p}` : "");
@@ -1693,7 +1767,11 @@ async function startSendFlow() {
   showLoader(`Creating animation for GCU Card# ${PID}`, productInfo.title);
   try {
     const card = await prepare(productInfo);
-    sendCard = { ...card, to: "You", from: "Greeting Card Universe" };
+    if (!edit.original && !edit.blob) {
+      edit.original = normalizeMessage((productInfo.lines || []).join("\n"));
+      edit.message = edit.original;
+    }
+    sendCard = { ...card, originalInside: card.inside, inside: edit.blob ? edit.url : card.inside, to: "You", from: "Greeting Card Universe" };
     after.innerHTML = "";
     startAnimation(sendCard, {
       autoPlay: true,
@@ -1728,8 +1806,11 @@ const postJson = async (path, body, token) => {
   return { res, data };
 };
 
-const SEND_COST = 3;
+const SEND_COST = 2;
 const form = { method: "email", session: readSession(), credits: null, codeSent: false, busy: "" };
+const normalizeMessage = (s) => s.replace(/\r/g, "").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).join("\n").trim();
+// The sender's edits to the inside message; kept while they stay on this card.
+const edit = { original: "", message: "", signature: "", open: false, blob: null, url: "", pending: null, seq: 0 };
 
 function showSendForm() {
   if (after.querySelector(".send-panel")) return;
@@ -1737,6 +1818,14 @@ function showSendForm() {
     <section class="send-panel" aria-labelledby="sendTitle">
       <h2 id="sendTitle">Send this card</h2>
       <p class="send-sub">They’ll get a link that opens this envelope and card.</p>
+      <div class="msg-edit">
+        <button type="button" class="send-secondary msg-toggle" data-edit-msg ${edit.open ? "hidden" : ""}>✎ Edit the message inside</button>
+        <div class="msg-fields" ${edit.open ? "" : "hidden"}>
+          <label><span>Message inside the card</span><textarea id="msgText" rows="5" maxlength="${MAX_MESSAGE_CHARS}"></textarea></label>
+          <label><span>Sign it <small>(optional)</small></span><input id="msgSig" maxlength="60" autocomplete="off" placeholder="Love, Alex"></label>
+          <p class="msg-actions"><span class="msg-status" id="msgStatus" aria-live="polite"></span><button type="button" class="link-btn" data-reset-msg>Reset to original</button></p>
+        </div>
+      </div>
       <div class="send-method" role="radiogroup" aria-label="Send by">
         <button type="button" role="radio" data-method="email">Email</button>
         <button type="button" role="radio" data-method="text">Text message</button>
@@ -1746,16 +1835,15 @@ function showSendForm() {
         <label><span>To <small>(their name, optional)</small></span><input id="sendTo" maxlength="40" autocomplete="off" placeholder="Jamie"></label>
         <label><span>From <small>(your name)</small></span><input id="sendFrom" maxlength="40" autocomplete="name" placeholder="Alex"></label>
       </div>
-      <label><span>Short note <small>(optional, shown after they open the card)</small></span><textarea id="sendNote" maxlength="300" rows="2"></textarea></label>
       <label class="sms-consent" hidden>
         <input type="checkbox" id="sendConsent">
         <span>OK to text them this card — one message, no marketing. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
           <a href="${esc(APP_URL)}/privacy/index.html" target="_blank" rel="noopener">Privacy</a> · <a href="${esc(APP_URL)}/terms/index.html" target="_blank" rel="noopener">Terms</a></span>
       </label>
       <div class="send-account" id="sendAccount"></div>
-      <p class="send-cost">Sending uses ${SEND_COST} Card Genie credits.</p>
       <p class="send-notice" id="sendNotice" role="alert"></p>
       <button class="send-submit" type="button" id="sendSubmit">Send card</button>
+      <p class="send-cost">${SEND_COST} GCU credits</p>
     </section>`;
   const $ = (s) => after.querySelector(s);
   const notice = (t, ok = false) => { const n = $("#sendNotice"); n.textContent = t; n.classList.toggle("is-ok", ok); };
@@ -1773,9 +1861,10 @@ function showSendForm() {
   const renderAccount = () => {
     const box = $("#sendAccount");
     if (form.session) {
-      const credits = form.credits == null ? "" : ` · ${form.credits} credit${form.credits === 1 ? "" : "s"}`;
+      const credits = form.credits == null ? "" : `${form.credits} credit${form.credits === 1 ? "" : "s"}`;
       const low = form.credits != null && form.credits < SEND_COST;
-      box.innerHTML = `<p class="ok">✓ Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}${esc(credits)}</p>
+      box.innerHTML = `<p class="ok">✓ Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
+        ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
         ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits on Card Genie</a>, then come back and tap Send.</p>` : ""}`;
       return;
     }
@@ -1833,7 +1922,6 @@ function showSendForm() {
     const destRaw = $("#sendDest").value.trim();
     const fromName = $("#sendFrom").value.trim();
     const toName = $("#sendTo").value.trim();
-    const note = $("#sendNote").value.trim();
     if (method === "email" && !validEmail(destRaw)) return notice("Enter their email address, like jamie@example.com.");
     if (method === "text" && phoneDigits(destRaw).length !== 10) return notice("Enter their 10-digit US cellphone number, like (925) 555-1234.");
     if (!fromName) return notice("Enter your name so they know who it’s from.");
@@ -1845,8 +1933,16 @@ function showSendForm() {
     btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span>Sending…`;
     notice("");
     try {
+      await edit.pending;
+      const inside = edit.blob ? await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error("Couldn’t prepare your message. Please try again."));
+        r.readAsDataURL(edit.blob);
+      }) : undefined;
       const { res, data } = await postJson(`/gcu/${PID}/send`, {
-        method, destination: destRaw, fromName, toName, note, recipientConsentConfirmed: method === "text" ? true : undefined,
+        method, destination: destRaw, fromName, toName, recipientConsentConfirmed: method === "text" ? true : undefined,
+        ...(inside ? { inside, message: edit.message, signature: edit.signature } : {}),
       }, form.session.token);
       if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
       if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; renderAccount(); }
@@ -1856,7 +1952,7 @@ function showSendForm() {
         <section class="send-panel send-done" aria-live="polite">
           <div class="big" aria-hidden="true">💌</div>
           <h2>Card sent!</h2>
-          <p class="send-sub">We ${method === "email" ? "emailed" : "texted"} ${esc(shown)} a link to open it. ${SEND_COST} credits used${typeof data.creditBalance === "number" ? ` · ${data.creditBalance} left` : ""}.</p>
+          <p class="send-sub">We ${method === "email" ? "emailed" : "texted"} ${esc(shown)} a link to open it. ${SEND_COST} GCU credits used${typeof data.creditBalance === "number" ? ` · ${data.creditBalance} left` : ""}.</p>
           <p><a href="${esc(data.shareUrl)}" target="_blank" rel="noopener">${esc(data.shareUrl)}</a></p>
           <p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
             <button class="send-secondary" type="button" data-again>Send to someone else</button>
@@ -1874,16 +1970,64 @@ function showSendForm() {
     sendCard.from = $("#sendFrom").value.trim() || "Greeting Card Universe";
     sendCard.to = $("#sendTo").value.trim() || "You";
   };
+  const msgStatus = (t) => { $("#msgStatus").textContent = t; };
+  const redraw = () => {
+    const seq = ++edit.seq;
+    edit.message = $("#msgText").value;
+    edit.signature = $("#msgSig").value;
+    const custom = normalizeMessage(edit.message) !== edit.original || edit.signature.trim();
+    edit.pending = (async () => {
+      if (!custom) {
+        edit.blob = null;
+        sendCard.inside = sendCard.originalInside;
+        msgStatus("");
+        return showCardInside();
+      }
+      const style = await getInsideStyle(productInfo);
+      if (seq !== edit.seq) return;
+      const blob = await new Promise((r) => renderCustom(style, edit.message, edit.signature).toBlob(r, "image/jpeg", 0.9));
+      if (seq !== edit.seq) return;
+      if (edit.url) URL.revokeObjectURL(edit.url);
+      edit.blob = blob;
+      edit.url = URL.createObjectURL(blob);
+      sendCard.inside = edit.url;
+      msgStatus("Tap Replay to preview it in the envelope.");
+      showCardInside();
+    })().catch(() => msgStatus("Couldn’t update the preview. Try again."));
+  };
+  let redrawTimer = 0;
+  const scheduleRedraw = () => { clearTimeout(redrawTimer); redrawTimer = setTimeout(redraw, 150); };
+  const openEditor = async () => {
+    edit.open = true;
+    $("[data-edit-msg]").hidden = true;
+    $(".msg-fields").hidden = false;
+    showCardInside();
+    if (!edit.blob) msgStatus("Loading the card’s lettering…");
+    try { await getInsideStyle(productInfo); } catch {}
+    if (!edit.blob) msgStatus("");
+    $("#msgText").focus();
+  };
+  $("#msgText").value = edit.message;
+  $("#msgSig").value = edit.signature;
   after.onclick = (e) => {
     const m = e.target.closest("[data-method]");
     if (m) return setMethod(m.dataset.method);
+    if (e.target.closest("[data-edit-msg]")) return openEditor();
+    if (e.target.closest("[data-reset-msg]")) {
+      $("#msgText").value = edit.original;
+      $("#msgSig").value = "";
+      return redraw();
+    }
     if (e.target.closest("[data-code-start]")) return startCode();
     if (e.target.closest("[data-code-verify]")) return verifyCode();
     if (e.target.closest("#sendSubmit")) return submit();
     if (e.target.closest("[data-again]")) { after.innerHTML = ""; return showSendForm(); }
     if (e.target.closest("[data-back-product]")) return renderProduct();
   };
-  after.oninput = (e) => { if (e.target.id === "sendFrom" || e.target.id === "sendTo") previewNames(); };
+  after.oninput = (e) => {
+    if (e.target.id === "sendFrom" || e.target.id === "sendTo") previewNames();
+    if (e.target.id === "msgText" || e.target.id === "msgSig") scheduleRedraw();
+  };
   setMethod(form.method);
   refreshAccount();
 }
@@ -1898,7 +2042,11 @@ async function openGift() {
     ]);
     const heading = stage.querySelector(".gcu-loading h1");
     if (heading) heading.textContent = `Opening your card from ${gift.from}…`;
-    const card = await prepare(info);
+    const card = { ...(await prepare(info)) };
+    if (gift.inside) {
+      card.inside = API_ORIGIN + gift.inside;
+      await loadImage(card.inside).catch(() => {});
+    }
     const buyUrl = info.productUrl || `https://www.greetingcarduniverse.com/${PID}`;
     startAnimation({ ...card, from: gift.from, to: gift.to || "You" }, {
       onSettled: () => {

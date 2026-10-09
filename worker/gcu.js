@@ -17,13 +17,16 @@ const MAX_INSIDE_BYTES = 6 * 1024 * 1024
 const insideAsset = (pid) => ({ r2Key: `gcu/inside/${pid}.jpg`, kvKey: `gcu:inside:${pid}` })
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
 const GCU_HEADERS = { 'User-Agent': 'CardGenie/1.0 (+https://www.card-genie.com)', Accept: '*/*' }
-// Same price as a single-recipient send in the main app.
-const SEND_CREDIT_COST = 3
+const SEND_CREDIT_COST = 2
 const SENDS_PER_HOUR = 10
+const MAX_MESSAGE_CHARS = 400
+const sendInsideAsset = (id) => ({ r2Key: `gcu/sends/${id}.jpg`, kvKey: `gcu:send-inside:${id}` })
 
 export const matchGcuPath = (pathname) => {
   const tab = pathname.match(/^\/gcu\/0*(\d{1,10})\/tab\/([234])\/?$/i)
   if (tab) return { pid: tab[1], action: 'tab', id: tab[2] }
+  const giftInside = pathname.match(/^\/gcu\/0*(\d{1,10})\/gift\/([A-Za-z0-9]{6,24})\/inside\.jpg$/i)
+  if (giftInside) return { pid: giftInside[1], action: 'gift-inside', id: giftInside[2] }
   const m = pathname.match(/^\/gcu\/0*(\d{1,10})(?:\/(info|preview|inside|inside\.jpg|send|gift)(?:\/([A-Za-z0-9]{6,24}))?)?\/?$/i)
   return m ? { pid: m[1], action: (m[2] || 'page').toLowerCase(), id: m[3] || null } : null
 }
@@ -40,6 +43,23 @@ const DETAIL_COLUMNS = {
   // Everything else the product-page replica shows (back image, price tiers, related cards, testimonials…).
   extra_json: 'TEXT',
   details_version: 'INTEGER NOT NULL DEFAULT 0',
+}
+const SEND_COLUMNS = {
+  custom_message: 'TEXT',
+  signature: 'TEXT',
+  custom_inside: 'INTEGER NOT NULL DEFAULT 0',
+}
+
+const addMissingColumns = async (db, table, columns) => {
+  const { results } = await db.prepare(`PRAGMA table_info(${table})`).all()
+  const have = new Set(results.map((c) => c.name))
+  for (const [name, type] of Object.entries(columns)) {
+    if (have.has(name)) continue
+    // Another isolate may add the column first.
+    await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`).run().catch((error) => {
+      if (!/duplicate column/i.test(String(error?.message))) throw error
+    })
+  }
 }
 
 let tableReady = false
@@ -86,15 +106,8 @@ const ensureTable = async (db) => {
     ),
     db.prepare('CREATE INDEX IF NOT EXISTS gcu_sends_user_created ON gcu_sends (user_id, created_at)'),
   ])
-  const { results } = await db.prepare('PRAGMA table_info(gcu_cards)').all()
-  const have = new Set(results.map((c) => c.name))
-  for (const [name, type] of Object.entries(DETAIL_COLUMNS)) {
-    if (have.has(name)) continue
-    // Another isolate may add the column first.
-    await db.prepare(`ALTER TABLE gcu_cards ADD COLUMN ${name} ${type}`).run().catch((error) => {
-      if (!/duplicate column/i.test(String(error?.message))) throw error
-    })
-  }
+  await addMissingColumns(db, 'gcu_cards', DETAIL_COLUMNS)
+  await addMissingColumns(db, 'gcu_sends', SEND_COLUMNS)
   tableReady = true
 }
 
@@ -520,6 +533,16 @@ const handleSend = async (request, env, pid, deps) => {
     return json({ error: error.message }, 400)
   }
   const note = String(body.note || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, 300)
+  const customMessage = String(body.message || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').trim().slice(0, MAX_MESSAGE_CHARS)
+  const signature = String(body.signature || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60)
+  let insideBytes = null
+  if (body.inside) {
+    const b64 = String(body.inside).match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/)?.[1]
+    if (b64) insideBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    if (!insideBytes || insideBytes.length < 1000 || insideBytes.length > MAX_INSIDE_BYTES || insideBytes[0] !== 0xff || insideBytes[1] !== 0xd8) {
+      return json({ error: 'Couldn’t read your edited message. Tap Reset to original, then try again.' }, 400)
+    }
+  }
 
   const row = await getRow(db, pid)
   if (!row) return json({ error: 'Open the card page again, then send.' }, 404)
@@ -571,14 +594,17 @@ const handleSend = async (request, env, pid, deps) => {
   const shareUrl = `${appUrl(env)}/gcu/${pid}?s=${id}`
   await db
     .prepare(
-      `INSERT INTO gcu_sends (id, pid, user_id, method, destination, from_name, to_name, note, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO gcu_sends (id, pid, user_id, method, destination, from_name, to_name, note, status, created_at,
+         custom_message, signature, custom_inside)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
     )
-    .bind(id, pid, session.userId, method, destination, fromName, toName || null, note || null, now)
+    .bind(id, pid, session.userId, method, destination, fromName, toName || null, note || null, now,
+      insideBytes ? customMessage || null : null, insideBytes ? signature || null : null, insideBytes ? 1 : 0)
     .run()
 
   const copy = giftCopy({ fromName, toName, shareUrl, imageUrl: row.image3d_url || row.front_url, title: row.title, escapeHtml: deps.escapeHtml })
   try {
+    if (insideBytes) await putAsset(env, sendInsideAsset(id), insideBytes, 'image/jpeg')
     if (method === 'email') await deps.sendEmailDelivery({ env, to: destination, copy })
     else await deps.sendTextDelivery({ env, to: destination, copy })
   } catch (error) {
@@ -612,7 +638,21 @@ const handleGift = async (env, pid, id) => {
     .prepare('UPDATE gcu_sends SET open_count = open_count + 1, opened_at = COALESCE(opened_at, ?) WHERE id = ?')
     .bind(new Date().toISOString(), id)
     .run()
-  return json({ from: gift.from_name, to: gift.to_name || '', note: gift.note || '' })
+  return json({
+    from: gift.from_name,
+    to: gift.to_name || '',
+    note: gift.note || '',
+    inside: gift.custom_inside ? `/gcu/${pid}/gift/${id}/inside.jpg` : null,
+  })
+}
+
+const handleGiftInside = async (env, pid, id) => {
+  const gift = await env.ACCOUNT_DB.prepare(`SELECT custom_inside FROM gcu_sends WHERE id = ? AND pid = ? AND status = 'sent'`).bind(id, pid).first()
+  const found = gift?.custom_inside ? await getAsset(env, sendInsideAsset(id)) : null
+  if (!found) return json({ error: 'Not found.' }, 404)
+  return new Response(found.value, {
+    headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable' },
+  })
 }
 
 const route = async (request, env, url, { pid, action, id }, deps) => {
@@ -625,6 +665,7 @@ const route = async (request, env, url, { pid, action, id }, deps) => {
   if (method === 'POST' && action === 'inside') return handleInsideUpload(request, env, pid, url)
   if (method === 'POST' && action === 'send') return handleSend(request, env, pid, deps)
   if (method === 'GET' && action === 'gift') return handleGift(env, pid, id)
+  if (method === 'GET' && action === 'gift-inside') return handleGiftInside(env, pid, id)
   if (method === 'GET' && action === 'tab') return handleTab(env, id, url.searchParams.get('o') === 'l')
   return json({ error: 'Not found.' }, 404)
 }
