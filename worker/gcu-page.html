@@ -280,7 +280,7 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
   border-radius: 999px; background: var(--gcu-orange); color: #fff; font-size: 1.05rem; font-weight: 900; text-decoration: none;
   box-shadow: 0 10px 22px rgba(245, 158, 51, 0.32);
 }
-.gift-buy .gift-buy-links { margin: 12px auto 0; font-size: 0.88rem; }
+.gift-buy .gift-buy-links { margin: 12px auto 0; font-size: 0.88rem; line-height: 1.9; }
 .gift-buy-links a { color: var(--gcu-dark-teal); font-weight: 700; }
 .gift-buy .gift-buy-fine { margin: 6px auto 0; color: var(--gcu-grey); font-size: 0.8rem; }
 .gcu-footer { margin-top: 18px; text-align: center; font-size: 0.78rem; color: var(--gcu-grey); }
@@ -2093,9 +2093,9 @@ async function openGift() {
       <section class="gift-buy" aria-labelledby="buyTitle">
         <span class="gift-buy-kicker">Want this card mailed to you?</span>
         <h2 id="buyTitle">${info.price ? `Get it printed for ${esc(money(info.price))}` : "Get it printed"}</h2>
-        <p>Greeting Card Universe prints this card on premium cardstock, includes an envelope, and mails it to you or anyone you choose.</p>
+        <p>Greeting Card Universe prints this card on premium cardstock and mails it to you or anyone you choose.</p>
         <a class="gift-buy-btn" href="${esc(addToCartUrl(PID))}">Buy this card${info.price ? ` · ${esc(money(info.price))}` : ""}</a>
-        <p class="gift-buy-links"><a href="${esc(personalizeUrl(PID))}">Personalize the inside &amp; buy</a> · <a href="${esc(productUrl)}">See card details</a></p>
+        <p class="gift-buy-links"><a href="${esc(personalizeUrl(PID))}">Personalize the inside &amp; buy</a><br><a href="${esc(productUrl)}">See card details</a></p>
         ${gift.inside ? `<p class="gift-buy-fine">You can type your own message inside when you personalize.</p>` : ""}
       </section>`;
     let offered = false;
