@@ -12,7 +12,7 @@ const SITE = 'https://www.greetingcarduniverse.com'
 // Bump when the browser-side inside renderer changes so stored inside images are rebuilt.
 const INSIDE_VERSION = 4
 // Bump when scrape() collects new product-page fields so cached rows are refreshed on next visit.
-const DETAILS_VERSION = 1
+const DETAILS_VERSION = 3
 const MAX_INSIDE_BYTES = 6 * 1024 * 1024
 const insideAsset = (pid) => ({ r2Key: `gcu/inside/${pid}.jpg`, kvKey: `gcu:inside:${pid}` })
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
@@ -22,6 +22,8 @@ const SEND_CREDIT_COST = 3
 const SENDS_PER_HOUR = 10
 
 export const matchGcuPath = (pathname) => {
+  const tab = pathname.match(/^\/gcu\/0*(\d{1,10})\/tab\/([234])\/?$/i)
+  if (tab) return { pid: tab[1], action: 'tab', id: tab[2] }
   const m = pathname.match(/^\/gcu\/0*(\d{1,10})(?:\/(info|preview|inside|inside\.jpg|send|gift)(?:\/([A-Za-z0-9]{6,24}))?)?\/?$/i)
   return m ? { pid: m[1], action: (m[2] || 'page').toLowerCase(), id: m[3] || null } : null
 }
@@ -35,6 +37,8 @@ const DETAIL_COLUMNS = {
   customize: 'TEXT',
   categories_json: 'TEXT',
   image3d_url: 'TEXT',
+  // Everything else the product-page replica shows (back image, price tiers, related cards, testimonials…).
+  extra_json: 'TEXT',
   details_version: 'INTEGER NOT NULL DEFAULT 0',
 }
 
@@ -109,11 +113,15 @@ const decodeEntities = (s) =>
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&[lr]squo;/g, "'")
+    .replace(/&[lr]dquo;/g, '"')
+    .replace(/&hellip;/g, '…')
+    .replace(/&[mn]dash;/g, '–')
     .replace(/&amp;/g, '&')
 
 const parseZoom = (zoom) => {
   const paths = {}
-  for (const side of ['front', 'inside']) {
+  for (const side of ['front', 'inside', 'back']) {
     const m = zoom.match(new RegExp(`${side}_img\\.src\\s*=\\s*"([^"?]+)`))
     paths[side] = m ? `${SITE}${m[1]}` : null
   }
@@ -156,7 +164,52 @@ const parseDetails = (page) => {
     ? [...crumbs[1].matchAll(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)].map(([, href, name]) => ({ name: cleanText(name), url: absolute(href) }))
     : []
   const image3d = page.match(/<img\s+id\s*=\s*"image1"\s+src\s*=\s*"([^"]+)"/i)
+  const tiersHtml = page.match(/class="popoverdiv prices_popover">([\s\S]*?)<\/table>/i)
+  const tiers = tiersHtml
+    ? [...tiersHtml[1].matchAll(/<tr[^>]*>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi)]
+        .map(([, qty, price]) => ({ qty: cleanText(qty.replace(/<sup>\*<\/sup>/gi, '*')), price: cleanText(price) }))
+        .filter((t) => t.qty && t.price && !/quantity/i.test(t.qty))
+    : []
+  const lowest = page.match(/<\/table>\s*<\/div>\s*<\/div>\s*<\/span>\s*\$\s*([\d.,]+)/i)
+  const cid = page.match(/load_other_cards\(\s*\d+\s*,\s*(\d+)/)
+  const section = (from, to) => {
+    const a = page.indexOf(from)
+    if (a < 0) return ''
+    const b = to ? page.indexOf(to, a) : -1
+    return page.slice(a, b > a ? b : a + 20000)
+  }
+  const quotes = (html, whoFirst) =>
+    [...html.matchAll(/<div class="testimonial grey_gilltext">([\s\S]*?<div class="reviewer[^"]*">[\s\S]*?<\/div>[\s\S]*?)<\/div>/gi)]
+      .map(([, inner]) => {
+        const who = inner.match(/<div class="reviewer[^"]*">([\s\S]*?)<\/div>/i)
+        return { who: cleanText(who ? who[1] : ''), text: cleanText(inner.replace(/<div class="reviewer[^"]*">[\s\S]*?<\/div>/i, '')) }
+      })
+      .filter((q) => q.text)
+      .slice(0, whoFirst ? 30 : 3)
+  const reviews = page
+    .split(/<div class="product_review">/i)
+    .slice(1)
+    .map((block) => {
+      const field = (cls) => {
+        const m = block.match(new RegExp(`class="${cls}">([\\s\\S]*?)</(?:span|div)>`, 'i'))
+        return m ? cleanText(m[1]) : ''
+      }
+      const rating = block.match(/rating\s*=\s*"(\d)"/i)
+      return { rating: rating ? Number(rating[1]) : 5, title: field('pr_title'), who: field('pr_customer'), body: field('pr_body') }
+    })
+    .filter((r) => r.body || r.title)
+    .slice(0, 30)
+  const extra = {
+    reviews,
+    availability: cleanText(detailHtml(page, 'Availability')) || null,
+    tiers: tiers.slice(0, 14),
+    lowest: lowest ? lowest[1] : null,
+    cid: cid ? cid[1] : null,
+    sideQuotes: quotes(section('id="testimonialsC"', 'id="bbblinks"'), false),
+    productQuotes: quotes(section('id="product_testimonials"', 'as_featured_in'), true),
+  }
   return {
+    extra,
     price: priceText ? priceText[1] : trackedPrice ? Number(trackedPrice[1]).toFixed(2) : null,
     artist: cleanText(artistHtml) || null,
     artistUrl: artistLink ? absolute(artistLink[1]) : null,
@@ -189,15 +242,53 @@ const scrape = async (pid) => {
     throw new Error(`GreetingCardUniverse returned ${pageRes.status}${challenged} for the product page.`)
   }
   const page = await pageRes.text()
+  const details = parseDetails(page)
   const printUrl = paths.front.replace('_hres.', '_print.')
-  const front = printUrl !== paths.front && (await exists(printUrl)) ? printUrl : paths.front
+  const [front, related] = await Promise.all([
+    printUrl !== paths.front ? exists(printUrl).then((ok) => (ok ? printUrl : paths.front)) : paths.front,
+    details.extra.cid ? fetchRelated(pid, details.extra.cid) : [],
+  ])
+  details.extra.back = paths.back
+  details.extra.related = related
+  details.extra.shadow = details.image3d ? details.image3d.replace(/_3d\.jpg(\?.*)?$/, '_shadow.jpg') : null
   return {
     title: parseTitle(page, pid),
     productUrl: pageRes.url,
     front,
     insidePreview: paths.inside,
     lines: parseInsideText(page),
-    details: parseDetails(page),
+    details,
+  }
+}
+
+// The "other cards in this category" column GCU's page loads by AJAX after it renders.
+const fetchRelated = async (pid, cid) => {
+  try {
+    const res = await fetchGcu(`${SITE}/community/card_details.asp?ajax=true&cmd2=get_other_cards&aid=0&pid=${pid}&cid=${cid}&off=0&fromsearch=false`)
+    if (!res.ok) return []
+    const html = await res.text()
+    return html
+      .split(/<!--\s*card div/i)
+      .slice(1)
+      .map((block) => {
+        const id = block.match(/id\s*=\s*["']cardid_(\d+)/i)
+        const img = block.match(/<img[^>]*?\ssrc\s*=\s*["']([^"']+)/i)
+        const alt = block.match(/\salt\s*=\s*"([^"]*)"/i)
+        const name = block.match(/class\s*=\s*"prodname[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        if (!id || !img) return null
+        return {
+          pid: id[1],
+          img: absolute(img[1]),
+          title: alt ? decodeEntities(alt[1]) : '',
+          name: name ? cleanText(name[1]) : '',
+          landscape: /cardstyle\s+landscapeC/i.test(block),
+        }
+      })
+      .filter(Boolean)
+      .slice(0, 6)
+  } catch (error) {
+    console.error('gcu related', pid, error)
+    return []
   }
 }
 
@@ -220,6 +311,7 @@ const rowInfo = (row) => {
     front: row.front_url,
     image3d: row.image3d_url || null,
     hasPreview: Boolean(row.inside_preview_url),
+    insidePreview: row.inside_preview_url || null,
     lines: parseJson(row.inside_lines_json, []),
     inside: ready ? `/gcu/${row.pid}/inside.jpg?v=${encodeURIComponent(row.updated_at)}` : null,
     width: row.front_w || null,
@@ -232,6 +324,7 @@ const rowInfo = (row) => {
     size: row.size_text || null,
     customize: row.customize || null,
     categories: parseJson(row.categories_json, []),
+    ...parseJson(row.extra_json, {}),
   }
 }
 
@@ -244,6 +337,7 @@ const detailValues = (d) => [
   d.customize,
   JSON.stringify(d.categories),
   d.image3d,
+  JSON.stringify(d.extra || {}),
   DETAILS_VERSION,
 ]
 
@@ -266,7 +360,7 @@ const loadRow = async (db, pid) => {
     await db
       .prepare(
         `UPDATE gcu_cards SET title = ?, product_url = ?, price = ?, artist = ?, artist_url = ?, artist_notes = ?,
-           size_text = ?, customize = ?, categories_json = ?, image3d_url = ?, details_version = ? WHERE pid = ?`,
+           size_text = ?, customize = ?, categories_json = ?, image3d_url = ?, extra_json = ?, details_version = ? WHERE pid = ?`,
       )
       .bind(card.title || row.title, card.productUrl, ...detailValues(card.details), pid)
       .run()
@@ -274,9 +368,9 @@ const loadRow = async (db, pid) => {
     await db
       .prepare(
         `INSERT OR IGNORE INTO gcu_cards (pid, title, product_url, front_url, inside_preview_url, inside_lines_json,
-           price, artist, artist_url, artist_notes, size_text, customize, categories_json, image3d_url, details_version,
-           created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           price, artist, artist_url, artist_notes, size_text, customize, categories_json, image3d_url, extra_json,
+           details_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(pid, card.title, card.productUrl, card.front, card.insidePreview, JSON.stringify(card.lines), ...detailValues(card.details), now, now)
       .run()
@@ -531,10 +625,30 @@ const route = async (request, env, url, { pid, action, id }, deps) => {
   if (method === 'POST' && action === 'inside') return handleInsideUpload(request, env, pid, url)
   if (method === 'POST' && action === 'send') return handleSend(request, env, pid, deps)
   if (method === 'GET' && action === 'gift') return handleGift(env, pid, id)
+  if (method === 'GET' && action === 'tab') return handleTab(env, id, url.searchParams.get('o') === 'l')
   return json({ error: 'Not found.' }, 404)
 }
 
 // The page is usually shown on www.card-genie.com (GitHub Pages) and calls back here cross-origin.
+// GCU's Size/Quality, Pricing and Shipping tabs, cleaned of scripts and handlers so the replica can show them inline.
+const handleTab = async (env, tab, landscape) => {
+  const key = `gcu-tab:${tab}:${landscape ? 'l' : 'p'}`
+  let html = env.CARD_STORE ? await env.CARD_STORE.get(key) : null
+  if (!html) {
+    const orientation = encodeURIComponent(landscape ? '7" x 5"' : '5" x 7"')
+    const res = await fetchGcu(`${SITE}/community/card_details_tabs.asp?ajax=true&tab_num=${tab}&orientation=${orientation}`)
+    if (!res.ok) return json({ error: `GreetingCardUniverse returned ${res.status}.` }, 502)
+    html = (await res.text())
+      .replace(/<(script|style|iframe|object|embed|form)\b[\s\S]*?<\/\1\s*>/gi, '')
+      .replace(/<(script|iframe|object|embed|link|meta|base)\b[^>]*>/gi, '')
+      .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/\b(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
+      .replace(/\b(href|src)\s*=\s*(["'])(\/(?!\/)[^"']*)\2/gi, (_, attr, q, path) => `${attr}=${q}${SITE}${path}${q}`)
+    if (env.CARD_STORE) await env.CARD_STORE.put(key, html, { expirationTtl: 86400 })
+  }
+  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600' } })
+}
+
 export const handleGcuRequest = async (request, env, url, match, corsHeaders, deps) => {
   const res = await route(request, env, url, match, deps)
   const out = new Response(res.body, res)

@@ -272,74 +272,353 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
 .gcu-back { display: inline-block; margin: 0 0 12px; border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font-size: 0.86rem; font-weight: 700; cursor: pointer; }
 
 /* ---------- Product page (styled after greetingcarduniverse.com) ---------- */
-body.product-mode { display: block; padding: 0; background: #fff; color: #454545; font-family: Arial, Arimo, Helvetica, sans-serif; font-size: 14px; }
-body.product-mode main { width: 100%; }
-.shop { --gcu-blue: #849bcd; --gcu-blue-dark: #6178ad; max-width: 1000px; margin: 0 auto; padding: 0 16px 32px; }
-.shop a { color: var(--gcu-blue); text-decoration: none; }
-.shop a:hover { text-decoration: underline; }
-.shop-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 12px; }
-.shop-logo {
-  display: inline-grid; padding: 10px 18px 8px; border-radius: 3px; color: #fff !important; text-decoration: none !important;
-  background: linear-gradient(160deg, #f8b25a, #f39125 70%); box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.12);
+/* GreetingCardUniverse product-page styles (desktop), scoped to product mode. */
+@media (min-width: 760px) {
+body.product-mode { background: rgb(238, 238, 238); }
+body.product-mode, body.product-mode select, body.product-mode input, body.product-mode textarea, body.product-mode table, body.product-mode th, body.product-mode td, body.product-mode a { font-family: Arial, Helvetica, Futura, sans-serif; color: rgb(69, 69, 69); font-size: 14px; line-height: 1.5; }
+body.product-mode input { outline: none; }
+body.product-mode #gcu_logo { display: block; }
+body.product-mode .header_white { color: rgb(255, 255, 255); font-family: Arial, Helvetica, sans-serif; font-size: 18px; font-weight: normal; }
+body.product-mode .header_links { color: rgb(132, 155, 205); font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: normal; }
+body.product-mode .header_cart { color: rgb(245, 158, 51); font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: normal; }
+body.product-mode .grey_gilltext { color: rgb(125, 125, 125); font-family: Arial, Helvetica, sans-serif; font-weight: normal; }
+body.product-mode .fontcolor1 { color: rgb(69, 69, 69); }
+body.product-mode .fontcolor2 { color: rgb(63, 155, 145); }
+body.product-mode .fontsize10, body.product-mode .fontsize10 a { font-size: 12px; }
+body.product-mode .fontsize13, body.product-mode .fontsize13 a { font-size: 13px; }
+body.product-mode a:visited { color: rgb(132, 155, 205); }
+body.product-mode a { color: rgb(132, 155, 205); }
+body.product-mode .bg14 { background: rgb(255, 255, 255); }
+body.product-mode .h1bd { font-size: 22px; color: rgb(245, 158, 51); margin-bottom: 0px; padding-bottom: 0px; font-family: Helvetica, Futura, Arial, sans-serif; }
+body.product-mode .header_bar { clear: both; font-size: 14px; height: 33px; color: rgb(255, 255, 255); background-color: rgb(132, 155, 205); }
+body.product-mode .header_bar li { float: left; }
+body.product-mode #menu > div > div { display: none; }
+body.product-mode #menu > div:hover > div { display: block; }
+body.product-mode #menu > div { float: left; height: 33px; padding: 6px 16px 0px; position: relative; top: 0px; left: 0px; border-width: 1px; border-style: solid; border-color: transparent transparent transparent white; border-image: initial; }
+body.product-mode #menu > div:first-child { border-left: 1px solid transparent; }
+body.product-mode #menu > div:hover { background-color: rgb(99, 118, 156); }
+body.product-mode #menu > div:last-child { padding-right: 0px; }
+body.product-mode #menu > div a { color: white; text-decoration: none; font-weight: normal; }
+body.product-mode #menu div.submenu { background-color: rgb(132, 155, 205); z-index: 5000; position: absolute; left: 0px; top: 28px; max-width: 400px; text-align: left; padding: 0px 20px 0px 0px; box-shadow: rgba(50, 50, 50, 0.32) 0px 10px 5px; }
+body.product-mode #menu div:first-child div.submenu { left: -1px; }
+body.product-mode #menu div.submenu ul { list-style-type: none; padding-left: 0px; margin-top: 0px; }
+body.product-mode #menu div.submenu ul li { padding-top: 4px; padding-bottom: 4px; padding-left: 4px; white-space: nowrap; width: 100%; margin: 0px; }
+body.product-mode #menu div.submenu ul li:hover { background-color: rgb(99, 118, 156); }
+body.product-mode #menu div.submenu > ul > a > li { padding-left: 10px; padding-right: 10px; }
+body.product-mode #loginbox a { font-size: 13px; }
+body.product-mode #loginbox { padding-left: 2px; position: relative; }
+body.product-mode #phoneC, body.product-mode #loginboxC { padding-right: 2ex; vertical-align: top; height: 12px; text-align: right; padding-left: 5px; color: rgb(125, 125, 125); }
+body.product-mode #phoneC { font-size: 16px; font-weight: bold; position: relative; top: 1px; }
+body.product-mode #phonenumber { color: rgb(237, 139, 76); font-size: 16px; font-weight: bold; }
+body.product-mode #phonenumber, body.product-mode #custserv_phone { white-space: nowrap; }
+body.product-mode #loginboxC { white-space: nowrap; position: relative; top: 2px; }
+body.product-mode td.topmenu { padding-right: 20px; line-height: 1.5em; text-align: left; }
+body.product-mode #tShippingC { padding: 8px; }
+body.product-mode .linkish { text-decoration: underline; color: rgb(132, 155, 205); cursor: pointer; }
+body.product-mode .popover { position: relative; }
+body.product-mode .popoverdiv { position: absolute; z-index: 3000; border: 1px solid rgb(125, 125, 125); background-color: white; box-shadow: rgba(50, 50, 50, 0.62) 0px 5px 5px; left: 45px; top: 15px; cursor: auto; color: rgb(125, 125, 125); text-decoration: none; padding: 8px 12px 5px; font-size: 11px; display: none; border-radius: 4px; }
+body.product-mode .popover:hover > .popoverdiv { display: block; }
+body.product-mode .bold, body.product-mode .bold a { font-weight: bold; }
+body.product-mode .hidden { display: none; }
+body.product-mode div#theLayer { position: fixed !important; top: 20px !important; }
+body.product-mode a:link { text-decoration: none !important; }
+body.product-mode a:hover { text-decoration: underline !important; }
+body.product-mode div#theLayer { z-index: 6000; position: fixed !important; top: 20px !important; max-height: 90% !important; }
+body.product-mode #overlay { z-index: 5999 !important; }
+body.product-mode #testimonialsC { padding-top: 10px; width: 200px; margin-bottom: -30px; }
+body.product-mode { margin: 0px; }
+body.product-mode div.c6 {  }
+body.product-mode div.c2 {  }
+body.product-mode div.c1 { margin-left: 18px; }
+body.product-mode #faqheader { margin-bottom: 12px; }
+body.product-mode #faq1 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image1_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq2 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image2_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq3 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image3_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq4 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image4_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq5 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image5_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq6 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image6_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq7 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image7_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq8 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image8_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq9 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image9_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq10 { background: url("https://www.greetingcarduniverse.com/images/gcu/faq_image10_details_dec_2012.png") left top no-repeat scroll transparent; }
+body.product-mode #faq1, body.product-mode #faq2, body.product-mode #faq3, body.product-mode #faq4, body.product-mode #faq5, body.product-mode #faq6, body.product-mode #faq7, body.product-mode #faq8, body.product-mode #faq9, body.product-mode #faq10 { list-style-type: none; margin-left: -28px; padding-bottom: 4px; padding-left: 28px; padding-top: 6px; white-space: nowrap; }
+body.product-mode #rightsidebar { width: 221px; }
+body.product-mode div.footer, body.product-mode div.footer > p { clear: both; margin: auto; text-align: center; }
+body.product-mode div.footer { padding-top: 30px; }
+body.product-mode .pageC { width: 1000px; margin-left: auto; margin-right: auto; }
+body.product-mode .promo_margin { margin-top: 60px; }
+body.product-mode #logoTDC { float: left; padding-bottom: 5px; padding-top: 10px; }
+body.product-mode #gcu_logo { width: 280px; height: 113px; border: 0px; }
+body.product-mode #topRightNavTDC { padding-bottom: 3px; padding-top: 15px; }
+body.product-mode #loginC { height: 20px; }
+body.product-mode #loginboxC { vertical-align: bottom; float: right; }
+body.product-mode #phoneC { float: right; padding-right: 3px !important; }
+body.product-mode #cartC { height: 40px; }
+body.product-mode #headerNavTDC { float: right; }
+body.product-mode #menu_div > table { margin-bottom: -10px; }
+body.product-mode #searchTableTDC { vertical-align: top; padding: 4px 0px 0px; white-space: nowrap; position: relative; height: 55px; }
+body.product-mode #searchContainer { position: absolute; padding: 0px; margin: 10px 0px 0px; right: 0px; }
+body.product-mode ::-webkit-input-placeholder { color: rgb(187, 187, 187) !important; text-indent: 10px; }
+body.product-mode .searchBTN { padding: 0px; margin: 3px 0px 0px 4px; }
+body.product-mode #sli_search_1 { float: left; border: 1px solid rgb(245, 158, 51); margin-left: 3px; margin-top: 0px; padding: 5px; font-size: 18px; font-weight: bold; width: 490px; }
+body.product-mode #dropmenudiv { border-width: 1px; border-style: solid; border-color: rgb(0, 0, 102); z-index: 100; position: absolute; }
+body.product-mode .highslide-container div { font-family: Verdana, Helvetica; font-size: 10pt; }
+body.product-mode .highslide-container table { background: none; }
+body.product-mode .highslide-wrapper, body.product-mode .highslide-outline { background: white; }
+body.product-mode .highslide-loading { display: block; color: black; font-size: 9px; font-weight: bold; text-transform: uppercase; text-decoration: none; padding: 3px 3px 3px 22px; border: 1px solid white; background-color: white; background-image: url("https://www.greetingcarduniverse.com/js/highslide/highslide/graphics/loader.white.gif"); background-repeat: no-repeat; background-position: 3px 1px; }
+body.product-mode .highslide-viewport { display: none; position: fixed; width: 100%; height: 100%; z-index: 1; background: none; left: 0px; top: 0px; }
+body.product-mode #overlay { display: none; position: absolute; top: 0px; left: 0px; width: 100%; z-index: 100; background-color: rgb(0, 0, 0); opacity: 0.5; }
+body.product-mode #theLayer { display: none; position: absolute; z-index: 200; border: 1px solid rgb(0, 0, 0); background-color: rgb(255, 255, 255); text-align: left; top: 40px; left: 100px; width: 50%; }
+body.product-mode #popTop { position: absolute; width: 100%; background-color: rgb(248, 248, 248); height: 30px; font-size: 10px; border-bottom: 1px solid rgb(214, 211, 214); }
+body.product-mode #popTitle { top: 0px; padding-left: 4px; padding-top: 6px; font-size: 13px; font-family: arial; }
+body.product-mode #popX { position: absolute; right: 6px; top: 2px; width: 15px; height: 15px; text-align: center; padding-top: 5px; }
+body.product-mode #popX a { text-decoration: none; color: rgb(255, 255, 255); font-weight: bold; }
+body.product-mode #popClose { position: absolute; height: 10px; text-align: center; font-family: arial; font-size: 9px; }
+body.product-mode #popBottom { height: 100%; z-index: 11; }
+body.product-mode #popContent { width: 100%; height: 100%; margin-top: 10px; }
+body.product-mode .highslide-viewport-size { position: fixed; width: 100%; height: 100%; left: 0px; top: 0px; }
+body.product-mode #prev { list-style-type: none; }
+body.product-mode img.prevLink { border: none; vertical-align: top; position: absolute; inset: 0px; margin: auto auto 24px; }
+body.product-mode div.cardTile { width: 145px; height: 165px; position: absolute; margin-top: auto; margin-bottom: auto; top: 0px; bottom: 0px; border: 1px solid rgba(0, 0, 0, 0.25); border-radius: 3px; }
+body.product-mode .portrait { height: 157px; }
+body.product-mode li.item { margin-bottom: 20px; position: relative; width: 157px; height: 165px; }
+body.product-mode li.horizontal { float: right; }
+body.product-mode div.prevCardButtons { position: absolute; bottom: 0px; left: 0px; right: 0px; margin: auto; white-space: nowrap; text-align: center; }
+body.product-mode button.prevButton { border: 0px; color: rgb(132, 155, 205); cursor: pointer; background-color: transparent; margin: 0px; padding: 0px 2px; height: 15px; }
+body.product-mode button.prevButton:hover { color: rgb(245, 158, 51); text-decoration: underline; }
+body.product-mode button.addPrevButton { border-left: 1px solid rgb(125, 125, 125); }
+body.product-mode .cardstyle { float: left; width: 200px; height: 235px; overflow: hidden; padding-top: 3px; margin: 4px; text-align: center; z-index: 30; position: relative; }
+body.product-mode div.landscapeC { height: 180px; }
+body.product-mode div#d_card_details { margin-left: 15px; }
+body.product-mode div.prodname { position: relative; }
+body.product-mode div.pnLandscape { top: -36px; }
+body.product-mode img.landscapecard { position: relative; top: -36px; }
+body.product-mode div#cards { z-index: 20; }
+body.product-mode div#bbblinks { text-align: center; margin-top: 14px; margin-bottom: 24px; }
+body.product-mode div#bbblinks img { padding-right: 12px; }
+body.product-mode #prevC { display: table; clear: both; left: 0px; right: 0px; margin: auto; padding-right: 32px; height: 157px; max-width: 937px; }
+body.product-mode #prevRow { clear: both; }
+body.product-mode .tocHeader { width: 895px; height: 30px; margin: auto; padding-left: 5px; padding-top: 3px; padding-bottom: 3px; background-color: rgb(143, 208, 201); color: white; }
+body.product-mode .tocHeader h1, body.product-mode .tocHeader h2 { padding-bottom: 0px; margin-top: 3px; padding-top: 0px; font-weight: normal; }
+body.product-mode #prevHeaderRow { height: 36px; margin-top: 20px; clear: both; }
+body.product-mode .footer { clear: both; margin-top: 100px; }
+body.product-mode div.previous_more { float: right; padding: 5px 10px 0px 0px; margin: 0px; text-align: right; vertical-align: middle; top: 0px; }
+body.product-mode div.previous_more a { color: rgb(255, 255, 255); font-weight: bold; font-size: 13px; }
+body.product-mode #parentCardDispC { text-align: center; display: table-cell; vertical-align: top; width: 400px; padding-left: 20px; padding-top: 36px; }
+body.product-mode #card_title { margin-top: 10px; margin-bottom: 12px; font-weight: bold; }
+body.product-mode #add_to_cart_buttons { text-align: center; margin-top: 6px; margin-bottom: 12px; }
+body.product-mode a.pinitgcu { background: url("https://www.greetingcarduniverse.com/images/common/pinit.png"); display: inline-block; height: 20px; width: 40px; }
+body.product-mode a.pinitgcu:hover { background: url("https://www.greetingcarduniverse.com/images/common/pinitOver.png"); }
+body.product-mode a.pinitgcu:active { background: url("https://www.greetingcarduniverse.com/images/common/pinitActive.png"); }
+body.product-mode div#regenIndicator { float: left; font-weight: bold; left: 155px; position: relative; text-align: center; top: 200px; width: 250px; padding-top: 6px; padding-bottom: 6px; z-index: 3000; background-color: white; border: 3px solid rgb(238, 238, 238); border-radius: 6px; box-shadow: rgba(50, 50, 50, 0.75) 0px 5px 5px; }
+body.product-mode div#satisBlazon { display: none; }
+body.product-mode div.footer { clear: both; margin: auto; text-align: center; }
+body.product-mode input, body.product-mode textarea { border: 1px solid rgb(200, 200, 200); border-radius: 3px; }
+body.product-mode .inputC { text-align: left; margin-top: 12px; }
+body.product-mode div#popinBlocker { position: fixed; inset: 0px; min-width: 100%; min-height: 100%; opacity: 0.75; background-color: black; z-index: 1000000; }
+body.product-mode div#popin { position: fixed; width: 430px; height: 315px; background-color: white; border: 1px outset white; box-shadow: black 3px 3px 3px; inset: 0px; margin: auto; border-radius: 6px; max-height: 98%; z-index: 1000001; }
+body.product-mode #popinCloseBox { float: right; height: 16px; width: 16px; background-image: url("https://www.greetingcarduniverse.com/images/common/X-closebox.png"); background-repeat: no-repeat; border: 0px; background-color: transparent; margin-top: 6px; margin-right: 7px; cursor: pointer; }
+body.product-mode #popinCloseBox:hover { background-image: url("https://www.greetingcarduniverse.com/images/common/X-closebox-over.png"); }
+body.product-mode #popinControl { height: 36px; border-bottom: 1px solid rgb(220, 220, 220); background-color: rgb(220, 220, 220); }
+body.product-mode #popinTitle { font-family: Verdana, Helvetica; font-size: 14px; font-weight: bold; color: rgb(69, 69, 69); margin: 6px 5px 2px 8px; float: left; overflow: hidden; line-height: 20px; width: 90%; }
+body.product-mode #popinContent { position: absolute; right: 0px; left: 0px; width: 400px; height: 90%; margin: auto; overflow-y: auto; }
+body.product-mode { min-width: 1024px; }
+body.product-mode a:link { text-decoration: none; }
+body.product-mode a:hover { text-decoration: underline; }
+body.product-mode div#currency { margin-left: 8px; position: relative; top: 10px; white-space: nowrap; color: rgb(125, 125, 125); }
+body.product-mode img#showCurrSel { position: relative; bottom: 1px; cursor: pointer; border: none; }
+body.product-mode div#currency_list { width: 165px; color: rgb(125, 125, 125); background-color: white; border: 1px solid rgb(132, 132, 132); z-index: 200; padding: 0px; position: absolute; left: -100px; box-shadow: rgba(50, 50, 50, 0.5) 4px 4px 5px; }
+body.product-mode div#currency_list ul { list-style-type: none; margin: 0px; padding: 0px; }
+body.product-mode div#currency_list ul li { margin: 0px; padding: 2px 4px; }
+body.product-mode div#currency_list ul li:hover { background-color: rgb(231, 238, 247); cursor: pointer; }
+body.product-mode div#currListC { height: 1px; width: 1px; position: relative; }
+body.product-mode #sli_search_1 { width: 490px; }
+body.product-mode #subscribeC, body.product-mode #subscribeC > div:first-child, body.product-mode #subscribeC > div:first-child > div, body.product-mode #subscribeBL { inset: 0px; }
+body.product-mode #subscribeC { position: fixed; height: 300px; width: 350px; border-radius: 24px; box-shadow: rgba(0, 0, 0, 0.5) 0px 4px 8px; background-color: white; margin: auto; z-index: 6000; font-family: Arial, Helvetica, sans-serif; text-align: left; }
+body.product-mode #subscribeC > div:first-child { position: absolute; height: 294px; width: 344px; border-radius: 22px; margin: auto; background-color: rgb(143, 208, 201); }
+body.product-mode #subscribeC > div:first-child > div { position: absolute; height: 266px; width: 276px; border-radius: 20px; background-color: white; color: rgb(69, 69, 69); margin: auto; padding: 10px 30px; }
+body.product-mode #subscribeC > div:first-child > div > #subscribe_head1 { font-size: 24pt; font-weight: normal; color: rgb(245, 158, 51); text-shadow: none; margin-top: 22px; margin-bottom: 13px; }
+body.product-mode #subscribeC > div:first-child > div > div > input[type="text"] { width: 260px; height: 23px; border: 1px solid rgb(183, 183, 183); font-family: Verdana, Tahoma, Helvetica, Arial, sans-serif; color: rgb(85, 85, 85); margin-bottom: 10px; }
+body.product-mode #subscribeC > div:first-child > div > div > button { font-size: 16px; font-family: Arial, Helvetica, sans-serif; height: 40px; border: none; cursor: pointer; }
+body.product-mode #subscribeC > div:first-child > div > div > button.no { width: 260px; background-color: white; color: rgb(245, 158, 51); }
+body.product-mode #subscribeC > div:first-child > div > div > button.yes { width: 260px; text-transform: uppercase; font-weight: bold; color: white; border-radius: 6px; background: linear-gradient(135deg, rgb(236, 115, 46) 0%, rgb(238, 133, 48) 100%) rgb(236, 115, 46); }
+body.product-mode #subscribeC > div#subCloseBox { position: absolute; font-weight: bold; height: 32px; width: 32px; right: 5px; top: 5px; color: white; background-color: rgb(143, 208, 201); cursor: pointer; border-top-right-radius: 16px; border-bottom-left-radius: 6px; }
+body.product-mode #subscribeC > div#subCloseBox > span { position: relative; left: 9px; top: 6px; }
+body.product-mode #subscribeBL { position: fixed; background-color: rgba(0, 0, 0, 0.3); z-index: 5900; }
+body.product-mode .ie8L { display: none; }
+body.product-mode #subscribeC > div:first-child > div > p { font-size: 16px; }
+body.product-mode button.orange { text-align: center; margin-top: 4px; margin-bottom: 2px; padding: 5px; color: white; font-weight: bold; cursor: pointer; font-size: 12px; font-family: Arial, Helvetica, sans-serif; border: none; min-width: 194px; white-space: nowrap; background: linear-gradient(-45deg, rgb(236, 115, 46) 0%, rgb(239, 135, 48) 100%); box-shadow: rgb(161, 160, 161) 3px 3px 3px; }
+body.product-mode .over1, body.product-mode .over2, body.product-mode .over3, body.product-mode .over4, body.product-mode .over5, body.product-mode .over6 { position: relative; }
+body.product-mode .over3 { left: 3px; }
+body.product-mode .over6 { left: 6px; }
+body.product-mode #cards { float: left; width: 208px; border: 1px solid rgb(221, 221, 221); padding-top: 26px; padding-left: 0px; text-align: center; font-family: Arial, Helvetica, Futura, sans-serif; background-color: rgb(248, 248, 248); margin-bottom: 12px; }
+body.product-mode .testimonial { font-size: 13px; text-align: left; padding-top: 5px; padding-bottom: 8px; margin-bottom: 12px; }
+body.product-mode .testimonial div { padding-top: 2px; margin-top: 2px; margin-bottom: 8px; font-size: 13px; }
+body.product-mode #testimonialsC > div.testimonial_more { position: relative; top: -11px; display: block; padding-top: 5px; padding-bottom: 15px; text-align: center; }
+body.product-mode div.testimonial_more a { font-size: 13px; }
+body.product-mode #tabs { height: 32px; position: relative; top: 7px; padding-left: 5px; }
+body.product-mode .tab { float: left; padding: 4px 8px; border: 1px solid rgb(221, 221, 221); margin-right: 3px; margin-left: 3px; position: relative; font-weight: bold; width: 103px; background-color: white !important; }
+body.product-mode .activeTab { z-index: 1000; border-bottom-color: white; color: rgb(132, 155, 205); }
+body.product-mode .inactiveTab { z-index: 250; cursor: pointer; color: rgb(102, 102, 102); background-color: rgb(221, 221, 221) !important; }
+body.product-mode .inactiveTab:hover { color: rgb(0, 0, 0); }
+body.product-mode .tabC { border: 1px solid rgb(221, 221, 221); background-color: white; width: 100%; margin: 0px 8px 8px; padding-top: 8px; overflow-y: auto; max-height: 100%; }
+body.product-mode .inactiveTabC { visibility: hidden; }
+body.product-mode #tabContent { position: relative; width: 500px; z-index: 500; }
+body.product-mode .detailsL { width: 100px; float: left; font-weight: bold; color: rgb(125, 125, 125); padding-right: 12px; }
+body.product-mode .detail { min-height: 12pt; margin-left: 6px; margin-bottom: 22px; text-align: left; }
+body.product-mode .prices_popover { border: 3px solid rgb(204, 204, 204); left: -160px; padding: 0px; }
+body.product-mode #product_testimonials { width: 895px; margin: auto; }
+body.product-mode #product_testimonials > div.testimonial { font-size: 14px; text-align: left; padding: 5px 10px 8px; margin: 0px 0px 10px; }
+body.product-mode #product_testimonials > div.testimonial > div.reviewer { margin: 0px; font-size: 12px; font-style: italic; }
+body.product-mode #ptHeaderRow > div.testimonial_more { float: right; padding: 0px 10px 0px 0px; margin: 0px; text-align: right; vertical-align: middle; top: 0px; }
+body.product-mode #ptHeaderRow > div.testimonial_more a { color: rgb(255, 255, 255); }
+body.product-mode #ptHeaderRow { width: 895px; height: 26px; margin-top: 20px; padding: 10px 0px 0px 5px; clear: both; background-color: rgb(143, 208, 201); color: rgb(255, 255, 255); font: bold 14px Arial, Helvetica, Futura, sans-serif; }
+body.product-mode .fb-share-button { margin: 10px 0px 0px 10px; }
+body.product-mode .Footer-SiteMap { background-color: rgb(221, 221, 221); margin-bottom: 25px; }
+body.product-mode .Footer-Logos-Links { background-color: rgb(255, 255, 255); color: rgb(125, 125, 125); text-align: center; }
+body.product-mode .Footer-Logos-Links ul { display: inline-block; list-style: none; padding: 0px; }
+body.product-mode .Footer-Logos-Links ul li { display: inline-block; list-style: none; padding-right: 10px; }
+body.product-mode .Footer-Logos-Links a { color: rgb(125, 125, 125); }
+body.product-mode .Footer-Directory-Links { float: left; padding: 10px 0px; }
+body.product-mode .Footer-Directory-Links ul { text-align: left; list-style: none; float: left; padding: 0px 0px 0px 30px; margin: 0px; }
+body.product-mode .Footer-Directory-Links ul h4 { font-size: 14px; font-weight: normal; color: rgb(102, 102, 102); }
+body.product-mode .Footer-Directory-Links ul li { line-height: 2.5em; }
+body.product-mode .Footer-Directory-Links ul li a { color: rgb(102, 102, 102); font-size: 12px; }
+body.product-mode .Footer-Contact-Info { float: left; width: 366px; background-color: rgb(237, 237, 237); margin-left: 15px; margin-top: -15px; margin-bottom: -15px; height: auto; }
+body.product-mode .Footer-Contact-Info h3 { font-size: 25px; font-weight: normal; color: rgb(102, 102, 102); width: 90%; line-height: 1.5em; border-bottom: 1px solid rgb(211, 211, 211); margin: 15px 0px 0px 15px; text-align: left; }
+body.product-mode .Footer-Contact-Info ul { text-align: left; list-style: none; float: left; }
+body.product-mode .Footer-Contact-Info ul li { color: rgb(102, 102, 102); margin-bottom: 20px; }
+body.product-mode .Footer-Contact-Info ul a { color: rgb(102, 102, 102); font-size: 18px; }
+body.product-mode .FooterPhone { font-size: 18px; background-image: url("https://www.greetingcarduniverse.com/images/common/footer/Footer-Phone-Icon.png"); background-repeat: no-repeat; text-indent: 45px; line-height: 40px; vertical-align: middle; }
+body.product-mode .FooterPhone span { font-size: 20px; color: rgb(245, 158, 51); font-weight: bold; width: 100%; }
+body.product-mode .FooterPhone span.FooterCallHours { font-size: 12px; float: left; line-height: 0.2em; color: rgb(102, 102, 102); padding-left: 4px; font-weight: normal; }
+body.product-mode .FooterEmail { background-image: url("https://www.greetingcarduniverse.com/images/common/footer/Footer-Email-Icon.png"); background-repeat: no-repeat; text-indent: 45px; line-height: 26px; vertical-align: middle; }
+body.product-mode .FooterChat { background-image: url("https://www.greetingcarduniverse.com/images/common/footer/Footer-Chat-Icon.png"); background-repeat: no-repeat; text-indent: 45px; line-height: 32px; vertical-align: middle; }
+body.product-mode .FooterSavings { background-image: url("https://www.greetingcarduniverse.com/images/common/footer/Footer-Savings-Icon.png"); background-repeat: no-repeat; text-indent: 45px; line-height: 36px; vertical-align: middle; }
+body.product-mode .FooterFAQ { background-image: url("https://www.greetingcarduniverse.com/images/common/footer/Footer-FAQ-Icon.png"); background-repeat: no-repeat; text-indent: 45px; line-height: 44px; vertical-align: middle; }
+body.product-mode ul.Footer-FollowGCU { width: 130px; }
+body.product-mode .Footer-FollowGCU li a { padding-right: 25px; }
+body.product-mode .Footer-FollowGCU li { padding-top: 12px; }
+body.product-mode #tShippingC p, body.product-mode #tShippingC h3 { font-weight: normal; text-align: left; font-size: 14px; }
+body.product-mode #tShippingC > p, body.product-mode #tShippingC > h3 { display: block; padding: 8px; margin-top: 4px; margin-bottom: 4px; }
+body.product-mode #tShippingC table { margin: 6px auto 4px; width: 80%; border-spacing: 0px; border-collapse: collapse; }
+body.product-mode #tShippingC table td { padding: 4px; margin: 0px; text-align: left; }
+body.product-mode #tShippingC table td[align="center"] { text-align: center; }
+body.product-mode #tShippingC table tr:first-child td { border-bottom: 1px groove rgb(125, 125, 125); max-height: 24px; overflow: hidden; }
+body.product-mode #tShippingC table tr:nth-child(3), body.product-mode #tShippingC table tr:nth-child(5), body.product-mode #tShippingC table tr:nth-child(7), body.product-mode #tShippingC table tr:nth-child(9) { background-color: rgb(241, 241, 241); }
+body.product-mode #tShippingC table b { font-weight: bold; }
+body.product-mode .landscape { height: 157px; }
+body.product-mode #product_review_row { clear: both; margin: auto; width: 895px; }
+body.product-mode #prHeaderRow { width: 895px; height: 26px; margin-top: 20px; padding: 10px 0px 0px 5px; clear: both; background-color: rgb(143, 208, 201); color: rgb(255, 255, 255); font: bold 14px Arial, Helvetica, Futura, sans-serif; }
+body.product-mode div.product_review { width: auto; padding: 15px; clear: both; color: rgb(119, 119, 119); border: 0px solid rgb(0, 0, 170); }
+body.product-mode div.pr_head { float: left; margin: 3px 0px 0px; border: 0px solid rgb(170, 0, 0); vertical-align: bottom; }
+body.product-mode img.pr_rating { float: left; margin: 0px 10px 0px 0px; border: 0px solid rgb(153, 153, 153); }
+body.product-mode span.pr_title { font-weight: 700; }
+body.product-mode span.pr_customer { font-size: 10pt; font-style: italic; }
+body.product-mode div.pr_body { clear: both; padding: 7px 0px 0px; width: auto; border: 0px solid rgb(153, 153, 153); }
 }
-.shop-logo b { font-family: Courgette, "Brush Script MT", cursive; font-size: 1.55rem; font-weight: 400; line-height: 1.1; letter-spacing: 0.01em; }
-.shop-logo small { justify-self: end; font-size: 0.68rem; opacity: 0.95; }
-.shop-head-side { text-align: right; color: #7d7d7d; font-size: 0.82rem; line-height: 1.5; }
-.shop-head-side strong { color: var(--gcu-orange); }
-.shop-nav { display: flex; overflow-x: auto; background: var(--gcu-blue); scrollbar-width: none; }
-.shop-nav a { flex: 1 0 auto; padding: 7px 14px; border-right: 1px solid rgba(255, 255, 255, 0.55); color: #fff !important; font-size: 0.86rem; text-align: center; white-space: nowrap; }
-.shop-nav a:last-child { border-right: 0; }
-.shop-promo { margin: 9px 0 0; color: #555; font-size: 0.86rem; text-align: center; }
-.shop-promo b { color: #e0251b; font-weight: 400; }
-.shop-promo i { display: inline-block; width: 7px; height: 7px; margin: 0 10px 1px; border-radius: 50%; background: #7d7d7d; vertical-align: middle; }
-.shop-title { margin: 22px 0 2px; color: var(--gcu-orange); font-family: Helvetica, Arial, Arimo, sans-serif; font-size: 22px; font-weight: 700; line-height: 1.25; }
-.shop-crumbs { font-size: 0.86rem; color: #7d7d7d; }
-.shop-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; margin-top: 18px; align-items: start; }
-.shop-media { text-align: center; color: #7d7d7d; }
-.shop-image { display: grid; place-items: center; min-height: 360px; }
-.shop-image img { display: block; max-width: 100%; max-height: 520px; object-fit: contain; }
-.shop-image.is-flat img { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18); }
-.shop-views { margin-top: 8px; font-size: 0.86rem; }
-.shop-views button { border: 0; padding: 0 2px; background: none; color: var(--gcu-blue); font: inherit; cursor: pointer; }
-.shop-views button.is-selected { color: #454545; font-weight: 700; cursor: default; }
-.shop-caption { margin: 10px 0 0; color: #7d7d7d; font-weight: 700; }
-.shop-buy { display: grid; gap: 12px; }
-.shop-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; color: #7d7d7d; }
-.shop-price .amt { color: #454545; font-size: 1.7rem; font-weight: 700; }
-.shop-send {
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 56px;
-  border: 0; border-radius: 4px; padding: 12px 18px; cursor: pointer;
-  color: #fff; background: linear-gradient(180deg, #f8a94a, #f08a1c); box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.18);
-  font-family: Arial, Arimo, sans-serif; font-size: 1.15rem; font-weight: 700; letter-spacing: 0.01em;
+/* GreetingCardUniverse mobile-site styles, scoped to product mode. */
+@media (max-width: 759px) {
+body.product-mode .promo_margin { margin-top: 60px; }
+body.product-mode #header_menu { width: 50px; }
+body.product-mode #header_banner_logo { max-width: 230px; width: 100%; }
+body.product-mode .circle { position: relative; z-index: 1; float: right; border-radius: 50%; width: 18px; height: 18px; line-height: 18px; background: rgb(244, 157, 51); text-align: center; margin: -40px 5px 0px 0px; }
+body.product-mode div.circle a { font: bold 12px arial; color: rgb(255, 255, 255); text-decoration: none; position: relative; }
+body.product-mode #header_cart_icon { margin: 8px 0px 0px 10px; }
+body.product-mode #header_login { text-align: right; padding: 0px 3px 0px 0px; margin: 0px 5px 5px 0px; }
+body.product-mode #gcu_mobile_content { width: 100%; border-right: 1px solid rgb(170, 170, 170); border-bottom: 1px solid rgb(170, 170, 170); border-left: 1px solid rgb(170, 170, 170); border-image: initial; border-top: none; padding-bottom: 20px; overflow: hidden; }
+body.product-mode div#menu_options { width: 175px; color: rgb(125, 125, 125); background-color: white; border: 1px solid rgb(132, 132, 132); z-index: 200; padding: 0px; position: absolute; top: -10px; left: 15px; text-align: left; box-shadow: rgba(50, 50, 50, 0.5) 4px 4px 5px; }
+body.product-mode div#menu_options ul { list-style-type: none; margin: 0px; padding: 0px; }
+body.product-mode div#menu_options ul li { margin: 0px; padding: 2px 4px; font-size: 22px; }
+body.product-mode div#menu_options ul li:hover { background-color: rgb(231, 238, 247); cursor: pointer; }
+body.product-mode div#header_menu_optionsC { height: 1px; width: 1px; position: relative; }
+body.product-mode #search_button { float: left; padding: 0px; margin: 5px 0px 0px; width: 105px; height: 35px; background: rgb(244, 157, 51); color: rgb(255, 255, 255); font: bold 16px arial; border: none; border-radius: 0px; appearance: none; }
+body.product-mode #search_input { float: left; padding: 0px 0px 0px 5px; margin: 5px 0px 0px 10px; width: 100%; height: 33px; border: 1px solid rgb(244, 157, 51); border-radius: 0px; font: 100 16px arial; appearance: none; }
+body.product-mode #page_footer { text-align: center; padding-bottom: 10px; padding-top: 3px; font-size: 11px; width: 320px; clear: both; }
+body.product-mode #page_footer img { height: 40px; }
+body.product-mode #footer_links { font-size: 12px; }
+body.product-mode #footer_links a:link, body.product-mode #footer_links a:visited, body.product-mode #footer_links a:hover, body.product-mode #footer_links a:active { color: rgb(132, 155, 205); font-size: 12px; }
+body.product-mode #sm_icons { padding: 10px 0px; }
+body.product-mode #phoneC { position: relative; text-align: center; vertical-align: top; margin: 10px 0px; color: rgb(125, 125, 125); font-family: Arial, Helvetica, Futura, sans-serif; font-size: 16px; font-weight: bold; }
+body.product-mode #phonenumber { color: rgb(245, 158, 51); font-weight: bold; text-decoration: none; font-size: 16px; }
+body.product-mode #us_hours { text-align: center; font-size: 12px; }
+body.product-mode #phonenumber, body.product-mode #custserv_phone { white-space: nowrap; }
+body.product-mode { min-width: auto; }
+body.product-mode { margin: 0px; padding: 0px; font-family: Arial, sans-serif, helvetica; font-size: 12px; color: rgb(53, 53, 53); line-height: 1.4; }
+body.product-mode a, body.product-mode a:link, body.product-mode a:visited, body.product-mode a:hover, body.product-mode a:active { color: rgb(132, 155, 205); }
+body.product-mode .h1bd { font-size: 22px; color: rgb(245, 158, 51); margin-bottom: 0px; padding-bottom: 0px; font-family: Helvetica, Futura, Arial, sans-serif; }
+body.product-mode #header_promo_bar { background-color: rgb(238, 238, 238); color: rgb(248, 109, 10); font-size: 10px; text-align: center; border-bottom: 1px solid rgb(197, 197, 197); padding-top: 2px; padding-bottom: 1px; }
+body.product-mode #mask { position: fixed; top: 0px; left: 0px; z-index: 9000; background-color: rgb(0, 0, 0); display: none; opacity: 0.6; width: 100%; height: 100%; }
+body.product-mode #boxes .window { position: absolute; display: none; z-index: 9999; overflow: hidden; }
+body.product-mode #boxes #dialog { margin: 0px; position: fixed; top: 50vh; left: 50vw; transform: translate(-50%, -50%); background-color: rgb(255, 255, 255); border: 4px solid rgb(76, 76, 76); }
+body.product-mode #boxes .window_header { background-color: rgb(243, 243, 243); width: 100%; height: 28px; font-weight: bold; font-size: 14px; color: rgb(143, 208, 201); }
+body.product-mode #boxes .window_body { background-color: rgb(255, 255, 255); overflow: hidden; }
+body.product-mode .dialog_header_label { padding-left: 4px; padding-top: 6px; }
+body.product-mode #card_front_img { margin-top: 3px; }
+body.product-mode div#currency { margin-left: 8px; position: relative; top: 2px; white-space: nowrap; color: rgb(125, 125, 125); }
+body.product-mode img#showCurrSel { position: relative; bottom: 1px; cursor: pointer; border: none; }
+body.product-mode div#currency_list { width: 165px; color: rgb(125, 125, 125); background-color: white; border: 1px solid rgb(132, 132, 132); z-index: 200; padding: 0px; position: absolute; left: -100px; box-shadow: rgba(50, 50, 50, 0.5) 4px 4px 5px; }
+body.product-mode .hidden { display: none; }
+body.product-mode div#currency_list ul { list-style-type: none; margin: 0px; padding: 0px; }
+body.product-mode div#currency_list ul li { margin: 0px; padding: 2px 4px; }
+body.product-mode div#currency_list ul li:hover { background-color: rgb(231, 238, 247); cursor: pointer; }
+body.product-mode div#currListC { height: 1px; width: 1px; position: relative; }
+body.product-mode div#currency_list { width: 240px; font-size: 22px; left: -200px; }
+body.product-mode div#currency { top: 0px; left: -5px; }
+body.product-mode input, body.product-mode textarea { border: 1px solid rgb(200, 200, 200); border-radius: 3px; }
+body.product-mode div.card_details_div { display: flex; flex-flow: column; width: 312px; margin: 0px auto; }
+body.product-mode div.cd_header_div { padding: 5px 5px 0px; }
+body.product-mode h1.h1bd { font-size: 16px; margin: 0px; }
+body.product-mode div.cd_card_cat { font-size: 8pt; font-weight: bold; color: rgb(245, 158, 51); }
+body.product-mode div.cd_img_div { display: flex; flex-flow: column; margin: 15px auto 0px; padding: 5px 0px; border: 1px solid rgb(204, 204, 204); width: 310px; }
+body.product-mode #card_inside_img, body.product-mode #card_back_img { margin: 5px auto 0px; text-align: center; }
+body.product-mode #card_inside_img img { object-fit: cover; }
+body.product-mode img.inside_img_right { object-position: right center; }
+body.product-mode #front_mid_back_links { width: fit-content; margin: 0px auto; }
+body.product-mode div.cd_buttons_div { display: flex; margin: 20px auto 10px; }
+body.product-mode div.cd_buttons_div img { height: 30px; }
+body.product-mode img.cd_add_img { margin-right: 10px; }
+body.product-mode div.cd_details_div { text-align: left; padding: 3px; border-right: 1px solid rgb(204, 204, 204); border-bottom: 1px solid rgb(204, 204, 204); border-left: 1px solid rgb(204, 204, 204); border-image: initial; border-top: none; }
+body.product-mode table.cd_table td { vertical-align: top; padding-bottom: 18px; }
+body.product-mode div.product_review { width: auto; padding: 15px; clear: both; color: rgb(119, 119, 119); border: 0px solid rgb(0, 0, 170); }
+body.product-mode div.pr_head { float: left; margin: 3px 0px 0px; border: 0px solid rgb(170, 0, 0); vertical-align: bottom; }
+body.product-mode img.pr_rating { float: left; margin: 0px 10px 0px 0px; border: 0px solid rgb(153, 153, 153); }
+body.product-mode span.pr_title { font-weight: 700; }
+body.product-mode span.pr_customer { font-size: 10pt; font-style: italic; }
+body.product-mode div.pr_body { clear: both; padding: 7px 0px 0px; width: auto; border: 0px solid rgb(153, 153, 153); }
+body.product-mode img.inside_img_bottom { object-position: center bottom; }
+body.product-mode div.cd_reviews_header_div { font-weight: bold; padding: 0px 0px 0px 4px; }
 }
-.shop-send:hover { background: linear-gradient(180deg, #f59e33, #e47c10); }
-.shop-send svg { width: 26px; height: 26px; flex: none; }
-.shop-send-sub { margin: -4px 0 0; color: #7d7d7d; font-size: 0.82rem; text-align: center; }
-.shop-print {
-  display: block; padding: 10px 14px; border: 1px solid var(--gcu-blue); border-radius: 4px; text-align: center;
-  font-weight: 700; background: #f5f7fc;
+html.product-mode { background: #fff; }
+body.product-mode { display: block; min-height: 0; padding: 0; background: #fff; }
+body.product-mode main { width: auto; }
+body.product-mode #stage, body.product-mode #stage *:not(.gcu-send-btn) { box-sizing: content-box; }
+body.product-mode button { font: revert; }
+body.product-mode #image1.gcu-flat { max-width: 100%; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+.gcu-d, .gcu-m { display: none; }
+@media (min-width: 760px) { body.product-mode .gcu-d { display: block; } }
+@media (max-width: 759px) { body.product-mode .gcu-m { display: block; } }
+/* "Send Card Digitally Now": styled like GCU's own 168x39 button images, in teal so it reads as the extra option. */
+body.product-mode .gcu-send-row { margin: 9px 0 2px; text-align: center; }
+body.product-mode .gcu-send-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px; box-sizing: border-box; width: 345px; height: 39px;
+  margin: 0; padding: 0 12px; border: 0; border-radius: 2px; cursor: pointer;
+  background: linear-gradient(180deg, #4fb3a8 0%, #3f9b91 55%, #378a81 100%); color: #fff;
+  box-shadow: 2px 3px 3px rgba(0, 0, 0, 0.35);
+  font-family: "Gill Sans", "Gill Sans MT", Calibri, "Trebuchet MS", sans-serif; text-align: left;
 }
-.shop-print span { display: block; color: #7d7d7d; font-size: 0.78rem; font-weight: 400; }
-.shop-tabs { display: flex; gap: 3px; margin-top: 6px; border-bottom: 1px solid #ccc; }
-.shop-tabs span { padding: 5px 16px; border: 1px solid #ccc; border-bottom: 0; background: #fff; color: var(--gcu-blue); font-weight: 700; margin-bottom: -1px; }
-.shop-details { margin: 0; padding: 4px 12px 8px; border: 1px solid #ccc; border-top: 0; }
-.shop-details div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px; padding: 7px 0; }
-.shop-details dt { color: #7d7d7d; font-weight: 700; }
-.shop-details dd { margin: 0; overflow-wrap: anywhere; }
-.shop-loading { display: grid; justify-items: center; gap: 14px; padding: 90px 16px; color: #7d7d7d; text-align: center; }
-.shop-spinner { width: 42px; height: 42px; border: 5px solid rgba(132, 155, 205, 0.3); border-top-color: var(--gcu-orange); border-radius: 50%; animation: gcuSpin 900ms linear infinite; }
-.shop-foot { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e3e3e3; color: #7d7d7d; font-size: 0.78rem; text-align: center; }
-@media (max-width: 760px) {
-  .shop-head { flex-direction: column; align-items: center; padding-bottom: 10px; }
-  .shop-head-side { text-align: center; }
-  .shop-nav { justify-content: flex-start; }
-  .shop-promo { font-size: 0.78rem; }
-  .shop-promo i { margin: 0 6px 1px; }
-  .shop-title { margin-top: 16px; font-size: 19px; }
-  .shop-grid { grid-template-columns: 1fr; gap: 16px; }
-  .shop-image { min-height: 0; }
-  .shop-image img { max-height: 420px; }
-}
+body.product-mode .gcu-send-btn:hover { background: linear-gradient(180deg, #57bdb2 0%, #44a69b 55%, #3b938a 100%); }
+body.product-mode .gcu-send-btn svg { box-sizing: border-box; width: 26px; height: 26px; flex: none; }
+body.product-mode .gcu-send-btn span { display: grid; line-height: 1.05; }
+body.product-mode .gcu-send-btn b { font-size: 18px; font-weight: 400; letter-spacing: 0.01em; }
+body.product-mode .gcu-send-btn small { font-size: 12.5px; text-align: center; }
+body.product-mode .gcu-m .cd_buttons_div { flex-wrap: wrap; justify-content: center; }
+body.product-mode .gcu-m .gcu-send-row { flex: 0 0 100%; margin: 9px 0 0; }
+body.product-mode .gcu-send-btn.is-mobile { gap: 9px; width: 268px; height: 32px; padding: 0 8px; }
+body.product-mode .gcu-send-btn.is-mobile svg { width: 21px; height: 21px; }
+body.product-mode .gcu-send-btn.is-mobile b { font-size: 15px; }
+body.product-mode .gcu-send-btn.is-mobile small { font-size: 10.5px; }
+body.product-mode .gcu-share a + a { margin-left: 20px; }
 
 /* ---------- Send form (after the envelope plays) ---------- */
 #after { width: min(680px, 100%); }
@@ -412,6 +691,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 // ---------- Progress screen ----------
 function showLoader(heading = `Creating animation for GCU Card# ${PID}`, title = KNOWN_TITLE) {
   document.body.classList.remove("product-mode");
+  document.documentElement.classList.remove("product-mode");
   after.innerHTML = "";
   stage.innerHTML = `
     <section class="gcu-loading" aria-live="polite">
@@ -981,97 +1261,429 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } =
 }
 let stopAnimation = () => {};
 
-// ---------- Product page ----------
+// ---------- Product page (a copy of GreetingCardUniverse's own card page) ----------
 const money = (p) => (p ? `$${p}` : "");
-const orientationOf = (info) => {
+const G = "https://www.greetingcarduniverse.com";
+const M = "https://m.greetingcarduniverse.com";
+const gimg = (path) => G + path;
+const isLandscape = (info) => {
   const m = String(info.size || "").match(/(\d+(?:\.\d+)?)"\s*x\s*(\d+(?:\.\d+)?)"/);
-  if (m) return Number(m[1]) > Number(m[2]) ? "Landscape" : Number(m[1]) < Number(m[2]) ? "Portrait" : "Square";
-  return info.landscape == null ? "" : info.landscape ? "Landscape" : "Portrait";
+  return m ? Number(m[1]) > Number(m[2]) : Boolean(info.landscape);
 };
-const GCU_LINKS = [
-  ["All Cards", "/community/"], ["Birthday Cards", "/birthday-cards"], ["Thank You Cards", "/thank-you-cards"],
-  ["Holidays", "/holiday-cards"], ["Invitations", "/invitations"], ["Photo Cards", "/photo-cards"],
-];
+const addToCartUrl = (pid) => `${G}/shopping/add_item.asp?pid=${encodeURIComponent(pid)}&ref=details_add_to-cart`;
+const personalizeUrl = (pid, src = "cd") => `${G}/shopping/message.asp?do_add=1&pid=${encodeURIComponent(pid)}&src=${src}`;
+const helpUrl = (anchor = "") => `${G}/help/card_shopper_help.asp${anchor}`;
 const ENVELOPE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>`;
+const sendButton = (cls) => `<button type="button" class="gcu-send-btn ${cls}" data-send>${ENVELOPE_ICON}<span><b>Send Card Digitally Now</b><small>by text or email</small></span></button>`;
 
-function shopShell(inner) {
+const PREV_KEY = "gcuPreviouslyViewed";
+const previouslyViewed = (info) => {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(PREV_KEY) || "[]"); } catch {}
+  if (!Array.isArray(list)) list = [];
+  const me = { pid: PID, title: info.title || "", img: info.shadow || info.image3d || info.front, landscape: isLandscape(info) };
+  list = [me, ...list.filter((c) => c && c.pid !== PID && /^\d+$/.test(c.pid))].slice(0, 10);
+  try { localStorage.setItem(PREV_KEY, JSON.stringify(list)); } catch {}
+  return list;
+};
+
+const FAQ = [
+  ["What is your delivery time?", "#delivery"], ["How much do cards cost?", "#pricing"], ["Do you offer bulk discounts?", "#pricing"],
+  ["Is personalization free?", "#personalize"], ["Are these quality cards?", "#quality"], ["How much does shipping cost?", "#shipping"],
+  ["Who can I mail the cards to?", "#options"], ["How quickly are cards mailed?", "#turnaround"], ["Do you ship outside of the US?", "#international"],
+  ["Are envelopes included?", "#envelopes"],
+];
+const MENU = [
+  ["allcards", "All Cards", "/community/"], ["announcements", "Announcements", "/announcements"], ["birthday", "Birthday Cards", "/birthday-cards"],
+  ["invitations", "Invitations", "/invitations"], ["occasions", "Occasions", "/occasions"], ["thanks", "Thank You Cards", "/thank-you-cards"],
+  ["wedding", "Weddings", "/congratulations-cards/wedding-marriage"], ["holiday", "Holidays", "/holiday-cards"], ["photo", "Photo Cards", "/photo-cards.asp"],
+];
+const BBB = "https://www.bbb.org/greater-san-francisco/business-reviews/greeting-cards-retail/greetingcarduniverse-com-in-danville-ca-48777";
+const RR = "https://seals.resellerratings.com/landing.php?seller=35148";
+const LIVE_CHAT = "https://lc.chat/now/8541531/";
+
+const reviewList = (reviews) => reviews.map((r) => {
+  const stars = Math.min(5, Math.max(1, Number(r.rating) || 5));
+  return `<div class="product_review"><img src="${gimg(`/images/common/rstars/rstars-${stars}.png`)}" class="pr_rating" title="${stars} Stars" alt="${stars} Stars"><div class="pr_head"><span class="pr_title">${esc(r.title)}</span> <span class="pr_customer">${esc(r.who)}</span></div><div class="pr_body">${esc(r.body)}</div></div>`;
+}).join("");
+
+function cardViews(info) {
+  const front = info.image3d || info.front;
+  const inside = info.insidePreview || (info.inside ? API_ORIGIN + info.inside : "");
+  return { front, inside, back: info.back || "" };
+}
+
+function desktopView(info, prev) {
+  const title = esc(info.title || `GCU Card# ${PID}`);
+  const cats = info.categories || [];
+  const catUrl = cats.length ? cats[cats.length - 1].url : `${G}/community/`;
+  const views = cardViews(info);
+  const shareUrl = info.productUrl || `${G}/${PID}`;
+  const tiers = (info.tiers || []).length
+    ? `<div class="popoverdiv prices_popover"><table cellpadding="5" cellspacing="0" width="160">
+        <tr><td class="fontsize10" align="center" bgcolor="#EEEEEE"><b>Quantity</b></td><td class="fontsize10" align="center" bgcolor="#EEEEEE"><b>Price</b></td></tr>
+        ${info.tiers.map((t, i) => `<tr><td align="center" class="fontsize10"${i % 2 ? ' bgcolor="#F8F8F8"' : ""}>${esc(t.qty).replace("*", "<sup>*</sup>")}</td><td align="center" class="fontsize10"${i % 2 ? ' bgcolor="#F8F8F8"' : ""}>${esc(t.price)}</td></tr>`).join("")}
+        <tr><td class="fontsize10" align="center" bgcolor="#FFFFFF" colspan="2"><sup>*</sup> Orders with less than 5 cards or exceeding 99 cards are not eligible for FedEx Office pickup.</td></tr>
+      </table></div>`
+    : "";
+  const detail = (label, value, extra = "") => (value ? `<div class="detail"><div class="detailsL"${extra}>${label}:</div><div>${value}</div></div>` : "");
+  const insideLines = (info.lines || []).filter((l, i, a) => l || (i && a[i - 1])).map(esc).join("<br>");
+  const orientation = encodeURIComponent(isLandscape(info) ? '7" x 5"' : '5" x 7"');
+  const quote = (q, whoFirst) => whoFirst
+    ? `<div class="testimonial grey_gilltext"><div class="reviewer fontcolor1">${esc(q.who)}</div>${esc(q.text)}</div>`
+    : `<div class="testimonial grey_gilltext">${esc(q.text)}<div class="reviewer fontcolor2">${esc(q.who)}</div></div>`;
   return `
-  <div class="shop">
-    <header class="shop-head">
-      <a class="shop-logo" href="https://www.greetingcarduniverse.com/" target="_blank" rel="noopener"><b>Greeting Card Universe</b><small>any card imaginable</small></a>
-      <div class="shop-head-side">Send any GCU card <strong>digitally</strong> in seconds<br>with <strong>Card Genie</strong></div>
-    </header>
-    <nav class="shop-nav" aria-label="GreetingCardUniverse categories">
-      ${GCU_LINKS.map(([t, href]) => `<a href="https://www.greetingcarduniverse.com${href}" target="_blank" rel="noopener">${t}</a>`).join("")}
-    </nav>
-    <p class="shop-promo"><b>Send digitally</b> by text or email<i></i>Printed cards mailed <b>the next business day</b></p>
-    ${inner}
-    <footer class="shop-foot">GCU Card# ${esc(PID)} · Digital delivery by <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Card Genie</a> · Printed cards by <a href="https://www.greetingcarduniverse.com/" target="_blank" rel="noopener">GreetingCardUniverse</a></footer>
-  </div>`;
+<div class="pageC">
+ <div id="logoTDC" style="height:113px;">
+  <a href="${G}/" id="aLogo"><img src="${gimg("/images/gcu/gcu_logo_dec_2010.gif")}" alt="Greeting Card Universe" title="Greeting Card Universe" id="gcu_logo" style="position:absolute;"></a>
+ </div>
+ <div align="right" valign="top" id="topRightNavTDC">
+  <div align="right" valign="bottom" id="contactNameTDC">
+   <div id="loginC">
+    <div id="loginboxC" valign="bottom">
+     | <a href="${LIVE_CHAT}" target="_blank" rel="noopener" style="font-size:13px">Live Chat</a>
+     | <a href="${G}/blog/" style="font-size:13px">Blog</a>
+     | <span id="loginbox"><a href="${G}/login.asp" rel="nofollow" id="aLogin">Login</a> or <a href="${G}/login.asp?mode=register" rel="nofollow" id="aJoin">Join</a></span>
+    </div>
+    <div id="phoneC" valign="bottom"> Questions? <span id="custserv_phone">Toll-Free</span> <span id="phonenumber">877-347-6784</span></div>
+   </div>
+  </div>
+  <div id="cartC">
+   <div align="right" id="headerNavTDC">
+    <div id="menu_div"><table cellpadding="0" cellspacing="0" border="0"><tbody><tr>
+     <td class="topmenu"><br><a href="${G}/help/fedex_faq.asp" class="header_links">FedEx Office pickup <img src="${gimg("/images/gcu/partner/fedex/fxo_small.png")}" style="height:20px;" border="0" alt="FedEx" title="FedEx"></a></td>
+     <td class="topmenu"><br><a href="${helpUrl()}" class="header_links">Shopper FAQ</a></td>
+     <td class="topmenu"><br><a href="${G}/about/gcu_how_it_works.asp" class="header_links">How it works</a></td>
+     <td><table cellpadding="4" cellspacing="0" border="0" style="margin-top:3px;"><tbody><tr>
+      <td><a rel="nofollow" href="${G}/shopping/confirm.asp"><img src="${gimg("/images/gcu/shopping_cart_dec_2010.gif")}" width="40" height="32" border="0" alt="View Shopping Cart"></a></td>
+      <td><div style="padding-top: 0px;"><a rel="nofollow" href="${G}/shopping/confirm.asp" class="header_cart">View Cart</a></div></td>
+      <td><div id="currencyC"><div id="currency" style="margin-left:8px; position:relative; top:2px;">$ USD</div></div></td>
+     </tr></tbody></table></td>
+    </tr></tbody></table></div>
+   </div>
+  </div>
+ </div>
+ <form method="get" id="searchform" name="frmSearch" action="${G}/search/go" autocomplete="off">
+  <input type="hidden" name="view" value="grid">
+  <div id="searchTableTDC"><div id="searchContainer">
+   <input type="text" id="sli_search_1" name="w" size="29" class="sli_search_box" value="" autocomplete="off" placeholder="Try Our New and Improved Search!">
+   <input type="image" id="button" name="button" src="${gimg("/images/gcu/search_cards_dec_2010.gif")}" class="searchBTN" alt="Search Cards">
+  </div></div>
+ </form>
+ <div class="content" style="width:1000px;">
+  <div class="header_bar"><div id="menu">
+   ${MENU.map(([id, t, href]) => `<div id="menu_${id}"><a href="${G}${href}">${t}</a></div>`).join("")}
+  </div></div>
+  <div id="header_promo"><table width="1000" cellpadding="0" cellspacing="0" style="margin-bottom:10px; margin-top:5px;"><tbody><tr><td align="center">
+   <a href="${G}/help/fedex_faq.asp" target="_blank" rel="noopener"><img src="${gimg("/images/gcu/promo/2018/2024_desktop_secondary_header.png")}" border="0" alt="FedEx Office pickup"></a>
+  </td></tr></tbody></table></div>
+  <div align="left"><div>
+   <div id="d_card_title" align="left"><h1 class="h1bd">${title}</h1>
+    <div><div>${cats.map((c) => `<a href="${esc(c.url)}">${esc(c.name)}</a>`).join(" &gt; ")}</div></div>
+   </div>
+   <div id="thisthing">
+    <div valign="top">
+     <div id="d_card_nav">
+      <div style="float: left; width: 200px">
+       <div class="bold"><a href="${esc(catUrl)}"><img src="${gimg("/images/category_button_210px.png")}" style="cursor: pointer; margin-top: 4px;" alt="See all cards in this category" title="See all cards in this category" class="over3"></a></div>
+       <div id="cardsidebar"><div id="nav_html_content_ajax">
+        ${(info.related || []).length ? `<div id="cards">${info.related.map((c) => `
+         <div class="cardstyle ${c.landscape ? "landscapeC" : "portraitC"}" style="overflow:visible">
+          <div class="cardC" style="width:100%; vertical-align: middle;" align="center">
+           <a href="/gcu/${esc(c.pid)}" style="cursor:pointer"><img border="0" src="${esc(c.img)}" alt="${esc(c.title)}" title="${esc(c.title)} - Product #${esc(c.pid)}" class="${c.landscape ? "landscapecard" : "portraitcard"}"${c.landscape ? ' style="margin-top:45px;"' : ""}></a>
+          </div>
+          <div class="prodname ${c.landscape ? "pnLandscape" : "pnPortrait"}" style="color: #7D7D7D; font-size: 10pt">${esc(c.name)}</div>
+         </div>`).join("")}</div>` : ""}
+       </div></div>
+      </div>
+     </div>
+    </div>
+    <div id="rightsidebar" style="float: right">
+     <div id="testimonialsC">
+      <div style="width: 295px;"><img src="${gimg("/images/gcu/happy_shoppers_dec_2010.gif")}" alt="Shopper Testimonials"></div>
+      ${(info.sideQuotes || []).map((q) => quote(q, false)).join("")}
+      <div class="testimonial_more"><a href="${G}/help/testimonials_card_buyers.asp?hdr=1">more testimonials</a></div>
+     </div>
+     <div id="bbblinks">
+      <div style="margin-top: 12px;"><a href="${RR}" target="_blank" rel="noopener"><img border="0" src="${gimg("/images/common/reseller-ratings.png")}" alt="ResellerRatings"></a></div>
+      <div style="margin-top: 12px;"><a target="_blank" rel="noopener" href="${BBB}"><img title="Click to verify BBB accreditation and to see a BBB report." border="0" src="${gimg("/images/bbbaplus.png")}" alt="Click to verify BBB accreditation and to see a BBB report."></a></div>
+     </div>
+     <div id="cdrhs">
+      <div class="c1" id="satisBlazon"><img src="${gimg("/images/gcu/satisfaction_details_dec_2010.gif")}" alt="Satisfaction Guarantee on Greeting Cards"></div>
+      <div class="c2" id="faqheader"><a href="${helpUrl()}" target="_blank" rel="noopener"><img src="${gimg("/images/gcu/faq_details_dec_2010.gif")}" alt="Greeting Card FAQs"></a></div>
+      <div class="c6"><ol>${FAQ.map(([q, a], i) => `<li id="faq${i + 1}"><a href="${helpUrl(a)}" target="_blank" rel="noopener nofollow">${q}</a></li>`).join("")}</ol></div>
+      <div class="c2" id="faqfooter" style="text-align:center;"><a href="${helpUrl()}" target="_blank" rel="noopener" style="font-size:13px">more FAQ</a></div>
+     </div>
+    </div>
+    <div id="carddetailsC" valign="top">
+     <div id="d_card_details">
+      <div id="parentCardDispC">
+       <div style="color: #7D7D7D; text-align: center">
+        <div id="imgdisplayC"><img id="image1" src="${esc(views.front)}" style="border:none;" border="0" alt="${title} (${esc(PID)})"></div>
+        <div id="zoomControls">
+         <img src="${gimg("/images/icons/selected_icons/0204_16px_zoomin2.png")}" style="position: relative; top: 3px;" border="0" alt="">
+         <a href="#" rel="nofollow" data-view="front">Front</a>${views.inside ? ` | <a href="#" rel="nofollow" data-view="inside">Inside</a>` : ""}${views.back ? ` | <a href="#" rel="nofollow" data-view="back">Back</a>` : ""}
+        </div>
+        <div id="card_title">${title}</div>
+       </div>
+       <div id="add_to_cart_buttons" align="center">
+        <a href="${addToCartUrl(PID)}" rel="nofollow"><img src="${gimg("/images/gcu/add_to_cart_dec_2010.gif")}" alt="Add to Cart" width="168" height="39" border="0"></a>
+        &nbsp;
+        <a href="${personalizeUrl(PID)}"><img src="${gimg("/images/gcu/personalize_card_dec_2010.gif")}" alt="Personalize Inside" width="168" height="39" border="0"></a>
+        <div class="gcu-send-row">${sendButton("is-desktop")}</div>
+       </div>
+       <div>
+        <div id="details" style="width:521px; margin-left: 24px; position: relative">
+         <div id="tabs">
+          <div id="tDetails" data-tab="Details" class="tab activeTab">Details</div>
+          <div id="tSize" data-tab="Size" data-num="3" class="tab inactiveTab">Size/Quality</div>
+          <div id="tPricing" data-tab="Pricing" data-num="4" class="tab inactiveTab">Pricing</div>
+          <div id="tShipping" data-tab="Shipping" data-num="2" class="tab inactiveTab">Shipping</div>
+         </div>
+         <div id="tabContent">
+          <div id="tDetailsC" data-tabc="Details" class="tabC activeTabC">
+           ${info.price ? `<div class="detail"><div class="detailsL">Price:</div><div><span>$${esc(info.price)}</span> (includes envelope)${tiers ? `, <span class="popover"><span class="linkish">as low as</span>${tiers}</span>${info.lowest ? ` $${esc(info.lowest)}` : ""}` : ""}</div></div>` : ""}
+           ${insideLines ? `<div class="detail"><div style="margin-bottom: 10px"><div class="detailsL">Inside Text:</div><div style="display: table-cell">${insideLines}</div></div></div>` : ""}
+           ${detail("Customize", esc(info.customize))}
+           ${info.artist ? `<div class="detail"><div class="detailsL">Artist:</div><div style="float:left;width:300px">${info.artistUrl ? `<a style="font-size:14px" href="${esc(info.artistUrl)}" target="_blank" rel="noopener">${esc(info.artist)}</a>` : esc(info.artist)}</div><div style="clear:both"></div></div>` : ""}
+           ${detail("Product ID", `${esc(PID)} <a href="${G}/shopping/custom_card.asp?pid=${esc(PID)}&amp;w=1&amp;ref=vd_custom_card" target="_blank" rel="noopener nofollow">Request a Design Change</a>`)}
+           ${detail("Availability", esc(info.availability))}
+           ${detail("Share", `<span class="gcu-share"><a href="https://twitter.com/share?url=${encodeURIComponent(shareUrl)}" target="_blank" rel="noopener">Tweet</a><a href="https://pinterest.com/pin/create/button/?url=${encodeURIComponent(shareUrl)}&amp;media=${encodeURIComponent(views.front)}&amp;description=${encodeURIComponent(info.title || "")}" target="_blank" rel="noopener">Pin it</a></span>`)}
+           ${detail("Size", esc(info.size))}
+           ${info.artistNotes ? `<div class="detail"><div class="detailsL" style="height: 100px;">Artist Notes:</div><div style="float:left;width:375px;">${esc(info.artistNotes)}</div><div style="clear:both"></div></div>` : ""}
+          </div>
+          ${[["Size", 3], ["Pricing", 4], ["Shipping", 2]].map(([t, n]) => `<div id="t${t}C" data-tabc="${t}" data-num="${n}" data-orientation="${orientation}" class="tabC inactiveTabC" style="position: absolute; top: 0px; width: 100%">Loading…</div>`).join("")}
+         </div>
+        </div>
+       </div>
+      </div>
+     </div>
+     <div style="text-align: right; padding-right: 250px; margin-top: 12px;"><a href="${G}/community/" style="font-size: 12px">« Return to Greeting Card Categories</a></div>
+    </div>
+    ${(info.reviews || []).length ? `<div id="product_review_row"><div id="prHeaderRow">Reviews for ${title}</div>${reviewList(info.reviews)}</div>` : ""}
+    <div id="prevRow">
+     <div id="prevHeaderRow"><div class="tocHeader" id="upcomingL">
+      <div class="previous_more"><a href="${G}/shopping/previously_viewed.asp">see all</a></div>
+      <h2 class="header_white"><a style="color: white; font-weight: bold" href="${G}/shopping/previously_viewed.asp" title="See all previously viewed cards in one page">Previously Viewed Cards</a></h2>
+      <span style="clear:both;"></span>
+     </div></div>
+     <div id="prevC"><ul id="prev">${prev.map((c) => `<li class="item horizontal ${c.landscape ? "landscape" : "portrait"}"><div class="cardTile ${c.landscape ? "landscape" : "portrait"}"><div><a href="/gcu/${esc(c.pid)}"><img class="prevLink" src="${esc(c.img)}" alt="${esc(c.title)}" title="${esc(c.title)}"></a></div><div class="prevCardButtons"><button type="button" class="prevButton" data-href="/gcu/${esc(c.pid)}">view card</button><button type="button" class="prevButton addPrevButton" data-href="${addToCartUrl(c.pid)}">add to cart</button></div></div></li>`).join("")}</ul></div>
+     ${(info.productQuotes || []).length ? `<div id="product_testimonials">
+      <div id="ptHeaderRow">Testimonials from Shoppers that Ordered this Card <div class="testimonial_more"><a href="${G}/help/testimonials_card_buyers.asp?hdr=1">more</a></div><span style="clear:both;"></span></div>
+      ${info.productQuotes.map((q) => quote(q, true)).join("")}
+     </div>` : ""}
+     <img src="${gimg("/images/gcu/homepage_images/as_featured_in_desktop.png")}" id="as_featured_in" alt="As Featured In">
+    </div>
+    <div id="2014-Footer" class="footer">
+     <div class="Footer-SiteMap">
+      <div class="Footer-Contact-Info"><h3>How can we help you?</h3><ul>
+       <li class="FooterPhone"><span id="footer_phone"> Toll-Free <span>877-347-6784</span> <span class="FooterCallHours">M-F 9am to 5pm PST</span></span></li>
+       <li class="FooterFAQ"><a href="${helpUrl()}">Shopper FAQ</a></li>
+       <li class="FooterEmail"><a href="${G}/about/contactus.asp" target="_blank" rel="noopener">Contact Us</a></li>
+       <li class="FooterChat"><a href="${LIVE_CHAT}" target="_blank" rel="noopener">Live Chat</a></li>
+       <li class="FooterSavings"><a href="${G}/">Sign up for Email Savings</a></li>
+      </ul></div>
+      <div class="Footer-Directory-Links">
+       <ul><h4>CARD SHOPPERS</h4>
+        <li><a href="${G}/shopping/custom_card.asp">Custom Card Request</a></li>
+        <li><a href="${helpUrl("#delivery")}">Delivery Time</a></li>
+        <li><a href="${G}/ecard/">Free Ecards</a></li>
+        <li><a href="${G}/about/gcu_how_it_works.asp">How GCU Works</a></li>
+        <li><a href="${helpUrl("#returns")}">Return Policy</a></li>
+        <li><a href="${helpUrl()}">Shopper FAQ</a></li>
+        <li><a href="${G}/holidays/">Upcoming Holidays</a></li>
+       </ul>
+       <ul><h4>ARTISTS &amp; SELLERS</h4>
+        <li><a href="https://gcucommunity.com/" target="_blank" rel="noopener">Artist Blog</a></li>
+        <li><a href="${G}/about/answers.asp">Artist FAQ</a></li>
+        <li><a href="${G}/forum/yabb2/YaBB.pl">Artist Forum</a></li>
+        <li><a href="${G}/community/art_welcome.asp">Become a Card Artist</a></li>
+        <li><a href="${G}/about/avantlink_affiliate.asp">Become a Card Seller</a></li>
+        <li><a href="${G}/about/avantlink_affiliate.asp">Become an Affiliate</a></li>
+       </ul>
+       <ul><h4>OUR COMPANY</h4>
+        <li><a href="${G}/aboutus/">About Us</a></li>
+        <li><a href="${G}/blog/">Blog</a></li>
+        <li><a href="${G}/about/contactus.asp" target="_blank" rel="noopener">Contact Us</a></li>
+        <li><a href="${G}/help/testimonials_card_buyers.asp?hdr=1">Testimonials</a></li>
+       </ul>
+       <ul class="Footer-FollowGCU"><h4>FOLLOW GCU</h4><li>
+        <a href="https://www.facebook.com/greetingcarduniverse" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Icon-Facebook.png")}" title="GCU on Facebook" alt="Facebook"></a>
+        <a href="https://twitter.com/gcuniverse" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Icon-Twitter.png")}" title="GCU on Twitter" alt="Twitter"></a>
+        <a href="https://www.pinterest.com/gcuniverse/" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Icon-Pinterest.png")}" title="GCU on Pinterest" alt="Pinterest"></a>
+        <a href="https://www.instagram.com/greetingcarduniverse/" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Icon-Instagram.png")}" title="GCU on Instagram" alt="Instagram"></a>
+       </li></ul>
+      </div>
+      <div style="clear:both"></div>
+     </div>
+     <div class="Footer-Logos-Links">
+      <ul>
+       <li><a href="${RR}" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Logo-ResellerRating.gif")}" alt="ResellerRatings"></a></li>
+       <li><a href="${BBB}" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Logo-BBB.gif")}" alt="BBB"></a></li>
+       <li><a href="https://seal.godaddy.com/verifySeal?sealID=XIJhkVBp5CCqRGEJk9RmDw3L35bTpWzDnKMICIVX1BS1PSz97vZkP" target="_blank" rel="noopener"><img src="${gimg("/images/common/footer/Footer-Logo-GoDaddy.gif")}" alt="GoDaddy"></a></li>
+       <li><img src="${gimg("/images/common/footer/Footer-Logo-CreditCards.gif")}" alt="Credit cards accepted"></li>
+      </ul>
+      <p class="fontsize10">© Copyright 2000-${new Date().getFullYear()} Greeting Card Universe - <a href="${G}/solutions/">Powered By Bigdates-Solutions.com</a></p>
+      <p class="fontsize13"><a href="${G}/about/privacypolicy.asp">Privacy Policy</a> | <a href="${G}/community/disclaimer.asp">Content Disclaimer</a> | <a href="${G}/community/ada_accessibility.asp">ADA Accessibility</a></p>
+     </div>
+    </div>
+   </div>
+  </div></div>
+ </div>
+</div>`;
+}
+
+function mobileView(info) {
+  const title = esc(String(info.title || `GCU Card# ${PID}`).replace(/\s+card$/i, ""));
+  const cats = info.categories || [];
+  const catUrl = cats.length ? cats[cats.length - 1].url.replace(G, M) : `${M}/`;
+  const views = cardViews(info);
+  const size = String(info.size || "").match(/(\d+(?:\.\d+)?)"\s*x\s*(\d+(?:\.\d+)?)"/);
+  const row = (label, value) => (value ? `<tr><td${label === "Price" ? ' width="70"' : ""}><b>${label}:</b></td><td>${value}</td></tr>` : "");
+  return `
+<div id="mobile_header">
+ <table width="100%" cellpadding="0" cellspacing="0" border="0"><tbody><tr>
+  <td style="text-align:center;" width="50"><div id="header_menu"><div id="header_menuC"><div><a href="${M}/"><img id="header_menu" src="${gimg("/images/gcu/mobile_site/header_menu_icon.png")}" border="0" alt="Menu"></a></div></div></div></td>
+  <td style="text-align:center;"><a href="${M}/default.asp"><img id="header_banner_logo" src="${gimg("/images/gcu/mobile_site/header_banner_logo.png")}" border="0" alt="Greeting Card Universe"></a></td>
+  <td style="text-align:left;" width="60"><div id="cart_items"><div><a href="${M}/confirm.asp"><img id="header_cart_icon" border="0" src="${gimg("/images/gcu/shopping_cart_empty.png")}" alt="Cart"></a></div></div></td>
+ </tr></tbody></table>
+</div>
+<form id="search_form" name="search_form" action="${M}/search/go" method="get">
+ <table width="98%" cellpadding="0" cellspacing="0"><tbody><tr>
+  <td><input type="hidden" name="view" value="list"><input type="hidden" name="ts" value="m"><input id="search_input" placeholder="What are you looking for?" name="w" type="text" value="" autocomplete="off"></td>
+  <td width="105"><input type="submit" id="search_button" value="Search"></td>
+ </tr></tbody></table>
+</form>
+<div id="header_login"><a href="${M}/login.asp">Login/Join</a></div>
+<div id="header_promo_bar"><span style="width:314px; font-size:95%;"><img src="${gimg("/images/gcu/promo/2018/2024-mobile-header-with-fedex.png?1")}" alt="FedEx Office pickup"></span></div>
+<div id="gcu_mobile_content">
+ <div class="cd_header_div">
+  <h1 class="h1bd">${title}</h1>
+  <div class="cd_card_cat"><a href="${esc(catUrl)}">See all cards in this category</a></div>
+ </div>
+ <div class="card_details_div">
+  <div class="cd_img_div">
+   <div id="front_mid_back_links" class="gcu-m-views">
+    <b data-mview="front">Front</b>${views.inside ? ` | <a href="#" data-mview="inside">Inside</a>` : ""}${views.back ? ` | <a href="#" data-mview="back">Back</a>` : ""} | <a href="${M}/large_view.asp?pid=${esc(PID)}">Large</a>
+   </div>
+   <div id="card_front_img" data-mpane="front"><img src="${esc(views.front)}" width="100%" style="border:0px" alt="${title}"></div>
+   ${views.inside ? `<div id="card_inside_img" data-mpane="inside" style="display:none;"><img src="${esc(views.inside)}" class="inside_img_right" style="border:1px solid #CCCCCC;" width="${isLandscape(info) ? 277 : 195}" height="${isLandscape(info) ? 195 : 277}" alt="Inside"></div>` : ""}
+   ${views.back ? `<div id="card_back_img" data-mpane="back" style="display:none;"><img src="${esc(views.back)}" style="border:1px solid #CCCCCC;" width="${isLandscape(info) ? 277 : 195}" height="${isLandscape(info) ? 195 : 277}" alt="Back"></div>` : ""}
+   <div class="cd_buttons_div">
+    <a href="${addToCartUrl(PID)}" rel="nofollow"><img src="${gimg("/images/gcu/add_to_cart_dec_2010.gif")}" class="cd_add_img" border="0" alt="Add to Cart"></a>
+    <a href="${personalizeUrl(PID, "cdm")}"><img src="${gimg("/images/gcu/personalize_card_dec_2010.gif")}" border="0" alt="Personalize Inside"></a>
+    <div class="gcu-send-row">${sendButton("is-mobile")}</div>
+   </div>
+  </div>
+  <div class="cd_details_div">
+   <table class="cd_table"><tbody>
+    ${row("Price", info.price ? `${esc(info.price)} each` : "")}
+    ${row("Title", title)}
+    ${row("Inside", (info.lines || []).filter(Boolean).map(esc).join(" "))}
+    ${row("Product ID", esc(PID))}
+    ${row("Availability", esc(info.availability))}
+    ${row("Artist Notes", esc(info.artistNotes))}
+    ${row("Card Size", size ? `${size[1]}x${size[2]} Inches` : "")}
+    ${row("Card Artist", info.artist ? (info.artistUrl ? `<a href="${esc(info.artistUrl)}">${esc(info.artist)}</a>` : esc(info.artist)) : "")}
+   </tbody></table>
+   ${(info.reviews || []).length ? `<div class="cd_reviews_div"><div class="cd_reviews_header_div">Reviews:</div><div id="product_review_row"><div id="prHeaderRow"></div>${reviewList(info.reviews)}</div></div>` : ""}
+  </div>
+  <img id="as_featured_in" alt="As Featured In" src="${gimg("/images/gcu/homepage_images/as_featured_in_mobile.png")}" style="max-width:100%;margin:auto;display:block;">
+ </div>
+</div>
+<center>
+ <div id="page_footer">
+  <div id="phoneC" valign="bottom">Questions? <span id="custserv_phone">Toll-Free</span> <a href="tel:18773476784" id="phonenumber">877-347-6784</a><div id="us_hours">M-F 9am to 5pm PST</div></div>
+  <div id="footer_links">
+   <a href="${G}/">Full Site</a> &nbsp; | &nbsp; Support: <a href="tel:18773476784">Phone</a> &nbsp; <a href="mailto:support@greetingcarduniverse.com">Email</a> &nbsp; | &nbsp; <a href="${M}/about.asp">About</a>
+   <br><a href="${M}/card_shopper_help.asp">FAQ</a> &nbsp; | &nbsp; <a href="${M}/testimonials_card_buyers.asp">Testimonials</a>
+  </div>
+  <div id="sm_icons">
+   <a href="https://www.facebook.com/greetingcarduniverse"><img src="${gimg("/images/gcu/gcu_fb_icon_email.jpg")}" alt="Facebook"></a>&nbsp;&nbsp;
+   <a href="https://www.pinterest.com/gcuniverse/"><img src="${gimg("/images/gcu/gcu_pinterest_icon_email.jpg")}" alt="Pinterest"></a>&nbsp;&nbsp;
+   <a href="https://www.instagram.com/greetingcarduniverse/"><img src="${gimg("/images/gcu/gcu_ig_icon_email.jpg")}" alt="Instagram"></a>&nbsp;&nbsp;
+   <a href="https://twitter.com/gcuniverse"><img src="${gimg("/images/gcu/gcu_twitter_icon_email.jpg")}" alt="Twitter"></a>
+  </div>
+  <a href="${BBB}"><img src="${gimg("/images/bbbaplus.png")}" alt="BBB"></a>
+  <a href="${RR}"><img src="${gimg("/images/common/reseller-ratings.png")}" alt="ResellerRatings"></a>
+  <br><br>
+  <img src="${gimg("/images/common/footer/Footer-Logo-CreditCards.gif")}" alt="Credit cards accepted">
+ </div>
+</center>`;
 }
 
 let productInfo = null;
+const tabCache = {};
 function renderProduct() {
   stopAnimation();
   const info = productInfo;
   document.body.classList.add("product-mode");
+  document.documentElement.classList.add("product-mode");
   document.body.classList.remove("is-landscape");
   after.innerHTML = "";
-  if (info.title) document.title = `${info.title} · GCU ${PID}`;
-  const orientation = orientationOf(info);
-  const crumbs = (info.categories || []).map((c) => `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a>`).join(" &gt; ");
-  const insideSrc = info.inside ? API_ORIGIN + info.inside : info.hasPreview ? `${API}/preview` : "";
-  const views = [["front", "Front", info.image3d || info.front], ...(info.image3d ? [["cover", "Cover", info.front]] : []), ...(insideSrc ? [["inside", "Inside", insideSrc]] : [])];
-  const row = (label, value) => (value ? `<div><dt>${label}:</dt><dd>${value}</dd></div>` : "");
-  const buyUrl = info.productUrl || `https://www.greetingcarduniverse.com/${PID}`;
-  stage.innerHTML = shopShell(`
-    <h1 class="shop-title">${esc(info.title || `GCU Card# ${PID}`)}</h1>
-    ${crumbs ? `<nav class="shop-crumbs" aria-label="Category">${crumbs}</nav>` : ""}
-    <div class="shop-grid">
-      <div class="shop-media">
-        <div class="shop-image${info.image3d ? "" : " is-flat"}"><img id="shopImg" src="${esc(views[0][2])}" alt="${esc(info.title)} (${esc(PID)})"></div>
-        ${views.length > 1 ? `<div class="shop-views" role="group" aria-label="Card view">🔍 ${views.map(([k, t], i) => `<button type="button" data-view="${k}" data-src="${esc(views[i][2])}" class="${i ? "" : "is-selected"}">${t}</button>`).join(" | ")}</div>` : ""}
-        <p class="shop-caption">${esc(info.title)}</p>
-      </div>
-      <div class="shop-buy">
-        ${info.price ? `<div class="shop-price"><span class="amt">${esc(money(info.price))}</span> printed card (includes envelope)</div>` : ""}
-        <button class="shop-send" type="button" data-send>${ENVELOPE_ICON}Send Card Digitally Now</button>
-        <p class="shop-send-sub">Watch it open in an animated envelope, then send it by text or email.</p>
-        <a class="shop-print" href="${esc(buyUrl)}" target="_blank" rel="noopener">Buy printed card on GreetingCardUniverse${info.price ? ` · ${esc(money(info.price))}` : ""}<span>Printed, personalized &amp; mailed by GreetingCardUniverse</span></a>
-        <div class="shop-tabs"><span>Details</span></div>
-        <dl class="shop-details">
-          ${row("Price", info.price ? `${esc(money(info.price))} (printed card, includes envelope)` : "")}
-          ${row("Inside Text", (info.lines || []).filter((l, i, a) => l || (i && a[i - 1])).map(esc).join("<br>"))}
-          ${row("Customize", esc(info.customize))}
-          ${row("Artist", info.artist ? (info.artistUrl ? `<a href="${esc(info.artistUrl)}" target="_blank" rel="noopener">${esc(info.artist)}</a>` : esc(info.artist)) : "")}
-          ${row("Product ID", esc(PID))}
-          ${row("Size", esc(info.size))}
-          ${row("Orientation", esc(orientation))}
-          ${row("Artist Notes", esc(info.artistNotes))}
-        </dl>
-      </div>
-    </div>`);
-  stage.onclick = (e) => {
+  if (info.title) document.title = `${info.title} (${PID})`;
+  const prev = previouslyViewed(info);
+  stage.innerHTML = `<div class="gcu-d">${desktopView(info, prev)}</div><div class="gcu-m">${mobileView(info)}</div>`;
+  const views = cardViews(info);
+  stage.onclick = async (e) => {
+    if (e.target.closest("[data-send]")) return startSendFlow();
+    const go = e.target.closest("button[data-href]");
+    if (go) return void (location.href = go.dataset.href);
     const view = e.target.closest("[data-view]");
     if (view) {
-      stage.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("is-selected", b === view));
-      const img = stage.querySelector("#shopImg");
-      img.src = view.dataset.src;
-      img.parentElement.classList.toggle("is-flat", view.dataset.view !== "front" || !info.image3d);
+      e.preventDefault();
+      const img = stage.querySelector("#image1");
+      img.src = views[view.dataset.view];
+      img.classList.toggle("gcu-flat", view.dataset.view !== "front" || !info.image3d);
       return;
     }
-    if (e.target.closest("[data-send]")) startSendFlow();
+    const mview = e.target.closest("[data-mview]");
+    if (mview) {
+      e.preventDefault();
+      const want = mview.dataset.mview;
+      const box = stage.querySelector(".gcu-m-views");
+      box.querySelectorAll("[data-mview]").forEach((el) => {
+        const k = el.dataset.mview, label = el.textContent;
+        el.outerHTML = k === want ? `<b data-mview="${k}">${label}</b>` : `<a href="#" data-mview="${k}">${label}</a>`;
+      });
+      stage.querySelectorAll("[data-mpane]").forEach((p) => { p.style.display = p.dataset.mpane === want ? "" : "none"; });
+      return;
+    }
+    const tab = e.target.closest("[data-tab]");
+    if (tab && tab.classList.contains("inactiveTab")) {
+      stage.querySelectorAll("[data-tab]").forEach((t) => {
+        t.classList.toggle("activeTab", t === tab);
+        t.classList.toggle("inactiveTab", t !== tab);
+      });
+      let pane = null;
+      stage.querySelectorAll("[data-tabc]").forEach((c) => {
+        const on = c.dataset.tabc === tab.dataset.tab;
+        c.classList.toggle("activeTabC", on);
+        c.classList.toggle("inactiveTabC", !on);
+        c.style.position = on ? "static" : "absolute";
+        if (on) pane = c;
+      });
+      if (pane && pane.dataset.num && !pane.dataset.loaded) {
+        pane.dataset.loaded = "1";
+        const key = `${pane.dataset.num}:${isLandscape(info) ? "l" : "p"}`;
+        try {
+          tabCache[key] ||= fetch(`${API}/tab/${pane.dataset.num}?o=${isLandscape(info) ? "l" : "p"}`).then((r) => (r.ok ? r.text() : Promise.reject(new Error("tab"))));
+          pane.innerHTML = await tabCache[key];
+        } catch {
+          delete tabCache[key];
+          pane.dataset.loaded = "";
+          pane.innerHTML = `<p>Couldn’t load this tab. <a href="${esc(info.productUrl || `${G}/${PID}`)}">See it on GreetingCardUniverse</a>.</p>`;
+        }
+      }
+    }
   };
 }
 
 function productLoading(message, error = false) {
-  document.body.classList.add("product-mode");
-  stage.innerHTML = shopShell(`
-    <div class="shop-loading" aria-live="polite">
-      ${error ? "" : `<div class="shop-spinner" aria-hidden="true"></div>`}
-      <p class="${error ? "gcu-error" : ""}">${esc(message)}</p>
-      ${error ? `<a href="https://www.greetingcarduniverse.com/${esc(PID)}" target="_blank" rel="noopener">View GCU Card# ${esc(PID)} on GreetingCardUniverse</a>` : ""}
-    </div>`);
+  document.documentElement.classList.remove("product-mode");
+  showLoader(`GCU Card# ${PID}`, KNOWN_TITLE);
+  setStatus(message, error);
+  if (error) stage.querySelector(".gcu-loading")?.insertAdjacentHTML("beforeend", `<p><a href="https://www.greetingcarduniverse.com/${esc(PID)}">View GCU Card# ${esc(PID)} on GreetingCardUniverse</a></p>`);
 }
 
 // ---------- Sender: build + play, then the send form ----------
