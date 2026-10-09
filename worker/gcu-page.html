@@ -126,7 +126,7 @@ button { font: inherit; }
 .card-cover-frame img, .open-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .card-reveal { gap: 0; color: var(--gcu-dark-grey); font-weight: 900; }
-.front-reveal, .card-open-scene.is-static-inside { min-height: auto; padding: 28px; place-items: center; align-content: center; }
+.front-reveal, .card-open-scene.is-static-inside { min-height: auto; padding: 24px 16px; place-items: center; align-content: center; }
 .card-cover-frame {
   position: relative; overflow: hidden; width: min(450px, 100%); margin-inline: auto;
   aspect-ratio: var(--card-cover-width) / var(--card-cover-height);
@@ -226,9 +226,9 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
   84% { opacity: 1; transform: translateX(-50%) translateY(var(--rise-near)); }
   100% { opacity: 1; transform: translateX(-50%) translateY(var(--rise-end)); }
 }
-/* Envelope is min(520px, 88vw) wide; the card is --card-w of that. */
-.card-cover-frame, .open-card { width: min(333px, 56.3vw); }
-.is-landscape .card-cover-frame, .is-landscape .open-card { width: min(468px, 79vw); }
+.card-cover-frame, .open-card {
+  width: min(100%, calc((100svh - var(--card-reserve, 150px)) * var(--card-cover-width) / var(--card-cover-height)));
+}
 .envelope-ghost { position: absolute; margin: 0; z-index: 1; pointer-events: none; }
 
 @media (max-width: 640px) {
