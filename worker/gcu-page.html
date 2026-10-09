@@ -652,7 +652,9 @@ body.product-mode .gcu-share a + a { margin-left: 20px; }
 .send-secondary { border: 1px solid var(--gcu-dark-teal); border-radius: 999px; padding: 9px 14px; background: #fff; color: var(--gcu-dark-teal); font-weight: 800; cursor: pointer; }
 .send-secondary:disabled { opacity: 0.55; cursor: default; }
 .send-cost { margin: 8px 0 0; color: var(--gcu-grey); font-size: 0.86rem; font-weight: 700; text-align: center; }
-.send-account .credits { margin: 4px 0 0; color: var(--gcu-dark-teal); font-weight: 700; }
+.send-sub.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.send-account .check { display: inline-block; width: 1.3em; }
+.send-account .credits { margin: 4px 0 0; padding-left: 1.3em; color: var(--gcu-dark-teal); font-weight: 700; }
 .msg-edit { margin-bottom: 14px; }
 .msg-toggle { width: 100%; }
 .msg-edit textarea { min-height: 120px; text-align: center; }
@@ -1319,7 +1321,7 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, top = "" } =
     if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
   }
   stage.onclick = (e) => {
-    if (e.target.closest("[data-back]")) { timers.splice(0).forEach(clearTimeout); renderProduct(); return; }
+    if (e.target.closest("[data-back]")) { timers.splice(0).forEach(clearTimeout); backToProduct(); return; }
     const el = e.target.closest("[data-go]");
     if (el && !el.disabled) go(el.dataset.go);
   };
@@ -1762,7 +1764,19 @@ function productLoading(message, error = false) {
 
 // ---------- Sender: build + play, then the send form ----------
 let sendCard = null;
+// The send flow is its own history step, so the browser's Back button returns to the card details.
+let inSendStep = false;
+const backToProduct = () => (inSendStep ? history.back() : renderProduct());
+window.addEventListener("popstate", () => {
+  if (!inSendStep) return;
+  inSendStep = false;
+  renderProduct();
+});
 async function startSendFlow() {
+  if (!inSendStep) {
+    history.pushState({ ...(history.state || {}), gcuStep: "send" }, "");
+    inSendStep = true;
+  }
   window.scrollTo(0, 0);
   showLoader(`Creating animation for GCU Card# ${PID}`, productInfo.title);
   try {
@@ -1781,7 +1795,7 @@ async function startSendFlow() {
   } catch (err) {
     setStatus(err.message || "Something went wrong.", true);
     stage.querySelector(".gcu-loading")?.insertAdjacentHTML("afterbegin", `<button class="gcu-back" type="button" data-back>‹ Back to card details</button>`);
-    stage.onclick = (e) => { if (e.target.closest("[data-back]")) renderProduct(); };
+    stage.onclick = (e) => { if (e.target.closest("[data-back]")) backToProduct(); };
   }
 }
 
@@ -1817,7 +1831,7 @@ function showSendForm() {
   after.innerHTML = `
     <section class="send-panel" aria-labelledby="sendTitle">
       <h2 id="sendTitle">Send this card</h2>
-      <p class="send-sub">They’ll get a link that opens this envelope and card.</p>
+      <p class="send-sub one-line">They’ll get a link to open this card.</p>
       <div class="msg-edit">
         <button type="button" class="send-secondary msg-toggle" data-edit-msg ${edit.open ? "hidden" : ""}>✎ Edit the message inside</button>
         <div class="msg-fields" ${edit.open ? "" : "hidden"}>
@@ -1830,11 +1844,11 @@ function showSendForm() {
         <button type="button" role="radio" data-method="email">Email</button>
         <button type="button" role="radio" data-method="text">Text message</button>
       </div>
-      <label><span data-dest-label>Their email</span><input id="sendDest" autocomplete="off"></label>
       <div class="send-row">
         <label><span>To <small>(their name, optional)</small></span><input id="sendTo" maxlength="40" autocomplete="off" placeholder="Jamie"></label>
         <label><span>From <small>(your name)</small></span><input id="sendFrom" maxlength="40" autocomplete="name" placeholder="Alex"></label>
       </div>
+      <label><span data-dest-label>Their email</span><input id="sendDest" autocomplete="off"></label>
       <label class="sms-consent" hidden>
         <input type="checkbox" id="sendConsent">
         <span>OK to text them this card — one message, no marketing. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
@@ -1843,7 +1857,7 @@ function showSendForm() {
       <div class="send-account" id="sendAccount"></div>
       <p class="send-notice" id="sendNotice" role="alert"></p>
       <button class="send-submit" type="button" id="sendSubmit">Send card</button>
-      <p class="send-cost">${SEND_COST} GCU credits</p>
+      <p class="send-cost">${SEND_COST} GCU Credits to Send</p>
     </section>`;
   const $ = (s) => after.querySelector(s);
   const notice = (t, ok = false) => { const n = $("#sendNotice"); n.textContent = t; n.classList.toggle("is-ok", ok); };
@@ -1861,9 +1875,9 @@ function showSendForm() {
   const renderAccount = () => {
     const box = $("#sendAccount");
     if (form.session) {
-      const credits = form.credits == null ? "" : `${form.credits} credit${form.credits === 1 ? "" : "s"}`;
+      const credits = form.credits == null ? "" : `${form.credits} credit${form.credits === 1 ? "" : "s"} in account`;
       const low = form.credits != null && form.credits < SEND_COST;
-      box.innerHTML = `<p class="ok">✓ Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
+      box.innerHTML = `<p class="ok"><span class="check" aria-hidden="true">✓</span>Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
         ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
         ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits on Card Genie</a>, then come back and tap Send.</p>` : ""}`;
       return;
@@ -2022,7 +2036,7 @@ function showSendForm() {
     if (e.target.closest("[data-code-verify]")) return verifyCode();
     if (e.target.closest("#sendSubmit")) return submit();
     if (e.target.closest("[data-again]")) { after.innerHTML = ""; return showSendForm(); }
-    if (e.target.closest("[data-back-product]")) return renderProduct();
+    if (e.target.closest("[data-back-product]")) return backToProduct();
   };
   after.oninput = (e) => {
     if (e.target.id === "sendFrom" || e.target.id === "sendTo") previewNames();
