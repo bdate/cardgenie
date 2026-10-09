@@ -1193,7 +1193,7 @@ async function prepare(info) {
   setTitle(info.title);
   if (info.title) document.title = `${info.title} · GCU ${PID}`;
   if (builtCard) return builtCard;
-  builtCard = await buildCard(info);
+  builtCard = { ...(await buildCard(info)), back: info.back || "" };
   return builtCard;
 }
 
@@ -1243,7 +1243,9 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
       <button class="${step === "front" ? "is-selected" : ""}" data-go="front" type="button">Cover</button>
       <span aria-hidden="true">|</span>
       <button class="${step === "inside" ? "is-selected" : ""}" data-go="inside" type="button">Inside</button>
-      <span aria-hidden="true">|</span>
+      <span aria-hidden="true">|</span>${CARD.back ? `
+      <button class="${step === "back" ? "is-selected" : ""}" data-go="back" type="button">Back</button>
+      <span aria-hidden="true">|</span>` : ""}
       <button data-go="envelope" type="button">Replay</button>
     </nav>`;
   const views = {
@@ -1283,7 +1285,12 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
       <button class="proof-stage card-open-scene is-static-inside" type="button" data-go="front">
         <div class="open-card"><img src="${CARD.inside}" alt="Card inside"></div>
       </button>${toggle("inside")}`,
+    back: () => `
+      <button class="proof-stage card-reveal front-reveal" type="button" data-go="front">
+        <div class="card-cover-frame is-return"><img src="${CARD.back}" alt="Card back"></div>
+      </button>${toggle("back")}`,
   };
+  if (CARD.back) new Image().src = CARD.back;
 
   // Copy of the opening scene frozen at its last frame, so the envelope can fade out while the
   // card glides to its resting spot.
