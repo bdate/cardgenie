@@ -282,7 +282,8 @@ body.is-landscape { --card-w: 90%; --rise-start: 14%; --rise-peek: 10%; --rise-n
 }
 .gift-buy .gift-buy-links { margin: 12px auto 0; font-size: 0.88rem; line-height: 1.9; }
 .gift-buy-links a { color: var(--gcu-dark-teal); font-weight: 700; }
-.gift-buy .gift-buy-fine { margin: 6px auto 0; color: var(--gcu-grey); font-size: 0.8rem; }
+.gift-buy .gift-buy-fine { margin: 6px auto 0; color: var(--gcu-grey); font-size: 0.8rem; white-space: nowrap; }
+.gift-buy .nowrap { white-space: nowrap; }
 .gcu-footer { margin-top: 18px; text-align: center; font-size: 0.78rem; color: var(--gcu-grey); }
 .gcu-footer a { color: var(--gcu-dark-teal); font-weight: 700; }
 .gcu-back { display: inline-block; margin: 0 0 12px; border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font-size: 0.86rem; font-weight: 700; cursor: pointer; }
@@ -2093,10 +2094,10 @@ async function openGift() {
       <section class="gift-buy" aria-labelledby="buyTitle">
         <span class="gift-buy-kicker">Want this card mailed to you?</span>
         <h2 id="buyTitle">${info.price ? `Get it printed for ${esc(money(info.price))}` : "Get it printed"}</h2>
-        <p>Greeting Card Universe prints this card on premium cardstock and mails it to you or anyone you choose.</p>
+        <p>Greeting Card Universe prints this card on premium cardstock and mails it to you or anyone you choose, <span class="nowrap">next business day.</span></p>
         <a class="gift-buy-btn" href="${esc(addToCartUrl(PID))}">Buy this card${info.price ? ` · ${esc(money(info.price))}` : ""}</a>
         <p class="gift-buy-links"><a href="${esc(personalizeUrl(PID))}">Personalize the inside &amp; buy</a><br><a href="${esc(productUrl)}">See card details</a></p>
-        ${gift.inside ? `<p class="gift-buy-fine">You can type your own message inside when you personalize.</p>` : ""}
+        <p class="gift-buy-fine">You can fully personalize the inside message.</p>
       </section>`;
     let offered = false;
     startAnimation({ ...card, from: gift.from, to: gift.to || "You" }, {
