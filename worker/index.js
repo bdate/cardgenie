@@ -75,12 +75,21 @@ const COVER_SAFE_MARGIN_PERCENT = 15
 /** Live Stripe Price IDs for credit packs. */
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
+  { id: '20', credits: 20, price: 10, priceId: 'price_1UOjzx1GfvmAXQBhOiubPGsq' },
+  { id: '52', credits: 52, price: 25, priceId: 'price_1UOjzy1GfvmAXQBhjEnv166G' },
+  { id: '108', credits: 108, price: 50, priceId: 'price_1UOk001GfvmAXQBhQujTCQ5s' },
+  { id: '222', credits: 222, price: 100, priceId: 'price_1UOk001GfvmAXQBhmcR4DTMO' },
+]
+/** No longer sold, but checkouts started before the Oct 2026 price change still need crediting. */
+const retiredCreditPacks = [
   { id: '25', credits: 25, price: 10, priceId: 'price_1UFlL11GfvmAXQBhBGbdzji0' },
   { id: '60', credits: 60, price: 20, priceId: 'price_1UFlKl1GfvmAXQBho0xWW6JO' },
 ]
 
 const creditPackById = new Map(creditPacks.map((pack) => [pack.id, pack]))
 const creditPackByPriceId = new Map(creditPacks.map((pack) => [pack.priceId, pack]))
+const anyCreditPackById = new Map([...creditPacks, ...retiredCreditPacks].map((pack) => [pack.id, pack]))
+const anyCreditPackByPriceId = new Map([...creditPacks, ...retiredCreditPacks].map((pack) => [pack.priceId, pack]))
 
 const stripeApiVersion = '2026-08-26.dahlia'
 
@@ -3029,12 +3038,14 @@ const handleAdjustAccountCredits = async (request, env) => {
   return jsonResponse(request, env, { ok: true, creditBalance: nextBalance })
 }
 
-const resolveCreditPack = ({ packId, priceId } = {}) => {
-  if (priceId && creditPackByPriceId.has(String(priceId))) {
-    return creditPackByPriceId.get(String(priceId))
+const resolveCreditPack = ({ packId, priceId } = {}, { includeRetired = false } = {}) => {
+  const byPriceId = includeRetired ? anyCreditPackByPriceId : creditPackByPriceId
+  const byId = includeRetired ? anyCreditPackById : creditPackById
+  if (priceId && byPriceId.has(String(priceId))) {
+    return byPriceId.get(String(priceId))
   }
-  if (packId && creditPackById.has(String(packId))) {
-    return creditPackById.get(String(packId))
+  if (packId && byId.has(String(packId))) {
+    return byId.get(String(packId))
   }
   return null
 }
@@ -3105,13 +3116,19 @@ const handleCreateCheckoutSession = async (request, env) => {
 const grantCreditsFromCheckoutSession = async (env, checkoutSession) => {
   const metadata = checkoutSession?.metadata || {}
   const pack =
-    resolveCreditPack({
-      packId: metadata.packId,
-      priceId: metadata.priceId || checkoutSession?.metadata?.priceId,
-    }) ||
-    resolveCreditPack({
-      priceId: checkoutSession?.line_items?.data?.[0]?.price?.id,
-    })
+    resolveCreditPack(
+      {
+        packId: metadata.packId,
+        priceId: metadata.priceId || checkoutSession?.metadata?.priceId,
+      },
+      { includeRetired: true },
+    ) ||
+    resolveCreditPack(
+      {
+        priceId: checkoutSession?.line_items?.data?.[0]?.price?.id,
+      },
+      { includeRetired: true },
+    )
 
   const userId = String(metadata.userId || checkoutSession.client_reference_id || '').trim()
   const phoneE164 = String(metadata.phoneE164 || '').trim()
