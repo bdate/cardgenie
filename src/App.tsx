@@ -62,6 +62,15 @@ type ExperienceStep = 'envelope' | 'envelopeFlip' | 'envelopeBack' | 'opening' |
 type EditorTab = 'front' | 'inside'
 type CoverRefinementMode = 'revise' | 'new'
 type DeliveryMethod = 'email' | 'text'
+type ArtistPayoutReport = {
+  quarter: string
+  currentQuarter: string
+  centsPerSend: number
+  totalSends: number
+  totalCents: number
+  artists: { artist: string; artistUrl: string | null; sends: number; cents: number; cards: string[] }[]
+}
+
 type DeliveryLog = {
   id: string
   method: DeliveryMethod
@@ -2815,7 +2824,11 @@ function App() {
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showCreditDetails, setShowCreditDetails] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
-  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | 'shoppers' | null>(null)
+  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | 'shoppers' | 'artists' | null>(null)
+  const [artistPayouts, setArtistPayouts] = useState<ArtistPayoutReport | null>(null)
+  const [artistPayoutQuarter, setArtistPayoutQuarter] = useState('')
+  const [isLoadingArtistPayouts, setIsLoadingArtistPayouts] = useState(false)
+  const [artistPayoutNotice, setArtistPayoutNotice] = useState('')
   const [accountHistory, setAccountHistory] = useState<{
     phoneE164?: string
     account?: {
@@ -6896,6 +6909,63 @@ function App() {
     }
   }
 
+  const loadArtistPayouts = async (token: string, quarter: string) => {
+    setIsLoadingArtistPayouts(true)
+    setArtistPayoutNotice('')
+    try {
+      const params = new URLSearchParams(quarter ? { quarter } : {})
+      const response = await fetch(apiUrl(`/api/admin/gcu-artist-payouts?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load artist payouts.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load artist payouts.')
+      }
+      setArtistPayouts(data as ArtistPayoutReport)
+      setArtistPayoutQuarter(String(data.quarter || quarter))
+    } catch (caughtError) {
+      setArtistPayouts(null)
+      setArtistPayoutNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load artist payouts.')
+    } finally {
+      setIsLoadingArtistPayouts(false)
+    }
+  }
+
+  const openAdminArtistPayouts = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('artists')
+    setShowCreditMenu(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadArtistPayouts(accountSession.token, artistPayoutQuarter)
+  }
+
+  const downloadArtistPayoutsCsv = () => {
+    if (!artistPayouts) {
+      return
+    }
+    const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
+    const rows = [
+      ['Artist', 'Artist page', 'Cards sent', 'Amount owed', 'GCU card numbers'],
+      ...artistPayouts.artists.map((row) => [
+        row.artist,
+        row.artistUrl || '',
+        row.sends,
+        (row.cents / 100).toFixed(2),
+        row.cards.join(' '),
+      ]),
+      ['Total', '', artistPayouts.totalSends, (artistPayouts.totalCents / 100).toFixed(2), ''],
+    ]
+    const blob = new Blob([rows.map((row) => row.map(cell).join(',')).join('\n')], { type: 'text/csv' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `gcu-artist-payouts-${artistPayouts.quarter}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
   const openAdminReviews = async () => {
     if (!accountSession?.token || !isAdmin) {
       return
@@ -10058,6 +10128,9 @@ function App() {
                     <button className="text-action-link" type="button" onClick={() => void openAdminShoppers()}>
                       Shopper Orders
                     </button>
+                    <button className="text-action-link" type="button" onClick={() => void openAdminArtistPayouts()}>
+                      GCU artist payouts
+                    </button>
                   </div>
                   <form
                     className="admin-grant-credits"
@@ -11181,6 +11254,114 @@ function App() {
                 </p>
               </>
             )}
+          </div>
+        </section>
+      )}
+
+      {adminView === 'artists' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="GCU artist payouts">
+          <div className="panel-heading">
+            <div>
+              <h2>GCU artist payouts</h2>
+              <p>
+                What each artist is owed for Greeting Card Universe cards sent
+                {artistPayouts ? ` (${artistPayouts.centsPerSend}¢ per card)` : ''}. Quarters use Pacific time.
+              </p>
+            </div>
+            <div className="admin-page-actions">
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={!artistPayouts || artistPayouts.artists.length === 0}
+                onClick={downloadArtistPayoutsCsv}
+              >
+                Download CSV
+              </button>
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          <div className="mode-toggle choice-radios admin-review-filters" role="radiogroup" aria-label="Quarter">
+            {(() => {
+              const latest = artistPayouts?.currentQuarter || artistPayoutQuarter
+              const match = latest.match(/^(\d{4})-Q([1-4])$/)
+              if (!match) {
+                return null
+              }
+              const quarters: string[] = []
+              let year = Number(match[1])
+              let q = Number(match[2])
+              for (let i = 0; i < 4; i += 1) {
+                quarters.push(`${year}-Q${q}`)
+                q -= 1
+                if (q === 0) {
+                  q = 4
+                  year -= 1
+                }
+              }
+              return quarters.map((quarter) => (
+                <button
+                  key={quarter}
+                  className={artistPayoutQuarter === quarter ? 'is-selected' : ''}
+                  type="button"
+                  role="radio"
+                  aria-checked={artistPayoutQuarter === quarter}
+                  disabled={isLoadingArtistPayouts || !accountSession?.token}
+                  onClick={() => accountSession?.token && void loadArtistPayouts(accountSession.token, quarter)}
+                >
+                  {quarter.replace('-', ' ')}
+                </button>
+              ))
+            })()}
+          </div>
+          <div className="account-block">
+            {artistPayoutNotice && <div className="field-notice">{artistPayoutNotice}</div>}
+            {isLoadingArtistPayouts && !artistPayouts ? (
+              <p>Loading payouts...</p>
+            ) : artistPayouts && artistPayouts.artists.length === 0 ? (
+              <p>No GCU cards sent in {artistPayouts.quarter.replace('-', ' ')}.</p>
+            ) : artistPayouts ? (
+              <div className="admin-daily-table-wrap">
+                <table className="admin-daily-table">
+                  <thead>
+                    <tr>
+                      <th>Artist</th>
+                      <th>Cards sent</th>
+                      <th>Owed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {artistPayouts.artists.map((row) => (
+                      <tr key={`${row.artist}|${row.artistUrl || ''}`}>
+                        <td>
+                          {row.artistUrl ? (
+                            <a href={row.artistUrl} target="_blank" rel="noopener noreferrer">
+                              {row.artist}
+                            </a>
+                          ) : (
+                            row.artist
+                          )}
+                        </td>
+                        <td>{row.sends}</td>
+                        <td>${(row.cents / 100).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td>
+                        <strong>Total</strong>
+                      </td>
+                      <td>
+                        <strong>{artistPayouts.totalSends}</strong>
+                      </td>
+                      <td>
+                        <strong>${(artistPayouts.totalCents / 100).toFixed(2)}</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         </section>
       )}

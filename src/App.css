@@ -3157,6 +3157,11 @@ textarea:focus {
   justify-self: center;
 }
 
+.admin-daily-table a {
+  color: var(--gcu-dark-teal);
+  font-weight: 700;
+}
+
 .account-page .account-signed-in {
   margin-top: 6px;
   color: var(--muted, #6b7d7a);

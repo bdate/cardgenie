@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import Stripe from 'stripe'
 import { migrateAssetsToR2 } from './assets.js'
-import { handleGcuRequest, matchGcuPath } from './gcu.js'
+import { currentQuarter, getArtistPayouts, handleGcuRequest, matchGcuPath } from './gcu.js'
 import {
   accountDbReady,
   applyCreditChange,
@@ -6884,6 +6884,18 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/backfill-recipients') {
     return handleAdminBackfillRecipients(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/gcu-artist-payouts') {
+    if (!(await isAdminRequest(request, env))) {
+      return jsonResponse(request, env, { error: 'Not found.' }, 404)
+    }
+    try {
+      const report = await getArtistPayouts(env, url.searchParams.get('quarter') || currentQuarter())
+      return jsonResponse(request, env, { ok: true, currentQuarter: currentQuarter(), ...report })
+    } catch (error) {
+      return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to load payouts.' }, 400)
+    }
   }
 
   if (request.method === 'GET' && url.pathname === '/api/admin/shoppers') {

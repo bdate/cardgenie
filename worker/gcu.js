@@ -4,7 +4,7 @@
 // and lets a signed-in Card Genie user send it by email or text (recipients open /gcu/<card#>?s=<id>).
 // The worker scrapes the product once and keeps it in D1; the visitor's browser re-typesets the
 // inside message at print size (it needs canvas + web fonts) and uploads it to KV for next time.
-import { ensureAccountUser, getAccountForSession } from './account-db.js'
+import { TEST_LOGIN_PHONE, ensureAccountUser, getAccountForSession } from './account-db.js'
 import { getAsset, putAsset } from './assets.js'
 import pageHtml from './gcu-page.html'
 
@@ -18,6 +18,7 @@ const insideAsset = (pid) => ({ r2Key: `gcu/inside/${pid}.jpg`, kvKey: `gcu:insi
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
 const GCU_HEADERS = { 'User-Agent': 'CardGenie/1.0 (+https://www.card-genie.com)', Accept: '*/*' }
 const SEND_CREDIT_COST = 2
+const ARTIST_PAYOUT_CENTS = 20
 const SENDS_PER_HOUR = 10
 const MAX_MESSAGE_CHARS = 400
 const sendInsideAsset = (id) => ({ r2Key: `gcu/sends/${id}.jpg`, kvKey: `gcu:send-inside:${id}` })
@@ -48,6 +49,10 @@ const SEND_COLUMNS = {
   custom_message: 'TEXT',
   signature: 'TEXT',
   custom_inside: 'INTEGER NOT NULL DEFAULT 0',
+  // The card's artist when it was sent, and what we owe them for it (paid out quarterly).
+  artist: 'TEXT',
+  artist_url: 'TEXT',
+  artist_payout_cents: 'INTEGER NOT NULL DEFAULT 0',
 }
 
 const addMissingColumns = async (db, table, columns) => {
@@ -598,14 +603,16 @@ const handleSend = async (request, env, pid, deps) => {
 
   const id = newSendId()
   const shareUrl = `${appUrl(env)}/gcu/${pid}?s=${id}`
+  const artistPayoutCents = session.phoneE164 === TEST_LOGIN_PHONE ? 0 : ARTIST_PAYOUT_CENTS
   await db
     .prepare(
       `INSERT INTO gcu_sends (id, pid, user_id, method, destination, from_name, to_name, note, status, created_at,
-         custom_message, signature, custom_inside)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+         custom_message, signature, custom_inside, artist, artist_url, artist_payout_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(id, pid, session.userId, method, destination, fromName, toName || null, note || null, now,
-      insideBytes ? customMessage || null : null, insideBytes ? signature || null : null, insideBytes ? 1 : 0)
+      insideBytes ? customMessage || null : null, insideBytes ? signature || null : null, insideBytes ? 1 : 0,
+      row.artist || null, row.artist_url || null, artistPayoutCents)
     .run()
 
   const copy = giftCopy({ fromName, toName, shareUrl, imageUrl: row.image3d_url || row.front_url, title: row.title, escapeHtml: deps.escapeHtml })
@@ -696,6 +703,62 @@ const handleTab = async (env, tab, landscape) => {
     if (env.CARD_STORE) await env.CARD_STORE.put(key, html, { expirationTtl: 86400 })
   }
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600' } })
+}
+
+// Quarters follow Pacific time: 2026-Q4 runs Oct 1 00:00 PT up to Jan 1 00:00 PT.
+const pacificMidnightIso = (year, month) => {
+  for (const offsetHours of [7, 8]) {
+    const at = new Date(Date.UTC(year, month - 1, 1, offsetHours))
+    const hour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hourCycle: 'h23' }).format(at)
+    if (Number(hour) === 0) return at.toISOString()
+  }
+  return new Date(Date.UTC(year, month - 1, 1, 8)).toISOString()
+}
+
+export const currentQuarter = (now = new Date()) => {
+  const [year, month] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit' })
+    .format(now)
+    .split('-')
+    .map(Number)
+  return `${year}-Q${Math.floor((month - 1) / 3) + 1}`
+}
+
+/** What each artist is owed for GCU cards sent in a quarter like "2026-Q4". */
+export const getArtistPayouts = async (env, quarter) => {
+  const match = String(quarter || '').match(/^(\d{4})-Q([1-4])$/)
+  if (!match) throw new Error('Choose a quarter like 2026-Q4.')
+  const year = Number(match[1])
+  const q = Number(match[2])
+  const from = pacificMidnightIso(year, (q - 1) * 3 + 1)
+  const to = q === 4 ? pacificMidnightIso(year + 1, 1) : pacificMidnightIso(year, q * 3 + 1)
+  await ensureTable(env.ACCOUNT_DB)
+  const { results } = await env.ACCOUNT_DB.prepare(
+    `SELECT COALESCE(s.artist, c.artist) AS artist, COALESCE(s.artist_url, c.artist_url) AS artist_url,
+       COUNT(*) AS sends, SUM(s.artist_payout_cents) AS cents,
+       GROUP_CONCAT(DISTINCT s.pid) AS pids
+     FROM gcu_sends s LEFT JOIN gcu_cards c ON c.pid = s.pid
+     WHERE s.status = 'sent' AND s.artist_payout_cents > 0 AND s.created_at >= ? AND s.created_at < ?
+     GROUP BY COALESCE(s.artist, c.artist), COALESCE(s.artist_url, c.artist_url)
+     ORDER BY cents DESC, artist`,
+  )
+    .bind(from, to)
+    .all()
+  const artists = (results || []).map((r) => ({
+    artist: r.artist || 'Unknown artist',
+    artistUrl: r.artist_url || null,
+    sends: Number(r.sends) || 0,
+    cents: Number(r.cents) || 0,
+    cards: String(r.pids || '').split(',').filter(Boolean),
+  }))
+  return {
+    quarter: `${year}-Q${q}`,
+    from,
+    to,
+    centsPerSend: ARTIST_PAYOUT_CENTS,
+    artists,
+    totalSends: artists.reduce((n, a) => n + a.sends, 0),
+    totalCents: artists.reduce((n, a) => n + a.cents, 0),
+  }
 }
 
 export const handleGcuRequest = async (request, env, url, match, corsHeaders, deps) => {
