@@ -3120,13 +3120,17 @@ const handleCreateCheckoutSession = async (request, env) => {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resumeCardId)
       ? `&resume=${encodeURIComponent(resumeCardId)}`
       : ''
+  // Greeting Card Universe card pages buy credits without leaving for Card Genie.
+  const gcuReturnPath = /^\/gcu\/\d{1,12}$/.test(String(body.returnPath || '')) ? String(body.returnPath) : ''
+  const successUrl = gcuReturnPath ? `${appUrl}${gcuReturnPath}?billing=success` : `${appUrl}/?billing=success${resumeQuery}`
+  const cancelUrl = gcuReturnPath ? `${appUrl}${gcuReturnPath}?billing=cancel` : `${appUrl}/?billing=cancel${resumeQuery}`
 
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: pack.priceId, quantity: 1 }],
-      success_url: `${appUrl}/?billing=success${resumeQuery}`,
-      cancel_url: `${appUrl}/?billing=cancel${resumeQuery}`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       client_reference_id: session.userId,
       metadata: {
         userId: session.userId,
@@ -3135,6 +3139,7 @@ const handleCreateCheckoutSession = async (request, env) => {
         packId: pack.id,
         priceId: pack.priceId,
         ...(resumeQuery ? { resumeCardId } : {}),
+        ...(gcuReturnPath ? { source: 'gcu' } : {}),
       },
       integration_identifier: `card-genie-credits-${integrationSuffix}`,
     })

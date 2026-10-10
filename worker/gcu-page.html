@@ -674,6 +674,16 @@ body.product-mode .gcu-share a + a { margin-left: 20px; }
 .send-account .credits { margin: 4px 0 0; padding-left: 1.3em; color: var(--gcu-dark-teal); font-weight: 700; }
 .send-account .credits-note { color: var(--gcu-grey); font-weight: 400; font-size: 0.85em; }
 .send-account .account-links { margin: 8px 0 0; padding-left: 1.3em; color: var(--gcu-grey); }
+.send-account .buy-open { margin-top: 8px; }
+.buy-packs { margin-top: 10px; display: grid; gap: 8px; }
+.send-account .buy-packs-title { margin: 0; font-weight: 700; color: var(--gcu-ink); }
+.buy-packs-title small { font-weight: 400; color: var(--gcu-grey); }
+.buy-pack { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 11px 14px; border: 1px solid #cfe5e2; border-radius: 12px; background: #fff; color: var(--gcu-ink); font: inherit; text-align: left; cursor: pointer; }
+.buy-pack:hover:not(:disabled) { border-color: var(--gcu-dark-teal); }
+.buy-pack:disabled { cursor: default; opacity: 0.75; }
+.buy-pack-price { display: inline-flex; min-width: 3em; justify-content: flex-end; color: var(--gcu-dark-teal); font-weight: 800; }
+.btn-spinner.on-light { border-color: rgba(245, 158, 51, 0.3); border-top-color: var(--gcu-orange); }
+.send-account .buy-packs-fine { margin: 0; color: var(--gcu-grey); font-size: 0.85em; }
 .send-account .account-links button { border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font: inherit; font-weight: 700; cursor: pointer; }
 .msg-edit { margin-bottom: 14px; }
 .msg-toggle { width: 100%; }
@@ -1881,12 +1891,30 @@ const postJson = async (path, body, token) => {
 };
 
 const SEND_COST = 2;
+const CREDIT_PACKS = [
+  { id: "10", credits: 10, price: 5 },
+  { id: "21", credits: 21, price: 10 },
+  { id: "53", credits: 53, price: 25 },
+  { id: "108", credits: 108, price: 50 },
+  { id: "222", credits: 222, price: 100 },
+];
+// What they'd typed on the send form, kept while they're away at Stripe checkout.
+const DRAFT_KEY = `gcuSendDraft:${PID}`;
+const BILLING = (() => {
+  const params = new URLSearchParams(location.search);
+  const value = params.get("billing");
+  if (!value) return "";
+  params.delete("billing");
+  const rest = params.toString();
+  history.replaceState(history.state, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+  return value === "success" ? "success" : "cancel";
+})();
 // GCU sends can only use purchased credits; form.credits is that number, form.total the whole balance.
 const applyCredits = (data) => {
   if (typeof data.paidCreditBalance === "number") form.credits = data.paidCreditBalance;
   if (typeof data.creditBalance === "number") { form.total = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
 };
-const form = { method: "email", session: readSession(), credits: null, total: null, codeSent: false, busy: "" };
+const form = { method: "email", session: readSession(), credits: null, total: null, codeSent: false, busy: "", buyOpen: false };
 const normalizeMessage = (s) => s.replace(/\r/g, "").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).join("\n").trim();
 // The sender's edits to the inside message; kept while they stay on this card.
 const edit = { original: "", message: "", signature: "", open: false, blob: null, url: "", pending: null, seq: 0 };
@@ -1946,8 +1974,16 @@ function showSendForm() {
       box.innerHTML = `<p class="ok"><span class="check" aria-hidden="true">✓</span>Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
         ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
         ${freeOnly ? `<p class="credits credits-note">Free credits can’t be used for Greeting Card Universe cards.</p>` : ""}
-        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits</a>, then come back and tap Send.</p>` : ""}
-        <p class="account-links"><a href="${esc(APP_URL)}/?account=1" target="_blank" rel="noopener">My account</a><span aria-hidden="true"> · </span><button type="button" data-sign-out>Sign out</button></p>`;
+        ${low && !form.buyOpen ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send.</p><button class="send-secondary buy-open" type="button" data-buy-open>Buy credits</button>` : ""}
+        ${form.buyOpen ? `<div class="buy-packs">
+          <p class="buy-packs-title">Choose credits <small>(${SEND_COST} credits per card)</small></p>
+          ${CREDIT_PACKS.map((p) => `<button type="button" class="buy-pack" data-buy-pack="${p.id}" ${form.busy ? "disabled" : ""}>
+            <span><strong>${p.credits} credits</strong> · ${Math.floor(p.credits / SEND_COST)} cards</span>
+            <span class="buy-pack-price">${form.busy === `buy:${p.id}` ? `<span class="btn-spinner on-light" aria-hidden="true"></span>` : `$${p.price}`}</span>
+          </button>`).join("")}
+          <p class="buy-packs-fine">Secure checkout by Stripe. You’ll come right back to this card.</p>
+        </div>` : ""}
+        <p class="account-links"><a href="${esc(APP_URL)}/?account=1" target="_blank" rel="noopener">My account</a><span aria-hidden="true"> · </span>${!low && !form.buyOpen ? `<button type="button" data-buy-open>Buy credits</button><span aria-hidden="true"> · </span>` : ""}<button type="button" data-sign-out>Sign out</button></p>`;
       return;
     }
     box.innerHTML = `
@@ -1970,6 +2006,60 @@ function showSendForm() {
     Object.assign(form, { session: null, credits: null, total: null, codeSent: false, phone: "" });
     notice("");
     renderAccount();
+  };
+  const saveDraft = () => {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+      method: form.method, to: $("#sendTo").value, from: $("#sendFrom").value, dest: $("#sendDest").value,
+      consent: $("#sendConsent").checked, message: edit.message, signature: edit.signature, editOpen: edit.open,
+      paidBefore: form.credits ?? 0,
+    }));
+  };
+  const buyCredits = async (packId) => {
+    if (!form.session || form.busy) return;
+    form.busy = `buy:${packId}`; renderAccount(); notice("");
+    try {
+      saveDraft();
+      const { res, data } = await postJson("/api/billing/checkout-session", { packId, returnPath: `/gcu/${PID}` }, form.session.token);
+      if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; throw new Error("Confirm your mobile number again to buy credits."); }
+      if (!res.ok || !data.url) throw new Error(data.error || "Couldn’t open checkout. Please try again.");
+      location.assign(data.url);
+      return;
+    } catch (err) { notice(err.message); }
+    form.busy = ""; renderAccount();
+  };
+  const restoreDraft = () => {
+    let draft = null;
+    try { draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); } catch {}
+    sessionStorage.removeItem(DRAFT_KEY);
+    if (!draft) return null;
+    setMethod(draft.method === "text" ? "text" : "email");
+    $("#sendTo").value = draft.to || "";
+    $("#sendFrom").value = draft.from || "";
+    $("#sendDest").value = draft.dest || "";
+    $("#sendConsent").checked = Boolean(draft.consent);
+    previewNames();
+    if (typeof draft.message === "string" && (normalizeMessage(draft.message) !== edit.original || String(draft.signature || "").trim())) {
+      $("#msgText").value = draft.message;
+      $("#msgSig").value = draft.signature || "";
+      edit.open = true;
+      $("[data-edit-msg]").hidden = true;
+      $(".msg-fields").hidden = false;
+      redraw();
+    }
+    return draft;
+  };
+  // Stripe adds the credits a moment after checkout, so wait for them to show up.
+  const afterCheckout = async (draft) => {
+    if (BILLING !== "success") { await refreshAccount(); return notice("Checkout canceled. You weren’t charged."); }
+    if (!form.session) return;
+    notice("Payment received. Adding your credits…", true);
+    const before = draft?.paidBefore ?? 0;
+    for (let i = 0; i < 12; i += 1) {
+      await refreshAccount();
+      if ((form.credits ?? 0) > before) return notice("Your credits were added. Tap Send card when you’re ready.", true);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    notice("Payment received. Your credits can take a minute to show up — refresh this page if they don’t.", true);
   };
   const refreshAccount = async () => {
     if (!form.session) return renderAccount();
@@ -2112,6 +2202,9 @@ function showSendForm() {
     if (e.target.closest("[data-code-start]")) return startCode();
     if (e.target.closest("[data-code-verify]")) return verifyCode();
     if (e.target.closest("[data-sign-out]")) return signOut();
+    if (e.target.closest("[data-buy-open]")) { form.buyOpen = true; return renderAccount(); }
+    const pack = e.target.closest("[data-buy-pack]");
+    if (pack) return buyCredits(pack.dataset.buyPack);
     if (e.target.closest("#sendSubmit")) return submit();
     if (e.target.closest("[data-again]")) { after.innerHTML = ""; return showSendForm(); }
     if (e.target.closest("[data-back-product]")) return backToProduct();
@@ -2121,8 +2214,15 @@ function showSendForm() {
     if (e.target.id === "msgText" || e.target.id === "msgSig") scheduleRedraw();
   };
   setMethod(form.method);
-  refreshAccount();
+  const draft = restoreDraft();
+  if (BILLING && !billingHandled) {
+    billingHandled = true;
+    afterCheckout(draft);
+  } else {
+    refreshAccount();
+  }
 }
+let billingHandled = false;
 
 // ---------- Recipient: open the card that was sent ----------
 async function openGift() {
@@ -2171,10 +2271,11 @@ if (GIFT_ID) {
 } else if (KNOWN_INFO) {
   productInfo = KNOWN_INFO;
   renderProduct();
+  if (BILLING) startSendFlow();
 } else {
   productLoading(`Loading GCU Card# ${PID}…`);
   getInfo()
-    .then((info) => { productInfo = info; renderProduct(); })
+    .then((info) => { productInfo = info; renderProduct(); if (BILLING) startSendFlow(); })
     .catch((err) => productLoading(err.message || "Something went wrong.", true));
 }
 </script>
