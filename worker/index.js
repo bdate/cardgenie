@@ -2875,6 +2875,22 @@ const getAccountSession = async (env, token) => {
   return (await env.CARD_STORE.get(`session:${token}`, 'json')) || null
 }
 
+/** Fictional number for walking through sign-up: no text is sent, the code is the TEST_LOGIN_CODE secret, and every sign-in starts a brand-new account. */
+const TEST_LOGIN_PHONE = '+19255551234'
+const testLoginCode = (env) => String(env.TEST_LOGIN_CODE || '').replace(/\D/g, '')
+
+// Frees the test number by renaming the previous test account, so its history stays but the next login is new.
+const retireTestLoginAccount = async (env) => {
+  await env.CARD_STORE.delete(`user:phone:${TEST_LOGIN_PHONE}`)
+  if (!env.ACCOUNT_DB) return
+  const now = new Date().toISOString()
+  await env.ACCOUNT_DB.prepare(
+    `UPDATE users SET phone_e164 = ?, status = 'test_retired', updated_at = ? WHERE phone_e164 = ?`,
+  )
+    .bind(`${TEST_LOGIN_PHONE}#retired-${Date.now()}`, now, TEST_LOGIN_PHONE)
+    .run()
+}
+
 const handleStartAccountOtp = async (request, env) => {
   try {
     const { phone } = (await readJson(request)) || {}
@@ -2887,6 +2903,18 @@ const handleStartAccountOtp = async (request, env) => {
     const existing = (await env.CARD_STORE.get(`otp:${phoneE164}`, 'json')) || null
     if (existing?.sentAt && Date.now() - existing.sentAt < 30 * 1000) {
       return jsonResponse(request, env, { error: 'Please wait a moment before requesting another code.' }, 429)
+    }
+
+    if (phoneE164 === TEST_LOGIN_PHONE) {
+      if (testLoginCode(env).length !== 6) {
+        return jsonResponse(request, env, { error: 'The test number is not set up.' }, 400)
+      }
+      await env.CARD_STORE.put(
+        `otp:${phoneE164}`,
+        JSON.stringify({ codeHash: await hashSecret(testLoginCode(env)), attempts: 0, sentAt: Date.now() }),
+        { expirationTtl: otpTtlSeconds },
+      )
+      return jsonResponse(request, env, { ok: true, phoneE164, message: 'We texted you a 6-digit code.' })
     }
 
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
@@ -2946,6 +2974,10 @@ const handleVerifyAccountOtp = async (request, env) => {
         { expirationTtl: otpTtlSeconds },
       )
       return jsonResponse(request, env, { error: 'That code does not match. Try again.' }, 400)
+    }
+
+    if (phoneE164 === TEST_LOGIN_PHONE) {
+      await retireTestLoginAccount(env)
     }
 
     const userKey = `user:phone:${phoneE164}`
