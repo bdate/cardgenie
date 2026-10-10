@@ -6798,6 +6798,34 @@ function App() {
     }
   }
 
+  const signOutAccount = async () => {
+    const token = accountSession?.token
+    if (token) {
+      await fetch(apiUrl('/api/auth/logout'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
+    window.localStorage.removeItem(accountSessionStorageKey)
+    window.localStorage.removeItem(creditStorageKey)
+    window.location.assign('/')
+  }
+
+  const openAccountFromLink = useRef(new URLSearchParams(window.location.search).get('account') === '1')
+  useEffect(() => {
+    if (!openAccountFromLink.current) {
+      return
+    }
+    if (window.localStorage.getItem(accountSessionStorageKey) && !accountSession) {
+      return
+    }
+    openAccountFromLink.current = false
+    const url = new URL(window.location.href)
+    url.searchParams.delete('account')
+    window.history.replaceState(window.history.state, '', url)
+    void openAccountPage()
+  }, [accountSession])
+
   const openAdminAnalytics = async () => {
     if (!accountSession?.token || !isAdmin) {
       return
@@ -9908,6 +9936,12 @@ function App() {
               <div>
                 <h2>My account</h2>
                 <p>Credits, cards, and sends for this phone number.</p>
+                <p className="account-signed-in">
+                  Signed in as {formatPhoneNumberDisplay(accountSession.phoneE164)} ·{' '}
+                  <button className="text-action-link" type="button" onClick={() => void signOutAccount()}>
+                    Sign out
+                  </button>
+                </p>
               </div>
               <button className="secondary-button account-back" type="button" onClick={() => setShowAccountPage(false)}>
                 Back to card

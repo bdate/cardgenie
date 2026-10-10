@@ -3157,6 +3157,16 @@ textarea:focus {
   justify-self: center;
 }
 
+.account-page .account-signed-in {
+  margin-top: 6px;
+  color: var(--muted, #6b7d7a);
+  font-size: 0.9rem;
+}
+
+.account-signed-in .text-action-link {
+  font-weight: 700;
+}
+
 .account-code-row {
   display: grid;
   gap: 10px;

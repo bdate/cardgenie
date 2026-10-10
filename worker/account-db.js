@@ -1,4 +1,5 @@
 const starterCredits = 2
+export const TEST_LOGIN_PHONE = '+19255551234'
 const phoneVerifyBonusCredits = 2
 const newAccountCredits = starterCredits + phoneVerifyBonusCredits
 
@@ -319,15 +320,15 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
   }
 
   const userId = existingUserId || crypto.randomUUID()
-  // Greeting Card Universe sign-ups start with no free credits.
-  if (signupSource === 'gcu') {
+  // Greeting Card Universe sign-ups and the test login number start with no free credits.
+  if (signupSource === 'gcu' || phoneE164 === TEST_LOGIN_PHONE) {
     await env.ACCOUNT_DB.prepare(
       `INSERT INTO users (
         id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
         credit_balance, credits_granted, last_client, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'active', 'gcu', 0, 0, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, 'active', ?, 0, 0, ?, ?)`,
     )
-      .bind(userId, phoneE164, now, now, now, client, now)
+      .bind(userId, phoneE164, now, now, now, signupSource === 'gcu' ? 'gcu' : 'test', client, now)
       .run()
     return {
       ...mapUser({
@@ -408,26 +409,32 @@ export const ensureAccountUser = async (env, { userId, phoneE164 }) => {
   }
 
   const now = isoNow()
+  const isTestPhone = phoneE164 === TEST_LOGIN_PHONE
+  const grant = isTestPhone ? 0 : starterCredits
   await env.ACCOUNT_DB.batch([
     env.ACCOUNT_DB.prepare(
       `INSERT INTO users (
         id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
         credit_balance, credits_granted, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'active', 'web', ?, ?, ?)`,
-    ).bind(userId, phoneE164 || '', now, now, now, starterCredits, starterCredits, now),
-    env.ACCOUNT_DB.prepare(
-      `INSERT INTO credit_events (
-        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
-      ) VALUES (?, ?, ?, 'grant', 'signup_starter', ?, ?, 'system', 'Starter credits')`,
-    ).bind(crypto.randomUUID(), userId, now, starterCredits, starterCredits),
+      ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+    ).bind(userId, phoneE164 || '', now, now, now, isTestPhone ? 'test' : 'web', grant, grant, now),
+    ...(grant > 0
+      ? [
+          env.ACCOUNT_DB.prepare(
+            `INSERT INTO credit_events (
+              id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, note
+            ) VALUES (?, ?, ?, 'grant', 'signup_starter', ?, ?, 'system', 'Starter credits')`,
+          ).bind(crypto.randomUUID(), userId, now, grant, grant),
+        ]
+      : []),
   ])
 
   return mapUser({
     id: userId,
     phone_e164: phoneE164 || '',
     email: '',
-    credit_balance: starterCredits,
-    credits_granted: starterCredits,
+    credit_balance: grant,
+    credits_granted: grant,
     credits_purchased: 0,
     credits_spent: 0,
     status: 'active',

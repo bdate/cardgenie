@@ -673,6 +673,8 @@ body.product-mode .gcu-share a + a { margin-left: 20px; }
 .send-account .check { display: inline-block; width: 1.3em; }
 .send-account .credits { margin: 4px 0 0; padding-left: 1.3em; color: var(--gcu-dark-teal); font-weight: 700; }
 .send-account .credits-note { color: var(--gcu-grey); font-weight: 400; font-size: 0.85em; }
+.send-account .account-links { margin: 8px 0 0; padding-left: 1.3em; color: var(--gcu-grey); }
+.send-account .account-links button { border: 0; padding: 0; background: none; color: var(--gcu-dark-teal); font: inherit; font-weight: 700; cursor: pointer; }
 .msg-edit { margin-bottom: 14px; }
 .msg-toggle { width: 100%; }
 .msg-edit textarea { min-height: 120px; text-align: center; }
@@ -1944,7 +1946,8 @@ function showSendForm() {
       box.innerHTML = `<p class="ok"><span class="check" aria-hidden="true">✓</span>Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
         ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
         ${freeOnly ? `<p class="credits credits-note">Free credits can’t be used for Greeting Card Universe cards.</p>` : ""}
-        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits</a>, then come back and tap Send.</p>` : ""}`;
+        ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits</a>, then come back and tap Send.</p>` : ""}
+        <p class="account-links"><a href="${esc(APP_URL)}/?account=1" target="_blank" rel="noopener">My account</a><span aria-hidden="true"> · </span><button type="button" data-sign-out>Sign out</button></p>`;
       return;
     }
     box.innerHTML = `
@@ -1958,6 +1961,15 @@ function showSendForm() {
         <button class="send-secondary" type="button" data-code-verify ${form.busy === "verify" ? "disabled" : ""}>${form.busy === "verify" ? "Checking…" : "Confirm number"}</button>
       </div>` : ""}`;
     if (form.phone) $("#acctPhone").value = form.phone;
+  };
+  const signOut = () => {
+    const token = form.session?.token;
+    if (token) fetch(`${API_ORIGIN}/api/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(CREDITS_KEY);
+    Object.assign(form, { session: null, credits: null, total: null, codeSent: false, phone: "" });
+    notice("");
+    renderAccount();
   };
   const refreshAccount = async () => {
     if (!form.session) return renderAccount();
@@ -2099,6 +2111,7 @@ function showSendForm() {
     }
     if (e.target.closest("[data-code-start]")) return startCode();
     if (e.target.closest("[data-code-verify]")) return verifyCode();
+    if (e.target.closest("[data-sign-out]")) return signOut();
     if (e.target.closest("#sendSubmit")) return submit();
     if (e.target.closest("[data-again]")) { after.innerHTML = ""; return showSendForm(); }
     if (e.target.closest("[data-back-product]")) return backToProduct();

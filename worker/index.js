@@ -37,6 +37,7 @@ import {
   updateAccountProfile,
   updateTestimonialStatus,
   upsertUserOnLogin,
+  TEST_LOGIN_PHONE,
 } from './account-db.js'
 import { USAGE_KINDS, getAdminCosts, recordUsage, smsSegmentCount } from './costs.js'
 import {
@@ -2875,8 +2876,15 @@ const getAccountSession = async (env, token) => {
   return (await env.CARD_STORE.get(`session:${token}`, 'json')) || null
 }
 
-/** Fictional number for walking through sign-up: no text is sent, the code is the TEST_LOGIN_CODE secret, and every sign-in starts a brand-new account. */
-const TEST_LOGIN_PHONE = '+19255551234'
+const handleAccountLogout = async (request, env) => {
+  const token = readAccountToken(request)
+  if (token && env.CARD_STORE) {
+    await env.CARD_STORE.delete(`session:${token}`)
+  }
+  return jsonResponse(request, env, { ok: true })
+}
+
+/** TEST_LOGIN_PHONE is fictional: no text is sent, the code is the TEST_LOGIN_CODE secret, and every sign-in starts a brand-new account with 0 credits. */
 const testLoginCode = (env) => String(env.TEST_LOGIN_CODE || '').replace(/\D/g, '')
 
 // Frees the test number by renaming the previous test account, so its history stays but the next login is new.
@@ -6806,6 +6814,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/auth/otp/verify') {
     return handleVerifyAccountOtp(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
+    return handleAccountLogout(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/account') {
