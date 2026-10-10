@@ -3083,6 +3083,7 @@ function App() {
   const [showAccountConfirm, setShowAccountConfirm] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [accountCode, setAccountCode] = useState('')
+  const [accountCodeSentTo, setAccountCodeSentTo] = useState('')
   const [accountSession, setAccountSession] = useState<{
     token: string
     phoneE164: string
@@ -9237,10 +9238,13 @@ function App() {
         throw new Error(data.error || 'Unable to send a sign-in code.')
       }
 
-      setAccountPhone(formatPhoneNumberDisplay(String(data.phoneE164 || validated.value)))
+      const sentTo = formatPhoneNumberDisplay(String(data.phoneE164 || validated.value))
+      setAccountPhone(sentTo)
+      const resent = Boolean(accountCodeSentTo)
+      setAccountCodeSentTo(sentTo)
       const notice = data.message || 'We texted you a 6-digit code.'
       if (showAccountPage) {
-        setAccountHistoryError(notice)
+        setAccountHistoryError(resent ? 'We texted you a new code.' : '')
       } else {
         setDeliveryNotice(notice)
       }
@@ -9308,6 +9312,7 @@ function App() {
         rememberCredits(parseCreditBalance(data.creditBalance) as number)
       }
       setAccountCode('')
+      setAccountCodeSentTo('')
       const bonusCredits = Number(data.phoneVerifyBonusCredits) || 0
       const registrationMessage =
         data.isNew && bonusCredits > 0
@@ -9740,6 +9745,7 @@ function App() {
                     : 'Ready to make your next card?')}
             </p>
             {!isSignedIn ? (
+              showAccountPage ? null : (
               <div className="credit-wallet is-guest">
                 <div>
                   <span className="guest-wallet-kicker">Try creating a card in seconds!</span>
@@ -9757,6 +9763,7 @@ function App() {
                   </small>
                 </div>
               </div>
+              )
             ) : (
             <div className="credit-wallet" aria-label="Wish balance">
               <div>
@@ -9892,66 +9899,113 @@ function App() {
       </section>
 
       {showAccountPage && !isRecipientView && (
-        <section className="account-page" aria-label="My account">
-          <div className="panel-heading">
-            <div>
-              <h2>My account</h2>
-              <p>Credits, cards, and sends for this phone number.</p>
-            </div>
-            <button className="secondary-button account-back" type="button" onClick={() => setShowAccountPage(false)}>
-              Back to card
-            </button>
-          </div>
-          {!accountSession && (
-            <div className="account-gate">
-              <span className="field-title">Sign in</span>
-              <p className="field-help">
-                Enter your mobile number. We’ll text a one-time code so you can open this account. New accounts get 2
-                extra credits when you confirm.
-              </p>
-              <label>
-                Mobile number
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={accountPhone}
-                  onChange={(event) => setAccountPhone(event.target.value)}
-                  placeholder="(925) 555-1234"
-                />
-              </label>
-              <div className="account-code-row">
-                <label>
-                  Text code
-                  <input
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={accountCode}
-                    onChange={(event) => setAccountCode(event.target.value)}
-                    placeholder="6-digit code"
-                  />
-                </label>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={isSendingAccountCode}
-                  onClick={() => void requestAccountCode()}
-                >
-                  {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={isVerifyingAccountCode || !accountCode.trim()}
-                  onClick={() => void verifyAccountCode()}
-                >
-                  {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
-                </button>
+        <section
+          className={`account-page${accountSession ? '' : ' is-signed-out'}`}
+          aria-label={accountSession ? 'My account' : 'Sign in'}
+        >
+          {accountSession ? (
+            <div className="panel-heading">
+              <div>
+                <h2>My account</h2>
+                <p>Credits, cards, and sends for this phone number.</p>
               </div>
+              <button className="secondary-button account-back" type="button" onClick={() => setShowAccountPage(false)}>
+                Back to card
+              </button>
             </div>
+          ) : (
+            <form
+              className="account-gate"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void (accountCodeSentTo ? verifyAccountCode() : requestAccountCode())
+              }}
+            >
+              <h2>Sign in</h2>
+              {accountCodeSentTo ? (
+                <>
+                  <p className="field-help">
+                    Enter the 6-digit code we texted to <strong>{accountCodeSentTo}</strong>.
+                  </p>
+                  <label>
+                    Text code
+                    <input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      autoFocus
+                      maxLength={6}
+                      value={accountCode}
+                      onChange={(event) => setAccountCode(event.target.value.replace(/\D/g, ''))}
+                      placeholder="6-digit code"
+                    />
+                  </label>
+                  {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={isVerifyingAccountCode || accountCode.trim().length !== 6}
+                    aria-busy={isVerifyingAccountCode}
+                  >
+                    {isVerifyingAccountCode ? 'Checking…' : 'Sign in'}
+                  </button>
+                  <p className="account-gate-links">
+                    <button
+                      className="text-action-link"
+                      type="button"
+                      disabled={isSendingAccountCode}
+                      onClick={() => void requestAccountCode()}
+                    >
+                      {isSendingAccountCode ? 'Sending…' : 'Resend code'}
+                    </button>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      className="text-action-link"
+                      type="button"
+                      onClick={() => {
+                        setAccountCodeSentTo('')
+                        setAccountCode('')
+                        setAccountHistoryError('')
+                      }}
+                    >
+                      Use a different number
+                    </button>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="field-help">
+                    Enter your mobile number and we’ll text you a sign-in code. New here? You’ll get 2 free credits
+                    when you confirm.
+                  </p>
+                  <label>
+                    Mobile number
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      value={accountPhone}
+                      onChange={(event) => setAccountPhone(event.target.value)}
+                      placeholder="(925) 555-1234"
+                    />
+                  </label>
+                  {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={isSendingAccountCode || !accountPhone.trim()}
+                    aria-busy={isSendingAccountCode}
+                  >
+                    {isSendingAccountCode ? 'Sending code…' : 'Text me a code'}
+                  </button>
+                </>
+              )}
+              <button className="text-action-link account-gate-back" type="button" onClick={() => setShowAccountPage(false)}>
+                ‹ Back to card
+              </button>
+            </form>
           )}
           {isLoadingAccountHistory && <p>Loading your account...</p>}
-          {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+          {accountSession && accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
           {accountSession && accountHistory && (
             <>
               {isAdmin && (

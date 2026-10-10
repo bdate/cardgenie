@@ -3121,6 +3121,42 @@ textarea:focus {
   margin: 0;
 }
 
+.account-page.is-signed-out {
+  max-width: 460px;
+}
+
+.account-page.is-signed-out .account-gate {
+  gap: 14px;
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.account-gate h2 {
+  margin: 0;
+}
+
+.account-gate .field-help strong {
+  white-space: nowrap;
+}
+
+.account-gate .primary-button {
+  width: 100%;
+}
+
+.account-gate-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted, #6b7d7a);
+}
+
+.account-gate-back {
+  justify-self: center;
+}
+
 .account-code-row {
   display: grid;
   gap: 10px;
