@@ -75,13 +75,15 @@ const COVER_SAFE_MARGIN_PERCENT = 15
 /** Live Stripe Price IDs for credit packs. */
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
-  { id: '20', credits: 20, price: 10, priceId: 'price_1UOjzx1GfvmAXQBhOiubPGsq' },
-  { id: '52', credits: 52, price: 25, priceId: 'price_1UOjzy1GfvmAXQBhjEnv166G' },
+  { id: '21', credits: 21, price: 10, priceId: 'price_1UOrSv1GfvmAXQBhNrH4obMu' },
+  { id: '53', credits: 53, price: 25, priceId: 'price_1UOrSv1GfvmAXQBhVEbCmhue' },
   { id: '108', credits: 108, price: 50, priceId: 'price_1UOk001GfvmAXQBhQujTCQ5s' },
   { id: '222', credits: 222, price: 100, priceId: 'price_1UOk001GfvmAXQBhmcR4DTMO' },
 ]
-/** No longer sold, but checkouts started before the Oct 2026 price change still need crediting. */
+/** No longer sold, but checkouts started before the Oct 2026 price changes still need crediting. */
 const retiredCreditPacks = [
+  { id: '20', credits: 20, price: 10, priceId: 'price_1UOjzx1GfvmAXQBhOiubPGsq' },
+  { id: '52', credits: 52, price: 25, priceId: 'price_1UOjzy1GfvmAXQBhjEnv166G' },
   { id: '25', credits: 25, price: 10, priceId: 'price_1UFlL11GfvmAXQBhBGbdzji0' },
   { id: '60', credits: 60, price: 20, priceId: 'price_1UFlKl1GfvmAXQBho0xWW6JO' },
 ]
