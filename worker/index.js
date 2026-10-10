@@ -3125,10 +3125,35 @@ const handleCreateCheckoutSession = async (request, env) => {
   const successUrl = gcuReturnPath ? `${appUrl}${gcuReturnPath}?billing=success` : `${appUrl}/?billing=success${resumeQuery}`
   const cancelUrl = gcuReturnPath ? `${appUrl}${gcuReturnPath}?billing=cancel` : `${appUrl}/?billing=cancel${resumeQuery}`
 
+  const gcuLogoUrl = `${getPublicAppUrl(request, env)}/gcu-stripe-logo.png`
+  const gcuCheckout = gcuReturnPath
+    ? {
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: pack.price * 100,
+              product_data: {
+                name: `Greeting Card Universe – ${pack.credits} credits`,
+                description: `${pack.credits} credits for sending Greeting Card Universe cards digitally`,
+              },
+            },
+          },
+        ],
+        branding_settings: {
+          display_name: 'Greeting Card Universe',
+          logo: { type: 'url', url: gcuLogoUrl },
+          icon: { type: 'url', url: gcuLogoUrl },
+          button_color: '#f38d33',
+        },
+      }
+    : { line_items: [{ price: pack.priceId, quantity: 1 }] }
+
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price: pack.priceId, quantity: 1 }],
+      ...gcuCheckout,
       success_url: successUrl,
       cancel_url: cancelUrl,
       client_reference_id: session.userId,
