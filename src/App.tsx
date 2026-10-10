@@ -1865,18 +1865,34 @@ const captureEnvelopeSettle = (): EnvelopeSettle | null => {
           },
           { transform: 'none' },
         ],
-        { duration: 1100, easing: 'cubic-bezier(0.3, 0.8, 0.25, 1)' },
+        { duration: 700, easing: 'cubic-bezier(0.33, 0.7, 0.3, 1)' },
       )
       const fade = sceneGhost.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: 700,
+        duration: 500,
         easing: 'ease',
         fill: 'forwards',
       })
       document
         .querySelector<HTMLElement>('.card-view-toggle')
-        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 1100 })
+        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 700 })
+
+      // The page can still shift while the card glides (panels appearing below), so keep the
+      // glide's landing spot on the real cover or it snaps at the end.
+      let follow = 0
+      const track = () => {
+        const now = frame.getBoundingClientRect()
+        Object.assign(cardGhost.style, {
+          left: `${now.left}px`,
+          top: `${now.top}px`,
+          width: `${now.width}px`,
+          height: `${now.height}px`,
+        })
+        follow = requestAnimationFrame(track)
+      }
+      follow = requestAnimationFrame(track)
 
       const cleanup = () => {
+        cancelAnimationFrame(follow)
         glide.cancel()
         fade.cancel()
         sceneGhost.remove()
@@ -7605,7 +7621,7 @@ function App() {
     window.setTimeout(() => {
       pendingEnvelopeSettleRef.current = captureEnvelopeSettle()
       setStep('front')
-    }, 4600)
+    }, 4100)
   }
 
   const playEnvelopeBack = () => {
