@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
   credits_granted INTEGER NOT NULL DEFAULT 0,
   credits_purchased INTEGER NOT NULL DEFAULT 0,
   credits_spent INTEGER NOT NULL DEFAULT 0,
+  -- Purchased credits still unspent; only these can pay for GCU sends. Can lag behind credit_balance, so read it as MIN(paid_credit_balance, credit_balance).
+  paid_credit_balance INTEGER NOT NULL DEFAULT 0,
   credits_refunded INTEGER NOT NULL DEFAULT 0,
   amount_paid_cents INTEGER NOT NULL DEFAULT 0,
   amount_refunded_cents INTEGER NOT NULL DEFAULT 0,

@@ -672,6 +672,7 @@ body.product-mode .gcu-share a + a { margin-left: 20px; }
 .send-sub.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .send-account .check { display: inline-block; width: 1.3em; }
 .send-account .credits { margin: 4px 0 0; padding-left: 1.3em; color: var(--gcu-dark-teal); font-weight: 700; }
+.send-account .credits-note { color: var(--gcu-grey); font-weight: 400; font-size: 0.85em; }
 .msg-edit { margin-bottom: 14px; }
 .msg-toggle { width: 100%; }
 .msg-edit textarea { min-height: 120px; text-align: center; }
@@ -1878,7 +1879,12 @@ const postJson = async (path, body, token) => {
 };
 
 const SEND_COST = 2;
-const form = { method: "email", session: readSession(), credits: null, codeSent: false, busy: "" };
+// GCU sends can only use purchased credits; form.credits is that number, form.total the whole balance.
+const applyCredits = (data) => {
+  if (typeof data.paidCreditBalance === "number") form.credits = data.paidCreditBalance;
+  if (typeof data.creditBalance === "number") { form.total = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+};
+const form = { method: "email", session: readSession(), credits: null, total: null, codeSent: false, busy: "" };
 const normalizeMessage = (s) => s.replace(/\r/g, "").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).join("\n").trim();
 // The sender's edits to the inside message; kept while they stay on this card.
 const edit = { original: "", message: "", signature: "", open: false, blob: null, url: "", pending: null, seq: 0 };
@@ -1932,15 +1938,17 @@ function showSendForm() {
   const renderAccount = () => {
     const box = $("#sendAccount");
     if (form.session) {
-      const credits = form.credits == null ? "" : `${form.credits} credit${form.credits === 1 ? "" : "s"} in account`;
+      const credits = form.credits == null ? "" : `${form.credits} GCU credit${form.credits === 1 ? "" : "s"} in account`;
       const low = form.credits != null && form.credits < SEND_COST;
+      const freeOnly = form.total != null && form.credits != null && form.total > form.credits;
       box.innerHTML = `<p class="ok"><span class="check" aria-hidden="true">✓</span>Phone confirmed: ${esc(formatPhone(form.session.phoneE164))}</p>
         ${credits ? `<p class="credits">${esc(credits)}</p>` : ""}
+        ${freeOnly ? `<p class="credits credits-note">Free credits can’t be used for Greeting Card Universe cards.</p>` : ""}
         ${low ? `<p style="margin:6px 0 0">You need ${SEND_COST} credits to send. <a href="${esc(APP_URL)}/" target="_blank" rel="noopener">Buy credits</a>, then come back and tap Send.</p>` : ""}`;
       return;
     }
     box.innerHTML = `
-      <p>Confirm your mobile number to send. We’ll text a one-time code. New accounts get free credits when they confirm.</p>
+      <p>Confirm your mobile number to send. We’ll text a one-time code.</p>
       <div class="code-row">
         <label>Mobile number<input id="acctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(925) 555-1234"></label>
         <button class="send-secondary" type="button" data-code-start ${form.busy === "start" ? "disabled" : ""}>${form.busy === "start" ? "Sending code…" : form.codeSent ? "Text a new code" : "Text me a code"}</button>
@@ -1958,7 +1966,7 @@ function showSendForm() {
       const res = await fetch(`${API_ORIGIN}/api/account`, { headers: { Authorization: `Bearer ${form.session.token}` } });
       if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; return renderAccount(); }
       const data = await res.json().catch(() => ({}));
-      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+      applyCredits(data);
     } catch {}
     renderAccount();
   };
@@ -1979,11 +1987,11 @@ function showSendForm() {
     if (code.length !== 6) return notice("Enter the 6-digit code from the text message.");
     form.busy = "verify"; renderAccount(); notice("");
     try {
-      const { res, data } = await postJson("/api/auth/otp/verify", { phone: form.phone, code });
+      const { res, data } = await postJson("/api/auth/otp/verify", { phone: form.phone, code, source: "gcu" });
       if (!res.ok || !data.token) throw new Error(data.error || "That code didn’t work. Try again.");
       form.session = { token: data.token, phoneE164: data.phoneE164, copyEmail: data.email || undefined };
       localStorage.setItem(SESSION_KEY, JSON.stringify(form.session));
-      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+      applyCredits(data);
       notice(data.message || "Your number is confirmed.", true);
     } catch (err) { notice(err.message); }
     form.busy = ""; renderAccount();
@@ -2015,7 +2023,7 @@ function showSendForm() {
         method, destination: destRaw, fromName, toName, recipientConsentConfirmed: method === "text" ? true : undefined,
         ...(inside ? { inside, message: edit.message, signature: edit.signature } : {}),
       }, form.session.token);
-      if (typeof data.creditBalance === "number") { form.credits = data.creditBalance; localStorage.setItem(CREDITS_KEY, String(data.creditBalance)); }
+      applyCredits(data);
       if (res.status === 401) { localStorage.removeItem(SESSION_KEY); form.session = null; renderAccount(); }
       if (!res.ok) { renderAccount(); throw new Error(data.error || "Couldn’t send the card. Please try again."); }
       const shown = method === "email" ? data.deliveredTo : formatPhone(data.deliveredTo);
@@ -2023,7 +2031,7 @@ function showSendForm() {
         <section class="send-panel send-done" aria-live="polite">
           <div class="big" aria-hidden="true">💌</div>
           <h2>Card sent!</h2>
-          <p class="send-sub">We ${method === "email" ? "emailed" : "texted"} ${esc(shown)} a link to open it. ${SEND_COST} GCU credits used${typeof data.creditBalance === "number" ? ` · ${data.creditBalance} left` : ""}.</p>
+          <p class="send-sub">We ${method === "email" ? "emailed" : "texted"} ${esc(shown)} a link to open it. ${SEND_COST} GCU credits used${typeof data.paidCreditBalance === "number" ? ` · ${data.paidCreditBalance} left` : ""}.</p>
           <p><a href="${esc(data.shareUrl)}" target="_blank" rel="noopener">${esc(data.shareUrl)}</a></p>
           <p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
             <button class="send-secondary" type="button" data-again>Send to someone else</button>

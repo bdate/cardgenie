@@ -557,28 +557,33 @@ const handleSend = async (request, env, pid, deps) => {
 
   await ensureAccountUser(env, { userId: session.userId, phoneE164: session.phoneE164 })
   const now = new Date().toISOString()
-  // Conditional update so two quick taps can't spend the same credits twice.
+  // Only purchased credits pay for GCU sends. Conditional update so two quick taps can't spend the same credits twice.
   const charged = await db
     .prepare(
-      `UPDATE users SET credit_balance = credit_balance - ?, credits_spent = credits_spent + ?, last_used_at = ?, updated_at = ?
-       WHERE id = ? AND credit_balance >= ?`,
+      `UPDATE users SET credit_balance = credit_balance - ?, paid_credit_balance = MIN(paid_credit_balance, credit_balance) - ?,
+         credits_spent = credits_spent + ?, last_used_at = ?, updated_at = ?
+       WHERE id = ? AND MIN(paid_credit_balance, credit_balance) >= ?`,
     )
-    .bind(SEND_CREDIT_COST, SEND_CREDIT_COST, now, now, session.userId, SEND_CREDIT_COST)
+    .bind(SEND_CREDIT_COST, SEND_CREDIT_COST, SEND_CREDIT_COST, now, now, session.userId, SEND_CREDIT_COST)
     .run()
   if (!charged.meta?.changes) {
     const account = await getAccountForSession(env, session.userId)
-    const balance = account?.creditBalance ?? 0
+    const paid = account?.paidCreditBalance ?? 0
     return json(
       {
-        error: `Sending uses ${SEND_CREDIT_COST} credits and you have ${balance}. Buy more credits to send this card.`,
+        error: `Sending uses ${SEND_CREDIT_COST} purchased credits and you have ${paid}. Buy credits to send this card.`,
         needCredits: true,
-        creditBalance: balance,
+        creditBalance: account?.creditBalance ?? 0,
+        paidCreditBalance: paid,
       },
       402,
     )
   }
   const creditEvent = async (delta, kind, reason) => {
-    const user = await db.prepare('SELECT credit_balance FROM users WHERE id = ?').bind(session.userId).first()
+    const user = await db
+      .prepare('SELECT credit_balance, MIN(paid_credit_balance, credit_balance) AS paid FROM users WHERE id = ?')
+      .bind(session.userId)
+      .first()
     await db
       .prepare(
         `INSERT INTO credit_events (id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, payment_id, note)
@@ -587,7 +592,7 @@ const handleSend = async (request, env, pid, deps) => {
       .bind(crypto.randomUUID(), session.userId, new Date().toISOString(), kind, reason, delta, user?.credit_balance ?? 0, `GCU Card# ${pid}`)
       .run()
       .catch((error) => console.error('gcu credit event', error))
-    return user?.credit_balance ?? 0
+    return { total: user?.credit_balance ?? 0, paid: Math.max(0, user?.paid ?? 0) }
   }
   let balance = await creditEvent(-SEND_CREDIT_COST, 'adjustment', 'card_send')
 
@@ -612,21 +617,23 @@ const handleSend = async (request, env, pid, deps) => {
     console.error('gcu send', pid, error)
     await db
       .prepare(
-        `UPDATE users SET credit_balance = credit_balance + ?, credits_spent = MAX(0, credits_spent - ?), updated_at = ? WHERE id = ?`,
+        `UPDATE users SET credit_balance = credit_balance + ?, paid_credit_balance = MIN(paid_credit_balance, credit_balance) + ?,
+           credits_spent = MAX(0, credits_spent - ?), updated_at = ? WHERE id = ?`,
       )
-      .bind(SEND_CREDIT_COST, SEND_CREDIT_COST, new Date().toISOString(), session.userId)
+      .bind(SEND_CREDIT_COST, SEND_CREDIT_COST, SEND_CREDIT_COST, new Date().toISOString(), session.userId)
       .run()
     balance = await creditEvent(SEND_CREDIT_COST, 'grant', 'card_send_refund')
     await db.prepare(`UPDATE gcu_sends SET status = 'failed', error = ? WHERE id = ?`).bind(String(error?.message || error).slice(0, 500), id).run()
     const what = method === 'email' ? 'Email' : 'Text'
-    return json({ error: `${what} delivery isn’t working right now, so your credits weren’t used. Please try again in a few minutes.`, creditBalance: balance }, 502)
+    return json({ error: `${what} delivery isn’t working right now, so your credits weren’t used. Please try again in a few minutes.`, creditBalance: balance.total, paidCreditBalance: balance.paid }, 502)
   }
   await db.prepare(`UPDATE gcu_sends SET status = 'sent' WHERE id = ?`).bind(id).run()
   return json({
     ok: true,
     shareUrl,
     deliveredTo: destination,
-    creditBalance: balance,
+    creditBalance: balance.total,
+    paidCreditBalance: balance.paid,
     message: `Card sent to ${destination}. ${SEND_CREDIT_COST} credits used.`,
   })
 }

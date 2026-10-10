@@ -2946,7 +2946,7 @@ const handleStartAccountOtp = async (request, env) => {
 
 const handleVerifyAccountOtp = async (request, env) => {
   try {
-    const { phone, code } = (await readJson(request)) || {}
+    const { phone, code, source } = (await readJson(request)) || {}
     const phoneE164 = normalizePhoneNumber(phone)
     const cleanCode = String(code || '').replace(/\D/g, '')
 
@@ -2986,6 +2986,7 @@ const handleVerifyAccountOtp = async (request, env) => {
       phoneE164,
       request,
       existingUserId: existingUser?.id,
+      signupSource: source === 'gcu' ? 'gcu' : 'web',
     })
     const user = {
       id: account?.id || existingUser?.id || crypto.randomUUID(),
@@ -3025,11 +3026,14 @@ const handleVerifyAccountOtp = async (request, env) => {
       preferredName: profile?.preferredName || '',
       mailingAddress: profile?.mailingAddress || null,
       creditBalance: user.creditBalance ?? 2,
+      paidCreditBalance: profile?.paidCreditBalance ?? 0,
       isNew: account?.isNew === true,
-      phoneVerifyBonusCredits: account?.isNew ? account.phoneVerifyBonusCredits || 2 : 0,
+      phoneVerifyBonusCredits: account?.isNew ? (account.phoneVerifyBonusCredits ?? 2) : 0,
       message:
         account?.isNew === true
-          ? 'Your number is confirmed. We added 2 credits for registering.'
+          ? account.phoneVerifyBonusCredits === 0
+            ? 'Your number is confirmed.'
+            : 'Your number is confirmed. We added 2 credits for registering.'
           : existingUser || account?.isNew === false
             ? 'Welcome back.'
             : 'Your account is ready.',
@@ -3787,6 +3791,7 @@ const handleGetAccount = async (request, env) => {
     preferredName: account?.preferredName || '',
     mailingAddress: account?.mailingAddress || null,
     creditBalance: account?.creditBalance ?? null,
+    paidCreditBalance: account?.paidCreditBalance ?? null,
   })
 }
 

@@ -54,6 +54,19 @@ const ensureUserProfileColumns = async (db) => {
   } catch {
     // Column already exists.
   }
+  try {
+    await db.prepare(`ALTER TABLE users ADD COLUMN paid_credit_balance INTEGER NOT NULL DEFAULT 0`).run()
+    // First run only: assume free credits were spent before purchased ones.
+    await db
+      .prepare(
+        `UPDATE users SET paid_credit_balance = MAX(0, MIN(credit_balance, credits_purchased,
+           credit_balance - MAX(0, credits_granted - credits_spent)))
+         WHERE credits_purchased > 0`,
+      )
+      .run()
+  } catch {
+    // Column already exists.
+  }
 }
 
 const DEFAULT_PROFILE_MAIL_FROM = {
@@ -255,6 +268,7 @@ const mapUser = (row) => {
     preferredName: String(row.preferred_name || '').trim(),
     mailingAddress: parseMailingAddressJson(row.mailing_address_json),
     creditBalance: row.credit_balance ?? 0,
+    paidCreditBalance: Math.max(0, Math.min(row.paid_credit_balance ?? 0, row.credit_balance ?? 0)),
     creditsGranted: row.credits_granted ?? 0,
     creditsPurchased: row.credits_purchased ?? 0,
     creditsSpent: row.credits_spent ?? 0,
@@ -279,7 +293,7 @@ export const findUserByPhone = async (env, phoneE164) => {
   return mapUser(await getUserByPhone(env.ACCOUNT_DB, phoneE164))
 }
 
-export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserId }) => {
+export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserId, signupSource = 'web' }) => {
   if (!env.ACCOUNT_DB) {
     return null
   }
@@ -305,6 +319,34 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
   }
 
   const userId = existingUserId || crypto.randomUUID()
+  // Greeting Card Universe sign-ups start with no free credits.
+  if (signupSource === 'gcu') {
+    await env.ACCOUNT_DB.prepare(
+      `INSERT INTO users (
+        id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
+        credit_balance, credits_granted, last_client, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'active', 'gcu', 0, 0, ?, ?)`,
+    )
+      .bind(userId, phoneE164, now, now, now, client, now)
+      .run()
+    return {
+      ...mapUser({
+        id: userId,
+        phone_e164: phoneE164,
+        email: '',
+        credit_balance: 0,
+        credits_granted: 0,
+        credits_purchased: 0,
+        credits_spent: 0,
+        status: 'active',
+        created_at: now,
+        last_used_at: now,
+      }),
+      isNew: true,
+      phoneVerifyBonusCredits: 0,
+    }
+  }
+
   await env.ACCOUNT_DB.batch([
     env.ACCOUNT_DB.prepare(
       `INSERT INTO users (
@@ -764,11 +806,14 @@ export const applyCreditChange = async (
   const paidCents = Number.isFinite(Number(amountPaidCents)) ? Math.max(0, Math.floor(Number(amountPaidCents))) : 0
   const isPurchase = eventKind === 'purchase' || reason === 'stripe_purchase' || reason === 'balance_sync'
   const markPurchase = isPurchase && creditsDelta > 0 ? 1 : 0
+  const paidAdded = (eventKind === 'purchase' || reason === 'stripe_purchase') && creditsDelta > 0 ? creditsDelta : 0
 
   await env.ACCOUNT_DB.batch([
     env.ACCOUNT_DB.prepare(
+      // Free credits are used up first, so purchased credits only drop once the balance falls below them.
       `UPDATE users
-       SET credit_balance = ?,
+       SET paid_credit_balance = MIN(MIN(paid_credit_balance, credit_balance) + ?, ?),
+           credit_balance = ?,
            credits_granted = credits_granted + ?,
            credits_purchased = credits_purchased + ?,
            credits_spent = credits_spent + ?,
@@ -779,6 +824,8 @@ export const applyCreditChange = async (
            updated_at = ?
        WHERE id = ?`,
     ).bind(
+      paidAdded,
+      nextBalance,
       nextBalance,
       creditsDelta > 0 && !isPurchase ? creditsDelta : 0,
       creditsDelta > 0 && isPurchase ? creditsDelta : 0,
