@@ -1365,7 +1365,11 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
       ghost = frozenCopy(scene, ".card-sleeve");
     }
     stage.innerHTML = top + views[step](fromEnvelope && !settle);
+    // Whatever goes below the card (the send form, the sender's note) changes where the centered
+    // page puts the card, so it has to be in place before measuring where the card will land.
+    if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
     if (settle) {
+      after.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: 1300, easing: "ease" });
       const frame = stage.querySelector(".card-cover-frame");
       const now = frame.getBoundingClientRect();
       const box = stage.getBoundingClientRect();
@@ -1387,7 +1391,6 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
     if (step === "envelopeFlip") timers.push(setTimeout(() => go("envelopeBack"), 1200));
     if (step === "envelopeBack") timers.push(setTimeout(() => go("opening"), 350));
     if (step === "opening") timers.push(setTimeout(() => go("front", true), 4600));
-    if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
     onStep?.(step);
   }
   stage.onclick = (e) => {
