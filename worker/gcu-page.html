@@ -1369,7 +1369,7 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
     // page puts the card, so it has to be in place before measuring where the card will land.
     if (step === "front" && fromEnvelope && onSettled) { const done = onSettled; onSettled = null; done(); }
     if (settle) {
-      after.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: 1300, easing: "ease" });
+      after.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: 900, easing: "ease" });
       const frame = stage.querySelector(".card-cover-frame");
       const now = frame.getBoundingClientRect();
       const box = stage.getBoundingClientRect();
@@ -1382,15 +1382,15 @@ function startAnimation(CARD, { autoPlay = false, onSettled = null, onStep = nul
       frame.animate([
         { transform: `translate(${cardWas.left - now.left}px, ${cardWas.top - now.top}px) scale(${cardWas.width / now.width})` },
         { transform: "none" },
-      ], { duration: 1100, easing: "cubic-bezier(0.3, 0.8, 0.25, 1)" });
-      ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 700, easing: "ease", fill: "forwards" })
+      ], { duration: 700, easing: "cubic-bezier(0.33, 0.7, 0.3, 1)" });
+      ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: "ease", fill: "forwards" })
         .finished.then(() => ghost.remove());
       stage.querySelector(".card-view-toggle")
-        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 1100 });
+        ?.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: 700 });
     }
     if (step === "envelopeFlip") timers.push(setTimeout(() => go("envelopeBack"), 1200));
     if (step === "envelopeBack") timers.push(setTimeout(() => go("opening"), 350));
-    if (step === "opening") timers.push(setTimeout(() => go("front", true), 4600));
+    if (step === "opening") timers.push(setTimeout(() => go("front", true), 4100));
     onStep?.(step);
   }
   stage.onclick = (e) => {
