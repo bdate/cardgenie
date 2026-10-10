@@ -3137,6 +3137,7 @@ const handleCreateCheckoutSession = async (request, env) => {
               product_data: {
                 name: `Greeting Card Universe – ${pack.credits} credits`,
                 description: `${pack.credits} credits for sending Greeting Card Universe cards digitally`,
+                images: [gcuLogoUrl],
               },
             },
           },
