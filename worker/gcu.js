@@ -239,7 +239,11 @@ const parseDetails = (page) => {
   }
 }
 
-const fetchGcu = (url, init = {}) => fetch(url, { redirect: 'follow', ...init, headers: GCU_HEADERS })
+// GCU's Cloudflare challenges visitors outside the US/GB/CA; a WAF rule there skips the
+// challenge for requests carrying this key, since the worker runs wherever the visitor is.
+let gcuFetchKey = ''
+const fetchGcu = (url, init = {}) =>
+  fetch(url, { redirect: 'follow', ...init, headers: { ...GCU_HEADERS, ...(gcuFetchKey ? { 'X-CardGenie-Key': gcuFetchKey } : {}) } })
 
 const exists = async (url) => {
   const res = await fetchGcu(url, { method: 'HEAD' }).catch(() => null)
@@ -762,6 +766,7 @@ export const getArtistPayouts = async (env, quarter) => {
 }
 
 export const handleGcuRequest = async (request, env, url, match, corsHeaders, deps) => {
+  gcuFetchKey = String(env.GCU_FETCH_KEY || '')
   const res = await route(request, env, url, match, deps)
   const out = new Response(res.body, res)
   for (const [k, v] of Object.entries(corsHeaders)) out.headers.set(k, v)
