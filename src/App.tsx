@@ -872,18 +872,27 @@ const staticPageRedirects: Record<string, string> = {
 
 const contactTopics = [
   {
+    slug: 'general',
     label: 'General questions',
     hint: 'How can we help? If it’s about a card or printed order, include the recipient’s name and about when you sent it.',
   },
   {
+    slug: 'billing',
     label: 'Credits and Billing',
     hint: 'What happened, about when, and the amount charged? Please don’t include full card numbers.',
   },
   {
+    slug: 'privacy',
+    label: 'Privacy',
+    hint: 'Questions about your information, or want a copy of it or have it deleted? Include the phone number or email you use with Card Genie.',
+  },
+  {
+    slug: 'suggestions',
     label: 'Suggestions',
     hint: 'We’d love to hear it — a new occasion, a style, a feature, or anything that would make Card Genie better.',
   },
   {
+    slug: 'other',
     label: 'Other',
     hint: 'Tell us what’s on your mind.',
   },
@@ -3400,15 +3409,16 @@ function App() {
     ''
   const senderNameClearedByShopperRef = useRef(false)
   const [contactOpen, setContactOpen] = useState(false)
-  const [contactFromLink, setContactFromLink] = useState(false)
+  const [contactFromLink, setContactFromLink] = useState<string | null>(null)
   const [contactForm, setContactForm] = useState({ name: '', email: '', topic: '', message: '', website: '' })
   const [contactStartedAt, setContactStartedAt] = useState(0)
   const [contactStatus, setContactStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
   const [contactError, setContactError] = useState('')
 
-  const openContact = () => {
+  const openContact = (topic = '') => {
     setContactForm((current) => ({
       ...current,
+      ...(topic ? { topic } : {}),
       name: current.name || accountPreferredName.trim() || accountSession?.preferredName?.trim() || accountSession?.mailingAddress?.name?.trim() || '',
       email: current.email || accountSession?.copyEmail || '',
     }))
@@ -3471,17 +3481,18 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('contact') !== '1') return
+    const contactParam = params.get('contact')
+    if (!contactParam) return
     params.delete('contact')
     const nextQuery = params.toString()
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
-    setContactFromLink(true)
+    setContactFromLink(contactTopics.find((topic) => topic.slug === contactParam)?.label || '')
   }, [])
 
   useEffect(() => {
-    if (!contactFromLink) return
-    setContactFromLink(false)
-    openContact()
+    if (contactFromLink === null) return
+    setContactFromLink(null)
+    openContact(contactFromLink)
   }, [contactFromLink])
 
   useEffect(() => {
@@ -14123,7 +14134,7 @@ function App() {
               {accountButtonLabel}
             </button>
           )}
-          <button type="button" onClick={openContact}>
+          <button type="button" onClick={() => openContact()}>
             Contact us
           </button>
           <a href="/faq/">FAQ</a>

@@ -1738,7 +1738,7 @@ const buildDeploySummaryCopy = ({ subject, summary }) => {
 }
 
 const CONTACT_TO = 'cardgenie@gcuniverse.com'
-const CONTACT_TOPICS = new Set(['General questions', 'Credits and Billing', 'Suggestions', 'Other'])
+const CONTACT_TOPICS = new Set(['General questions', 'Credits and Billing', 'Privacy', 'Suggestions', 'Other'])
 const CONTACT_MIN_FILL_MS = 3000
 const CONTACT_MAX_PER_HOUR = 5
 const CONTACT_MAX_PER_DAY_TOTAL = 200
