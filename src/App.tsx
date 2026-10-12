@@ -870,40 +870,22 @@ const staticPageRedirects: Record<string, string> = {
   '/terms/': '/terms/index.html',
 }
 
-const supportEmail = 'support@card-genie.com'
-const supportMailto = `mailto:${supportEmail}`
 const contactTopics = [
   {
-    label: 'Help making a card',
-    hint: 'What were you trying to make, and where did you get stuck? Include any error message you saw.',
+    label: 'General questions',
+    hint: 'How can we help? If it’s about a card or printed order, include the recipient’s name and about when you sent it.',
   },
   {
-    label: 'My card wasn’t received or won’t open',
-    hint: 'Who was it sent to (email or phone), about when, and what happens when they open it?',
-  },
-  {
-    label: 'Printed card order',
-    hint: 'Include the recipient’s name and roughly when you ordered. Need to change the address? Tell us the new one.',
-  },
-  {
-    label: 'Billing, credits, or refunds',
+    label: 'Credits and Billing',
     hint: 'What happened, about when, and the amount charged? Please don’t include full card numbers.',
   },
   {
-    label: 'Account or sign-in',
-    hint: 'What phone number do you sign in with, and what happens when you try?',
-  },
-  {
-    label: 'Suggestion or feedback',
+    label: 'Suggestions',
     hint: 'We’d love to hear it — a new occasion, a style, a feature, or anything that would make Card Genie better.',
   },
   {
-    label: 'Business or bulk orders',
-    hint: 'Tell us about your business, how many cards you need, and for what occasions.',
-  },
-  {
-    label: 'Something else',
-    hint: 'How can we help?',
+    label: 'Other',
+    hint: 'Tell us what’s on your mind.',
   },
 ]
 const companyAddressLines = ['Card-Genie.com', '154 East Prospect Avenue', 'Suite B', 'Danville, CA 94526']
@@ -3418,6 +3400,7 @@ function App() {
     ''
   const senderNameClearedByShopperRef = useRef(false)
   const [contactOpen, setContactOpen] = useState(false)
+  const [contactFromLink, setContactFromLink] = useState(false)
   const [contactForm, setContactForm] = useState({ name: '', email: '', topic: '', message: '', website: '' })
   const [contactStartedAt, setContactStartedAt] = useState(0)
   const [contactStatus, setContactStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
@@ -3485,6 +3468,21 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('contact') !== '1') return
+    params.delete('contact')
+    const nextQuery = params.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    setContactFromLink(true)
+  }, [])
+
+  useEffect(() => {
+    if (!contactFromLink) return
+    setContactFromLink(false)
+    openContact()
+  }, [contactFromLink])
 
   useEffect(() => {
     if (!isSignedIn || isRecipientView || !accountSenderName || senderNameClearedByShopperRef.current) {
@@ -14240,9 +14238,6 @@ function App() {
                   </button>
                 </div>
                 <div className="contact-fineprint">
-                  <span>
-                    Prefer email? <a href={supportMailto}>{supportEmail}</a>
-                  </span>
                   <address>{companyAddressLines.join(' · ')}</address>
                 </div>
               </form>
