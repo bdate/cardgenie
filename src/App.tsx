@@ -2803,6 +2803,7 @@ function App() {
   const [step, setStep] = useState<ExperienceStep>('envelope')
   const pendingEnvelopeSettleRef = useRef<EnvelopeSettle | null>(null)
   const [openPrintFromLink, setOpenPrintFromLink] = useState(false)
+  const [printOnlyFromLink, setPrintOnlyFromLink] = useState(false)
   useLayoutEffect(() => {
     const settle = pendingEnvelopeSettleRef.current
     pendingEnvelopeSettleRef.current = null
@@ -7931,8 +7932,20 @@ function App() {
       return
     }
     setOpenPrintFromLink(false)
+    setPrintOnlyFromLink(true)
     openPrintOrder()
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLInputElement>('.print-order-panel input[autocomplete="shipping address-line1"]')
+        ?.focus({ preventScroll: true })
+    }, 700)
   }, [openPrintFromLink, card, showSendActions])
+
+  useEffect(() => {
+    if (printOrderStep === 'closed') {
+      setPrintOnlyFromLink(false)
+    }
+  }, [printOrderStep])
 
   const previewPrintEnvelope = () => {
     if (printOrderStep === 'review') {
@@ -13108,7 +13121,7 @@ function App() {
                   </button>
                 </div>
               )}
-              {showSendActions && !isRecipientView && <form className="delivery-panel" onSubmit={deliverCard}>
+              {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send this card</span>
                   <p>Send by email or cellphone after you approve the card.</p>
