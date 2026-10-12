@@ -1,0 +1,66 @@
+/* Card Genie header for static pages. Keep in sync with the home page brand in src/App.css. */
+.cg-header {
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.cg-header .cg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #315f5b;
+  text-decoration: none;
+}
+
+.cg-header .cg-brand:focus-visible {
+  outline: 2px solid #3f9b91;
+  outline-offset: 6px;
+  border-radius: 12px;
+}
+
+.cg-header .cg-brand img {
+  display: block;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: 22px;
+  object-fit: cover;
+}
+
+.cg-header .cg-brand span {
+  font-family: "Dancing Script", cursive;
+  font-size: clamp(2.45rem, 5.4vw, 3.15rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding-bottom: 4px;
+  position: relative;
+  top: 14px;
+}
+
+.cg-header .cg-powered,
+.cg-header .cg-powered:link,
+.cg-header .cg-powered:visited {
+  display: block;
+  margin: -5px auto 0;
+  color: #7d7d7d;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.79rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.cg-header .cg-powered:hover,
+.cg-header .cg-powered:focus-visible {
+  color: #3f9b91;
+  text-decoration: underline;
+  outline: none;
+}
+
+@media (max-width: 980px) {
+  .cg-header .cg-powered {
+    margin-top: -4px;
+    font-size: 0.68rem;
+  }
+}

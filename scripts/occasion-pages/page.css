@@ -28,26 +28,6 @@ main {
   padding: 28px 20px 72px;
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.brand img {
-  width: 44px;
-  height: 44px;
-}
-
-.brand span {
-  font-family: "Dancing Script", cursive;
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .hero {
   display: grid;
   gap: 14px;

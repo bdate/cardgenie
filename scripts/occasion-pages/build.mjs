@@ -55,6 +55,7 @@ const head = ({ title, description, url, image, jsonLd }) => `<!doctype html>
       href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700;800&family=Playfair+Display:wght@700;800&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/brand-header.css" />
     <script type="application/ld+json">
 ${indent(JSON.stringify(jsonLd, null, 2), 6)}
     </script>
@@ -64,7 +65,10 @@ ${indent(css.trimEnd(), 6)}
   </head>
   <body>
     <main>
-      <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="44" height="44" /><span>Card Genie</span></a>
+      <header class="cg-header">
+        <a class="cg-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" alt="" width="72" height="72" /><span>Card Genie</span></a>
+        <a class="cg-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">Powered by GreetingCardUniverse.com</a>
+      </header>
 `
 
 const footer = `

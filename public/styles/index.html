@@ -55,24 +55,6 @@
         padding: 36px 20px 80px;
       }
 
-      .top-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--dark-teal);
-        font-weight: 800;
-        font-size: 0.78rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        text-decoration: none;
-      }
-
-      .top-link img {
-        width: 36px;
-        height: 36px;
-        border-radius: 9px;
-      }
-
       h1 {
         margin: 18px 0 10px;
         font-family: "Playfair Display", Georgia, serif;
@@ -141,10 +123,17 @@
         background: rgba(143, 208, 201, 0.28);
       }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/brand-header.css" />
   </head>
   <body>
     <main>
-      <a class="top-link" href="/"><img src="/logo.png" alt="" />Back to Card Genie</a>
+      <header class="cg-header">
+        <a class="cg-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" alt="" width="72" height="72" /><span>Card Genie</span></a>
+        <a class="cg-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">Powered by GreetingCardUniverse.com</a>
+      </header>
       <h1>Style lookbook</h1>
       <p class="intro">
         Same garden scene, fifteen treatments. Photorealistic is the photo-like look. Every other style keeps a

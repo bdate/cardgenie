@@ -20,6 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700;800&family=Playfair+Display:wght@700;800&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/brand-header.css" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -75,26 +76,6 @@
         max-width: 1120px;
         margin: 0 auto;
         padding: 28px 20px 72px;
-      }
-
-      .brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        color: var(--ink);
-        text-decoration: none;
-      }
-
-      .brand img {
-        width: 44px;
-        height: 44px;
-      }
-
-      .brand span {
-        font-family: "Dancing Script", cursive;
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1;
       }
 
       .hero {
@@ -423,7 +404,10 @@
   </head>
   <body>
     <main>
-      <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="44" height="44" /><span>Card Genie</span></a>
+      <header class="cg-header">
+        <a class="cg-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" alt="" width="72" height="72" /><span>Card Genie</span></a>
+        <a class="cg-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">Powered by GreetingCardUniverse.com</a>
+      </header>
 
       <section class="hero">
         <h1>Personalized Father’s Day cards as unique as Dad</h1>
