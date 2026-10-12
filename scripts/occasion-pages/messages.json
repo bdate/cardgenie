@@ -53,24 +53,6 @@
       "long": "On your special day, Priya, I hope you find time to enjoy your favorite latte, breathe deeply in a calming yoga pose, and listen to some beautiful jazz. Your creativity and spirit light up our design team every day. Happy birthday!"
     }
   },
-  "graduation-cards/law-school-grad-editorial": {
-    "message": "Daniel, your dedication has led you to this incredible milestone! Three years of late nights and coffee have truly paid off—congratulations on finishing law school and passing the bar on your first try.",
-    "closing": "Here's to your bright future ahead!",
-    "variants": {
-      "short": "Congratulations on an amazing achievement, Daniel! You’ve worked hard, and it’s paid off.",
-      "medium": "Daniel, your dedication has led you to this incredible milestone! Three years of late nights and coffee have truly paid off—congratulations on finishing law school and passing the bar on your first try.",
-      "long": "What a remarkable achievement, Daniel! Your journey through law school, marked by late nights and endless cups of coffee, has culminated in this well-deserved success. Passing the bar on your first try is a testament to your commitment and hard work. I'm so proud of you!"
-    }
-  },
-  "retirement-cards/nurse-retire-editorial": {
-    "message": "Happy retirement, Barbara! After 40 incredible years as an ER nurse, it’s time to share unforgettable adventures with your six grandkids. You’ve earned it!",
-    "closing": "Cheers to new adventures ahead!",
-    "variants": {
-      "short": "Congratulations on your retirement! Enjoy every moment with your grandkids.",
-      "medium": "Happy retirement, Barbara! After 40 incredible years as an ER nurse, it’s time to share unforgettable adventures with your six grandkids. You’ve earned it!",
-      "long": "Wishing you a joyful retirement, Barbara! Your 40 years of dedication as an ER nurse have made a difference in so many lives. Now it’s your turn to create beautiful memories with your six wonderful grandkids. Enjoy every precious moment!"
-    }
-  },
   "valentines-day-cards/long-distance-papercut": {
     "message": "Every day apart is a step closer to June. The red roses remind me of us—beautiful and intertwined. I cherish you, Alex, and can’t wait to close the distance.",
     "closing": "With all my love today and always.",
@@ -105,15 +87,6 @@
       "short": "Wishing you a speedy recovery, Tess! Can't wait for our sunrise runs again.",
       "medium": "I know being sidelined by a stress fracture is tough, especially right before marathon season. Remember, those sunrise runs on the coast trail will be waiting for you. Take care and heal well!",
       "long": "It’s frustrating being sidelined by a stress fracture when you were gearing up for marathon season. I miss our sunrise runs on the coast trail together! Focus on healing, and soon we'll be back out there, enjoying every mile again. You’ve got this!"
-    }
-  },
-  "graduation-cards/college-grad-watercolor": {
-    "message": "Sofia, your hard work and dedication have paid off! Graduating with your nursing degree makes you the first in our family to achieve this milestone. We're incredibly proud of you!",
-    "closing": "With all my love and pride.",
-    "variants": {
-      "short": "Congratulations on your nursing degree, Sofia! You’ve made our family so proud.",
-      "medium": "Sofia, your hard work and dedication have paid off! Graduating with your nursing degree makes you the first in our family to achieve this milestone. We're incredibly proud of you!",
-      "long": "Sofia, your journey is an inspiration to us all. Graduating with your nursing degree not only makes you the first in our family to finish college, but it also shows your incredible commitment to helping others. Your bright future begins now, and we couldn’t be prouder of you!"
     }
   },
   "wedding-cards/beach-wedding-poster": {
@@ -152,15 +125,6 @@
       "long": "I hear you're on the road to recovery with a mountain of ice cream and Clover snuggling right next to you! Tonsils are out, but your spirit is shining bright. Enjoy every moment in your cozy polka-dot pajamas! Wishing you a speedy recovery and lots of sweet treats!"
     }
   },
-  "anniversary-cards/partner-5th-claymation": {
-    "message": "Five years together filled with laughter, endless road trips in our quirky camper van, and our loving three-legged pup, Tripod! Here’s to many more adventures ahead!",
-    "closing": "To many more years of adventure and love!",
-    "variants": {
-      "short": "Five years of adventure, love, and our three-legged wonder, Tripod! Cheers to us!",
-      "medium": "Five years together filled with laughter, endless road trips in our quirky camper van, and our loving three-legged pup, Tripod! Here’s to many more adventures ahead!",
-      "long": "Happy 5th anniversary! Five incredible years of love, laughter, and our adventures with Tripod in our trusty camper van. Together, we've created a beautiful journey full of unforgettable memories. Here’s to exploring life together, one road trip at a time!"
-    }
-  },
   "retirement-cards/rv-retire-poster": {
     "message": "Congratulations on your retirement, Gary! After 30 years in IT, it’s time to hit the road. May your RV adventures take you to every national park!",
     "closing": "Wishing you an amazing journey ahead!",
@@ -170,24 +134,6 @@
       "long": "Cheers to your retirement, Gary! After three decades in IT, you’ve earned every moment of exploring our beautiful national parks. May your RV travels be filled with laughter, adventure, and unforgettable memories!"
     }
   },
-  "graduation-cards/grad-travel-poster": {
-    "message": "Congratulations, Hannah! Your hard work has paid off, and now you're off to Japan. Enjoy teaching English, savoring ramen, and discovering nature one hike at a time!",
-    "closing": "Cheers to your exciting new chapter!",
-    "variants": {
-      "short": "Congrats on graduating! Japan awaits your adventures with ramen and hikes!",
-      "medium": "Congratulations, Hannah! Your hard work has paid off, and now you're off to Japan. Enjoy teaching English, savoring ramen, and discovering nature one hike at a time!",
-      "long": "Congratulations on your incredible achievement, Hannah! Graduating college is just the beginning. As you embark on your journey to Japan, I know you’ll inspire others while teaching English. Enjoy the ramen, embrace the adventures, and capture every moment in your unique way!"
-    }
-  },
-  "graduation-cards/kindergarten-grad-storybook": {
-    "message": "Wow, Mia! You graduated kindergarten and learned to read this year! Peanut is so lucky to have you as a friend. Keep shining like the star you are!",
-    "closing": "Celebrate your amazing achievements!",
-    "variants": {
-      "short": "Congrats on graduating kindergarten! You’re a reading superstar and Peanut's best friend!",
-      "medium": "Wow, Mia! You graduated kindergarten and learned to read this year! Peanut is so lucky to have you as a friend. Keep shining like the star you are!",
-      "long": "Congratulations on graduating kindergarten, Mia! You’ve mastered reading and become Peanut’s favorite human! Your joy and excitement light up everyone’s day. Keep exploring, learning, and being wonderful you!"
-    }
-  },
   "congratulations-cards/marathon-poster": {
     "message": "You did it, Rachel! Completing the Boston Marathon after two years of hard work is a monumental achievement. Your dedication truly inspires everyone around you.",
     "closing": "Celebrate this amazing milestone!",
@@ -195,15 +141,6 @@
       "short": "Congratulations on conquering the Boston Marathon! Such an incredible achievement!",
       "medium": "You did it, Rachel! Completing the Boston Marathon after two years of hard work is a monumental achievement. Your dedication truly inspires everyone around you.",
       "long": "Finishing the Boston Marathon is no small feat, Rachel! After two years of relentless training, you demonstrated incredible perseverance and commitment. Your achievement is a testament to your strength and dedication. I'm so proud of you!"
-    }
-  },
-  "valentines-day-cards/galentine-3d": {
-    "message": "Cheers to ten years of mimosas, waffles, and non-stop laughs! I’m so grateful for each Saturday spent with you all. Happy Valentine’s Day, brunch crew!",
-    "closing": "With love and brunch vibes!",
-    "variants": {
-      "short": "To waffles, mimosas, and a decade of laughter! Happy Valentine’s Day, brunch crew!",
-      "medium": "Cheers to ten years of mimosas, waffles, and non-stop laughs! I’m so grateful for each Saturday spent with you all. Happy Valentine’s Day, brunch crew!",
-      "long": "Another Valentine’s Day toast to the best brunch crew! Here’s to a decade of mimosas, waffles, and endless laughter every Saturday. Our memories are the sprinkles on top! Can’t wait for many more Saturdays together. Happy Valentine’s Day!"
     }
   },
   "valentines-day-cards/girlfriend-valentine-poster": {
@@ -233,15 +170,6 @@
       "long": "Congratulations on becoming a U.S. Citizen after twelve years of determination and hard work! This is such a monumental milestone, and I can’t wait to celebrate by filling the day with flags, confetti, and happiness. Here’s to new beginnings and endless possibilities in your beautiful journey ahead!"
     }
   },
-  "thank-you-cards/neighbor-thanks-watercolor": {
-    "message": "We truly appreciate you watering our tomato garden and looking after Mochi while we were away. Your generosity and kindness made our trip so much more enjoyable.",
-    "closing": "With heartfelt thanks,",
-    "variants": {
-      "short": "Thank you for taking care of our garden and Mochi! Your help meant the world to us.",
-      "medium": "We truly appreciate you watering our tomato garden and looking after Mochi while we were away. Your generosity and kindness made our trip so much more enjoyable.",
-      "long": "Your willingness to water our tomato garden and care for Mochi while we were gone was such a blessing. We can't thank you enough for your kindness and support during our time away. It's neighbors like you who make our community feel like home."
-    }
-  },
   "fathers-day-cards/new-dad-3d": {
     "message": "This Father’s Day is extra special as we celebrate you, a wonderful dad to Noah. Those quiet moments on the couch, with him peacefully sleeping on your chest, warm my heart.",
     "closing": "With all my love on this special day.",
@@ -249,24 +177,6 @@
       "short": "Happy Father’s Day! Watching you with Noah fills my heart with joy.",
       "medium": "This Father’s Day is extra special as we celebrate you, a wonderful dad to Noah. Those quiet moments on the couch, with him peacefully sleeping on your chest, warm my heart.",
       "long": "On your first Father’s Day, I am so grateful for the loving dad you are to little Noah. Seeing you fall asleep on the couch with him resting on your chest is a beautiful reminder of the bond you share. I treasure these moments together."
-    }
-  },
-  "congratulations-cards/new-home-claymation": {
-    "message": "Cheers to your new yellow bungalow! May your days be filled with laughter on the porch swing and sweet lemonade from the lemon tree. You both deserve this!",
-    "closing": "Wishing you all the joy your new home brings!",
-    "variants": {
-      "short": "Congrats on your new yellow bungalow! Enjoy that porch swing and all the lemonade from your lemon tree!",
-      "medium": "Cheers to your new yellow bungalow! May your days be filled with laughter on the porch swing and sweet lemonade from the lemon tree. You both deserve this!",
-      "long": "Congratulations on your first home, Ben and Lily! Your yellow bungalow with the charming porch swing and a lemon tree is the perfect spot for fun gatherings. May your new adventure be filled with laughter, sweet sips, and endless joy. Here's to making wonderful memories together!"
-    }
-  },
-  "anniversary-cards/boyfriend-1st-comic": {
-    "message": "Happy anniversary! From losing every hole in the rain to our monthly mini golf battles, each moment with you is a hole-in-one. Here’s to more laughs and good times ahead!",
-    "closing": "To many more mini golf adventures!",
-    "variants": {
-      "short": "Cheers to our mini golf championship. Can’t wait for more rainy rounds with you!",
-      "medium": "Happy anniversary! From losing every hole in the rain to our monthly mini golf battles, each moment with you is a hole-in-one. Here’s to more laughs and good times ahead!",
-      "long": "Can you believe it’s been a year since our mini golf adventure in that downpour? You lost every hole, but you’ve won my heart every day since! Here’s to our monthly rounds filled with laughter, rainy days, and plenty more unforgettable moments together. I love you!"
     }
   },
   "anniversary-cards/parents-40th-vintage": {
@@ -296,60 +206,6 @@
       "long": "Congratulations on retiring after 40 long years of engineering! Now you've got all the time you need to finally perfect that golf swing. May every day be filled with relaxation, laughter, and maybe a little less time on the couch!"
     }
   },
-  "new-baby-cards/baby-girl-nursery": {
-    "message": "Congratulations on welcoming baby Olivia! Her nursery filled with bunnies and stars is a magical start to her journey. Wishing you all the joy and love during this beautiful time.",
-    "closing": "Wishing you all the love and happiness in the world.",
-    "variants": {
-      "short": "Welcome to the world, sweet Olivia! Your nursery of bunnies and stars is just perfect.",
-      "medium": "Congratulations on welcoming baby Olivia! Her nursery filled with bunnies and stars is a magical start to her journey. Wishing you all the joy and love during this beautiful time.",
-      "long": "So thrilled to welcome little Olivia into the world! Her nursery, filled with charming bunnies and shimmering stars, is a wonderful place for her to dream and grow. May this new adventure bring you endless joy and cherished moments as a family."
-    }
-  },
-  "retirement-cards/teacher-retire-watercolor": {
-    "message": "Congratulations on 35 incredible years of teaching! May your days be filled with joy and beauty as you tend to your flower garden.",
-    "closing": "Wishing you a beautiful retirement ahead!",
-    "variants": {
-      "short": "Enjoy every moment in your flower garden. You deserve it!",
-      "medium": "Congratulations on 35 incredible years of teaching! May your days be filled with joy and beauty as you tend to your flower garden.",
-      "long": "After 35 wonderful years of shaping young minds, it’s time for you to cultivate your own happiness in your flower garden. Your dedication and passion have left a lasting impact on so many. Wishing you a retirement filled with joy and blooming adventures."
-    }
-  },
-  "thank-you-cards/mentor-thanks-vector": {
-    "message": "Your weekly coffee chats and honest advice were instrumental in my first year as a manager. I truly appreciate your support and mentorship.",
-    "closing": "With sincere gratitude,",
-    "variants": {
-      "short": "Thank you for your invaluable guidance this year.",
-      "medium": "Your weekly coffee chats and honest advice were instrumental in my first year as a manager. I truly appreciate your support and mentorship.",
-      "long": "Thank you for being an incredible mentor during my first year as a manager. Your weekly coffee chats and honest insights have been invaluable. I appreciate the time you've invested in my growth and am grateful for your unwavering support."
-    }
-  },
-  "congratulations-cards/promotion-collage": {
-    "message": "Congrats on your promotion to Vice President after a decade of hard work! May your new role be as rewarding as a perfect espresso and as smooth as your favorite fountain pen.",
-    "closing": "Wishing you continued success in your new position!",
-    "variants": {
-      "short": "Congratulations on your well-deserved promotion to Vice President!",
-      "medium": "Congrats on your promotion to Vice President after a decade of hard work! May your new role be as rewarding as a perfect espresso and as smooth as your favorite fountain pen.",
-      "long": "Congratulations on your promotion to Vice President! After ten years of dedication, you truly deserve this recognition. Your passion for excellence inspires us all. May your new role bring as much joy as a strong espresso and success as smooth as your favorite fountain pen."
-    }
-  },
-  "fathers-day-cards/dad-jokes-comic": {
-    "message": "Thank you for being the undisputed king of dad jokes and the weekend grill master. Your ‘Kiss the Cook’ apron should come with a warning label!",
-    "closing": "Cheers to you, Dad!",
-    "variants": {
-      "short": "Happy Father's Day to the undisputed king of dad jokes and grill mastery!",
-      "medium": "Thank you for being the undisputed king of dad jokes and the weekend grill master. Your ‘Kiss the Cook’ apron should come with a warning label!",
-      "long": "Happy Father’s Day to the undisputed king of dad jokes, who can always bring a smile with a bad pun. Your culinary skills on the grill are only rivaled by your ability to serve up laughter in every joke. Keep rocking that ‘Kiss the Cook’ apron—you wear it like a champion!"
-    }
-  },
-  "thank-you-cards/host-thanks-collage": {
-    "message": "Thank you for an enchanting evening filled with your homemade pasta, candlelight, and way too much tiramisu! It was a memory I will cherish.",
-    "closing": "With heartfelt gratitude for your generosity.",
-    "variants": {
-      "short": "Your dinner was a masterpiece—thank you for the lovely evening!",
-      "medium": "Thank you for an enchanting evening filled with your homemade pasta, candlelight, and way too much tiramisu! It was a memory I will cherish.",
-      "long": "What a delightful evening! Your homemade pasta was exquisite, the candlelight in the garden created an unforgettable atmosphere, and the tiramisu was truly heavenly. Thank you for the wonderful memories and friendship; it was a night to remember."
-    }
-  },
   "mothers-day-cards/mom-travel-poster": {
     "message": "You finally made it to Kyoto during cherry blossom season! I hope the beauty of the blooms inspires you as much as you inspire me every day.",
     "closing": "Enjoy every blossom!",
@@ -366,15 +222,6 @@
       "short": "Wishing you a peaceful Father’s Day by the river, doing what you love most.",
       "medium": "Happy Father’s Day! May you spend the day fly fishing on that quiet Montana river, enjoying every moment in your favorite spot. You deserve it.",
       "long": "On this Father’s Day, I hope you find peace and joy fly fishing in the stillness of your favorite Montana river. Thank you for all the lessons you’ve taught me, and for sharing your love of nature with me. Enjoy every cast!"
-    }
-  },
-  "mothers-day-cards/mom-garden-watercolor": {
-    "message": "Your beautiful blue hydrangea garden is the pride of the neighborhood. Thank you for bringing so much joy and color into our lives. Happy Mother’s Day!",
-    "closing": "With all my love on this special day.",
-    "variants": {
-      "short": "Your blue hydrangea garden brightens our lives. Happy Mother’s Day!",
-      "medium": "Your beautiful blue hydrangea garden is the pride of the neighborhood. Thank you for bringing so much joy and color into our lives. Happy Mother’s Day!",
-      "long": "Every time I see your stunning blue hydrangea garden, I'm reminded of your love and dedication. It truly is the pride of our neighborhood, just like you are to our family. Wishing you a beautiful Mother’s Day filled with all the love you give us every day."
     }
   },
   "sympathy-cards/grandmother-loss-papercut": {
@@ -395,24 +242,6 @@
       "long": "Just imagine the laughter and joy as we roll the snow into giant balls and decorate him together. Ready for a winter adventure, my little snow pals?"
     }
   },
-  "sympathy-cards/friend-loss-editorial": {
-    "message": "I can’t imagine the pain of losing Dan. His spirit will always walk those peaceful mountain trails in the Sierra Nevada, where the golden hour shines bright.",
-    "closing": "With heartfelt sympathy and support.",
-    "variants": {
-      "short": "Thinking of you and the peaceful trails Dan loved.",
-      "medium": "I can’t imagine the pain of losing Dan. His spirit will always walk those peaceful mountain trails in the Sierra Nevada, where the golden hour shines bright.",
-      "long": "In this difficult time, I want you to know that my heart goes out to you. Dan’s adventurous spirit will forever echo through the serene trails of the Sierra Nevada. May the golden hour remind you of the joy he found there, amidst the beauty of nature, where he’ll always be at peace."
-    }
-  },
-  "christmas-cards/cabin-christmas-watercolor": {
-    "message": "Celebrating another Christmas at our snowy log cabin brings warmth to my heart. The glowing windows and wreath make it feel like home. Cherishing these moments with you both.",
-    "closing": "With all my love, Merry Christmas!",
-    "variants": {
-      "short": "Merry Christmas from our snowy log cabin! Love fills the air with each glowing window.",
-      "medium": "Celebrating another Christmas at our snowy log cabin brings warmth to my heart. The glowing windows and wreath make it feel like home. Cherishing these moments with you both.",
-      "long": "This Christmas at our snowy log cabin in Lake Tahoe brings so much joy. The glowing windows and the beautiful wreath on the door remind me of the love our family shares. I treasure every moment spent with you—thank you for making our gatherings so special."
-    }
-  },
   "valentines-day-cards/kids-valentine-storybook": {
     "message": "Happy Valentine’s Day to my favorite little unicorn! Your heart doodles make every day magical. Keep shining and jumping in those pink rain boots!",
     "closing": "With all my love and hugs!",
@@ -422,15 +251,6 @@
       "long": "On this special day, I just want to remind you how much you sparkle like a unicorn! Your heart doodles make the world a better place, and I love every adventure we share. Keep being you, my little artist in pink rain boots! Happy Valentine’s Day!"
     }
   },
-  "get-well-cards/mom-get-well-pencil": {
-    "message": "May your days be filled with chamomile tea, fun crossword puzzles, and the comforting company of Biscuit. Take all the time you need to rest and heal. Sending you my love!",
-    "closing": "With all my love and warm wishes for your recovery.",
-    "variants": {
-      "short": "Wishing you cozy days with chamomile tea, crossword puzzles, and Biscuit by your side. Get well soon!",
-      "medium": "May your days be filled with chamomile tea, fun crossword puzzles, and the comforting company of Biscuit. Take all the time you need to rest and heal. Sending you my love!",
-      "long": "I hope you find comfort in chamomile tea, enjoy the challenge of crossword puzzles, and have Biscuit snuggled up with you while you rest. You're in my thoughts, and I can't wait to see you back to your wonderful self soon!"
-    }
-  },
   "graduation-cards/high-school-grad-comic": {
     "message": "Congratulations on your graduation, Marcus! Four years of building amazing robots has prepared you well. Now, get ready to engineer even greater things in college!",
     "closing": "Cheers to your next adventure!",
@@ -438,24 +258,6 @@
       "short": "Congrats, robot master!",
       "medium": "Congratulations on your graduation, Marcus! Four years of building amazing robots has prepared you well. Now, get ready to engineer even greater things in college!",
       "long": "Way to go, Marcus! After four years of creating incredible robots, you're off to college for engineering. Dream big and keep inventing!"
-    }
-  },
-  "get-well-cards/grandpa-garden-watercolor": {
-    "message": "I hope you’re feeling better, Grandpa! Your vegetable garden, especially those prize tomatoes and bright sunflowers, is missed around here. Can’t wait to see you back in action soon.",
-    "closing": "Sending love and warm wishes for a quick recovery.",
-    "variants": {
-      "short": "Thinking of you, Grandpa. Can't wait for those prize tomatoes and sunflowers to flourish again.",
-      "medium": "I hope you’re feeling better, Grandpa! Your vegetable garden, especially those prize tomatoes and bright sunflowers, is missed around here. Can’t wait to see you back in action soon.",
-      "long": "Wishing you a speedy recovery, Grandpa Joe. The garden feels empty without your careful touch. We all miss your prize tomatoes and stunning sunflowers. Get well soon so we can enjoy your harvest together again."
-    }
-  },
-  "sympathy-cards/father-loss-watercolor": {
-    "message": "Thinking of you as Walt continues to fish peacefully at dawn on Lake Tahoe, surrounded by the love of his grandkids. His joyful memories will always be with you.",
-    "closing": "With heartfelt sympathy and love.",
-    "variants": {
-      "short": "Walt's spirit will forever shine on Lake Tahoe's calm waters.",
-      "medium": "Thinking of you as Walt continues to fish peacefully at dawn on Lake Tahoe, surrounded by the love of his grandkids. His joyful memories will always be with you.",
-      "long": "As you cherish the memories of Walt fishing at dawn on Lake Tahoe, may the beauty of those serene moments bring you comfort. His laughter and love live on in your heart and in the hearts of his grandkids. You are in my thoughts during this difficult time."
     }
   },
   "christmas-cards/vintage-santa": {
@@ -476,24 +278,6 @@
       "long": "As you begin your journey together, may your love be as vibrant and enduring as the wildflowers that grace the landscape of your rustic barn. Wishing you a lifetime of joy, laughter, and cherished memories."
     }
   },
-  "new-baby-cards/twins-claymation": {
-    "message": "Congratulations on the arrival of Max and Sam! With twin boys, get ready for double the diapers and double the joy. Your house will be filled with twice the laughter!",
-    "closing": "Wishing you all the happiness in this new chapter!",
-    "variants": {
-      "short": "Double the diapers, double the joy! Congrats on your twin boys, Max and Sam!",
-      "medium": "Congratulations on the arrival of Max and Sam! With twin boys, get ready for double the diapers and double the joy. Your house will be filled with twice the laughter!",
-      "long": "Welcome to the wild world of parenting! With Max and Sam joining the family, you'll experience double the diapers, double the joy, and an endless supply of love and laughter. Prepare for twice the adventures and twice the fun—you're going to need it!"
-    }
-  },
-  "fathers-day-cards/stepdad-editorial": {
-    "message": "Your patience while teaching me to drive made all the difference. You never raised your voice, which meant the world to me. Happy Father's Day to an amazing stepdad!",
-    "closing": "With love and appreciation.",
-    "variants": {
-      "short": "Thanks for teaching me to drive with patience and calm. Happy Father's Day!",
-      "medium": "Your patience while teaching me to drive made all the difference. You never raised your voice, which meant the world to me. Happy Father's Day to an amazing stepdad!",
-      "long": "Happy Father's Day! I'll always cherish the time you took to teach me how to drive in that empty parking lot. Your calm demeanor and endless patience made it such a special experience. Thank you for being a wonderful stepdad and always supporting me."
-    }
-  },
   "christmas-cards/family-pajamas-3d": {
     "message": "From our family of four in matching red plaid pajamas, to Waffles in his jolly Santa hat, we're sending you heaps of Christmas cheer and love this season!",
     "closing": "Happy Holidays!",
@@ -501,42 +285,6 @@
       "short": "Wishing you all the holiday joy from our cozy crew in plaid and Waffles in his Santa hat!",
       "medium": "From our family of four in matching red plaid pajamas, to Waffles in his jolly Santa hat, we're sending you heaps of Christmas cheer and love this season!",
       "long": "As we gather around the tree in our matching red plaid pajamas, and Waffles rocks his festive Santa hat, we're reminded of the joy and warmth this season brings. Sending you all our love and holiday cheer—may your days be merry and bright!"
-    }
-  },
-  "thank-you-cards/babysitter-thanks-3d": {
-    "message": "You're the ultimate blanket fort architect and the voice wizard of story time! The twins adore you! Thanks for making every adventure so magical.",
-    "closing": "Forever grateful for your magic!",
-    "variants": {
-      "short": "Thanks for being the best blanket fort architect and storyteller! You're a legend!",
-      "medium": "You're the ultimate blanket fort architect and the voice wizard of story time! The twins adore you! Thanks for making every adventure so magical.",
-      "long": "You transform ordinary days into epic adventures with your storytelling and blanket fort masterpieces! The twins can't stop talking about all the fun they have with you. Your magic brings joy and laughter to their world. Thank you for being such an extraordinary babysitter!"
-    }
-  },
-  "wedding-cards/courthouse-wedding-vector": {
-    "message": "You two eloped at City Hall, then celebrated with tacos and margaritas! It seems you’ve found the perfect recipe for love. Here’s to adventure and a lifetime of laughter together!",
-    "closing": "Wishing you endless joy and laughter on this crazy journey together!",
-    "variants": {
-      "short": "Tacos, margaritas, and a spontaneous elopement? Cheers to a delightfully unconventional wedding!",
-      "medium": "You two eloped at City Hall, then celebrated with tacos and margaritas! It seems you’ve found the perfect recipe for love. Here’s to adventure and a lifetime of laughter together!",
-      "long": "Congratulations on your San Francisco elopement! Who knew a spontaneous trip to City Hall would lead to tacos and margaritas for the ultimate wedding celebration? Your love is as vibrant as your party, and I can’t wait to see where this adventure takes you both. Cheers to a lifetime of fun!"
-    }
-  },
-  "mothers-day-cards/new-mom-nursery": {
-    "message": "On this special first Mother’s Day, seeing your bond with Ellie fills my heart with joy. You are an amazing mother, and I’m so grateful for you.",
-    "closing": "With all my love today and always.",
-    "variants": {
-      "short": "Happy first Mother’s Day! Your love for Ellie is truly inspiring.",
-      "medium": "On this special first Mother’s Day, seeing your bond with Ellie fills my heart with joy. You are an amazing mother, and I’m so grateful for you.",
-      "long": "Celebrating your first Mother’s Day with baby Ellie is such a heartfelt moment. Watching you nurture and love her has been incredible. Your strength and kindness shine brightly as you embark on this beautiful journey of motherhood. I cherish every moment we share as a family."
-    }
-  },
-  "retirement-cards/fishing-retire-pencil": {
-    "message": "After 32 years of dedication, it’s time to enjoy mornings by the dock. Your fishing adventures await, standing proud in your hat and flannel. You've truly earned this retirement!",
-    "closing": "Cheers to new beginnings!",
-    "variants": {
-      "short": "Enjoy every moment off the dock, Grandpa! You’ve earned it.",
-      "medium": "After 32 years of dedication, it’s time to enjoy mornings by the dock. Your fishing adventures await, standing proud in your hat and flannel. You've truly earned this retirement!",
-      "long": "Congratulations on your retirement, Grandpa! After 32 wonderful years at the post office, it's your time to relax and enjoy fishing off the dock each morning. May your days be filled with peace, laughter, and new adventures in your favorite flannel shirt and fishing hat."
     }
   },
   "sympathy-cards/colleague-loss-vector": {
@@ -566,24 +314,6 @@
       "long": "Celebrating you this Father’s Day for all the moments spent together restoring classic cars. Your red 1965 Mustang is a testament to your passion and love. Thank you for letting us be part of this journey with you."
     }
   },
-  "mothers-day-cards/stepmom-editorial": {
-    "message": "You’ve been a wonderful addition to our lives. Your support at my soccer games over the years means so much to me. I’m grateful for having you as my stepmom.",
-    "closing": "Happy Mother’s Day!",
-    "variants": {
-      "short": "Thanks for always cheering me on at every game!",
-      "medium": "You’ve been a wonderful addition to our lives. Your support at my soccer games over the years means so much to me. I’m grateful for having you as my stepmom.",
-      "long": "Ten years ago, you became a special part of our family, and I can’t thank you enough for being there at every soccer game. Your unwavering love and support have made such a difference in my life. I’m so grateful to have you as my stepmom."
-    }
-  },
-  "new-baby-cards/adoption-watercolor": {
-    "message": "Congratulations, Chris and Alex! Grace is so lucky to be welcomed into your loving home. May your days be filled with joy as you start this beautiful adventure together.",
-    "closing": "With love and warm wishes on this new chapter.",
-    "variants": {
-      "short": "Welcome home, Grace! Your journey to family is finally complete.",
-      "medium": "Congratulations, Chris and Alex! Grace is so lucky to be welcomed into your loving home. May your days be filled with joy as you start this beautiful adventure together.",
-      "long": "What a beautiful moment as you welcome little Grace into your family! After the wait, your cozy home is finally filled with laughter and love. May every step together be an adventure filled with cherished memories and endless joy."
-    }
-  },
   "new-baby-cards/baby-boy-storybook": {
     "message": "Congratulations on the arrival of baby Theo! I can't wait to see how proud June will be as the best big sister. Get ready for plenty of fun and laughter!",
     "closing": "Cheers to new adventures and family fun!",
@@ -611,24 +341,6 @@
       "long": "Your legendary lasagna could singlehandedly bring world peace—and it definitely brings joy to my life! Thanks for being my superhero in the kitchen and beyond. Happy Mother’s Day!"
     }
   },
-  "graduation-cards/nursing-grad-3d": {
-    "message": "Congratulations on earning your teaching credential! Your determination to go back to school at 45 inspires us all. I’m excited to see where this journey takes you!",
-    "closing": "Cheers to your bright future!",
-    "variants": {
-      "short": "You did it! So proud of your achievement, brother!",
-      "medium": "Congratulations on earning your teaching credential! Your determination to go back to school at 45 inspires us all. I’m excited to see where this journey takes you!",
-      "long": "Graduating with your teaching credential is a monumental achievement! Your commitment to going back to school at 45 is truly inspiring. Your passion for education will positively impact so many lives. I'm incredibly proud of you, brother, and can’t wait to see the difference you’ll make!"
-    }
-  },
-  "new-baby-cards/baby-with-dog-pencil": {
-    "message": "Welcome baby Arjun! It warms my heart to see Bear taking his role as protector so seriously. Wishing your family endless joy and unforgettable moments together.",
-    "closing": "With love and joy for your growing family.",
-    "variants": {
-      "short": "Congratulations on baby Arjun! Bear is the perfect guardian.",
-      "medium": "Welcome baby Arjun! It warms my heart to see Bear taking his role as protector so seriously. Wishing your family endless joy and unforgettable moments together.",
-      "long": "Congratulations on the arrival of baby Arjun! It's heartwarming to see Bear settling into his role as the little one's protector. May your home be filled with love, laughter, and the delightful sounds of new beginnings."
-    }
-  },
   "anniversary-cards/wife-10th-watercolor": {
     "message": "Every Sunday morning has been a blessing, reading side by side since we met in that charming bookstore. Cheers to a decade of love, laughter, and countless stories together.",
     "closing": "Forever grateful for you.",
@@ -636,15 +348,6 @@
       "short": "Ten years ago in that little bookstore, I found my forever. Here's to many more Sundays side by side.",
       "medium": "Every Sunday morning has been a blessing, reading side by side since we met in that charming bookstore. Cheers to a decade of love, laughter, and countless stories together.",
       "long": "Ten years have flown by since our paths crossed in that cozy bookstore in Portland. Those Sunday mornings spent reading side by side are my favorite moments. Thank you for being my partner in every story, and here's to many more chapters together."
-    }
-  },
-  "thank-you-cards/teacher-thanks-storybook": {
-    "message": "Your reading corner and Shelly the turtle made learning so special for Noah. Thank you for nurturing his love for books and making every day in class a joy.",
-    "closing": "With heartfelt thanks and appreciation.",
-    "variants": {
-      "short": "Thank you for igniting Noah's passion for reading in such a warm and inviting way.",
-      "medium": "Your reading corner and Shelly the turtle made learning so special for Noah. Thank you for nurturing his love for books and making every day in class a joy.",
-      "long": "We are incredibly grateful for the warmth and encouragement you've shown Noah in your second-grade class. Your reading corner and Shelly the turtle created a magical space where he fell in love with stories. Thank you for making learning such a delightful experience."
     }
   },
   "get-well-cards/friend-knee-comic": {
@@ -674,15 +377,6 @@
       "long": "As you begin this incredible journey together, may your wedding at the vineyard in Napa be filled with laughter, love, and unforgettable moments at sunset. Here's to a lifetime of happiness and shared dreams."
     }
   },
-  "new-baby-cards/grandbaby-vintage": {
-    "message": "So thrilled to celebrate your new role as grandparents! Baby Rose is a precious addition to our family, and I know she'll be surrounded by love.",
-    "closing": "With all my love and joy for this wonderful new chapter.",
-    "variants": {
-      "short": "Congratulations on becoming grandparents! Baby Rose is lucky to have you both.",
-      "medium": "So thrilled to celebrate your new role as grandparents! Baby Rose is a precious addition to our family, and I know she'll be surrounded by love.",
-      "long": "Congratulations on welcoming baby Rose into our family! I can't wait to see the love and joy you both will bring as grandparents. This little one is so fortunate to have you in her life, shaping her world with warmth and wisdom."
-    }
-  },
   "fathers-day-cards/dad-workshop-pencil": {
     "message": "Your birdhouses aren't just projects; they symbolize the love and care you share with our family. Thanks for being a constant source of inspiration.",
     "closing": "Happy Father's Day!",
@@ -692,24 +386,6 @@
       "long": "Thank you for your unwavering support and love, transforming moments into cherished memories. You always inspire me to create and explore, just like in your workshop."
     }
   },
-  "wedding-cards/two-grooms-editorial": {
-    "message": "Congratulations on your wedding! From meeting in the choir to celebrating love in a historic library, your story is a beautiful melody. May your life together be filled with joy and harmony.",
-    "closing": "With heartfelt wishes for your beautiful future together.",
-    "variants": {
-      "short": "Wishing you both a beautiful journey together, starting in that historic library where your hearts harmonized.",
-      "medium": "Congratulations on your wedding! From meeting in the choir to celebrating love in a historic library, your story is a beautiful melody. May your life together be filled with joy and harmony.",
-      "long": "As you step into this new chapter of your lives, I reflect on the beautiful harmony that began in our community choir. Celebrating your wedding in a historic library adds a magical touch to your unique love story. May every moment together resonate with joy, laughter, and everlasting love."
-    }
-  },
-  "mothers-day-cards/grandma-mothers-day-pencil": {
-    "message": "Thank you for teaching me the art of knitting and sharing special moments on the porch swing. Your love weaves through every stitch. Happy Mother’s Day!",
-    "closing": "With all my love on this special day.",
-    "variants": {
-      "short": "Your love and knitting lessons are my treasures. Happy Mother’s Day!",
-      "medium": "Thank you for teaching me the art of knitting and sharing special moments on the porch swing. Your love weaves through every stitch. Happy Mother’s Day!",
-      "long": "Your patience and warmth as you teach us to knit on the porch swing have created so many cherished memories. I’m grateful for every lesson and laugh we share. Happy Mother’s Day!"
-    }
-  },
   "retirement-cards/boss-retire-collage": {
     "message": "Congratulations on an incredible journey! After 25 years of leading our company, may your retirement bring you the joy of sailing on calm waters and exploring new horizons.",
     "closing": "Cheers to your next chapter!",
@@ -717,15 +393,6 @@
       "short": "Wishing you calm seas and endless adventures in retirement. Your legacy will be cherished.",
       "medium": "Congratulations on an incredible journey! After 25 years of leading our company, may your retirement bring you the joy of sailing on calm waters and exploring new horizons.",
       "long": "As you retire after 25 remarkable years of founding and leading our company, we celebrate your legacy. May the calm waters ahead bring you peace and joy as you embark on new adventures sailing into the horizon."
-    }
-  },
-  "christmas-cards/cookie-baking-pencil": {
-    "message": "Our annual gingerbread cookie baking on Christmas Eve is my favorite tradition. Thank you for filling the holiday season with warmth and love. Merry Christmas!",
-    "closing": "Wishing you a joyous holiday season!",
-    "variants": {
-      "short": "I cherish our gingerbread cookie tradition. Merry Christmas, Mom!",
-      "medium": "Our annual gingerbread cookie baking on Christmas Eve is my favorite tradition. Thank you for filling the holiday season with warmth and love. Merry Christmas!",
-      "long": "Every Christmas Eve, baking gingerbread cookies with you brings me so much joy. It’s a special time that I always look forward to, filled with laughter and memories. Thank you for making the holidays magical. Merry Christmas, Mom!"
     }
   },
   "anniversary-cards/husband-25th-poster": {
@@ -746,13 +413,346 @@
       "long": "Thank you for your incredible patience and the joy you brought to Dad during his recovery. Your humor and compassionate care made all the difference in his healing process. We are forever grateful for your support and kindness."
     }
   },
-  "wedding-cards/second-wedding-vintage": {
-    "message": "Congratulations on finding your way back to each other. May your love only deepen from here as you celebrate this new journey together with laughter and joy.",
-    "closing": "With all my love on your special day.",
+  "anniversary-cards/boyfriend-1st-comic": {
+    "message": "Happy 1st anniversary! From falling eleven times on our first date to our monthly skating adventures, every moment with you brings a smile to my face. Let’s keep rolling!",
+    "closing": "Here’s to many more adventures together!",
     "variants": {
-      "short": "Wishing you both endless joy as you start this beautiful chapter together.",
-      "medium": "Congratulations on finding your way back to each other. May your love only deepen from here as you celebrate this new journey together with laughter and joy.",
-      "long": "Your love story is an inspiration for us all. As you embark on this exciting journey, may every day be filled with laughter, understanding, and unwavering support. Cheers to a beautiful future together, filled with love and cherished moments."
+      "short": "Cheers to another year of epic skating—and all the falls along the way!",
+      "medium": "Happy 1st anniversary! From falling eleven times on our first date to our monthly skating adventures, every moment with you brings a smile to my face. Let’s keep rolling!",
+      "long": "One year down, countless laughs and falls to go! Remember our first date at the roller rink? Eleven wipeouts later, your smile remained intact. Here’s to our monthly skating adventures and all the memories yet to come. You make every tumble worth it!"
+    }
+  },
+  "thank-you-cards/host-thanksgiving-collage": {
+    "message": "Your Thanksgiving gathering was truly special—wonderful food, especially the three kinds of pie, and the kids' table was the highlight of the day. Thank you for your warm hospitality.",
+    "closing": "With heartfelt gratitude for your kindness.",
+    "variants": {
+      "short": "Thank you for a memorable Thanksgiving with three amazing pies and a delightful kids' table.",
+      "medium": "Your Thanksgiving gathering was truly special—wonderful food, especially the three kinds of pie, and the kids' table was the highlight of the day. Thank you for your warm hospitality.",
+      "long": "Thank you for hosting such a magnificent Thanksgiving celebration. The warmth of your home and the delicious three kinds of pie made it unforgettable. The kids' table was a delightful addition that stole the show! We're truly grateful for your friendship and generosity."
+    }
+  },
+  "thank-you-cards/mentor-thanks-vector": {
+    "message": "I truly appreciate your support and honest advice during my first year as a manager. Our walking meetings made all the difference in navigating challenges and growing in this role.",
+    "closing": "With gratitude for your support and wisdom.",
+    "variants": {
+      "short": "Thank you for your invaluable guidance through my first year as a manager.",
+      "medium": "I truly appreciate your support and honest advice during my first year as a manager. Our walking meetings made all the difference in navigating challenges and growing in this role.",
+      "long": "Your mentorship has been instrumental in my development as a manager this past year. I greatly value our weekly walking meetings and the honest advice you've shared. Thank you for guiding me through the challenges and inspiring growth."
+    }
+  },
+  "thank-you-cards/teacher-thanks-storybook": {
+    "message": "We are so grateful for your support in helping Owen discover his voice as a narrator. Your warmth and encouragement made a lasting difference.",
+    "closing": "With heartfelt appreciation,",
+    "variants": {
+      "short": "Thank you for helping Owen find his voice in the class play.",
+      "medium": "We are so grateful for your support in helping Owen discover his voice as a narrator. Your warmth and encouragement made a lasting difference.",
+      "long": "Thank you for being such an amazing teacher to Owen. Your support and guidance helped him confidently find his voice as the narrator in the class play. We're so grateful for the love and care you've shown, especially with Shelly always by your side."
+    }
+  },
+  "thank-you-cards/neighbor-fence-claymation": {
+    "message": "Your help with the fence after the storm was so appreciated. That pot of chili you brought over was a delicious bonus! Thank you for being such a great neighbor.",
+    "closing": "With heartfelt thanks and appreciation.",
+    "variants": {
+      "short": "Thanks for fixing the fence and bringing that amazing chili!",
+      "medium": "Your help with the fence after the storm was so appreciated. That pot of chili you brought over was a delicious bonus! Thank you for being such a great neighbor.",
+      "long": "I can’t thank you enough for fixing our fence after the storm—it means the world to us! Your thoughtful gesture of bringing that incredible pot of chili was the cherry on top. We're so grateful to have you as a neighbor."
+    }
+  },
+  "thank-you-cards/babysitter-thanks-3d": {
+    "message": "We’re so grateful for our favorite babysitter! Your epic blanket forts and incredible voices at story time bring so much joy to the kids. Thank you for everything!",
+    "closing": "You’re simply the best!",
+    "variants": {
+      "short": "Thanks for being the ultimate blanket fort master and storyteller!",
+      "medium": "We’re so grateful for our favorite babysitter! Your epic blanket forts and incredible voices at story time bring so much joy to the kids. Thank you for everything!",
+      "long": "You’re not just our babysitter; you’re a master of epic blanket forts and an amazing storyteller! The kids adore every moment spent with you, and your voices bring stories to life. Thank you for filling our home with laughter and fun!"
+    }
+  },
+  "anniversary-cards/partner-5th-claymation": {
+    "message": "Cheers to five years of adventures! From road-tripping in our old camper van to adopting Tripod, every moment has been unforgettable. Here’s to many more journeys together!",
+    "closing": "Here’s to our forever adventure!",
+    "variants": {
+      "short": "Five amazing years, countless road trips, and our three-legged adventurer, Tripod. Let’s keep exploring!",
+      "medium": "Cheers to five years of adventures! From road-tripping in our old camper van to adopting Tripod, every moment has been unforgettable. Here’s to many more journeys together!",
+      "long": "Happy fifth anniversary! It’s been a wild ride, hasn’t it? From the countless memories made during our road trips in the camper van to adopting our wonderful three-legged pup, Tripod, every moment has brought us closer. Let’s continue this adventure together, one destination at a time!"
+    }
+  },
+  "sympathy-cards/father-loss-watercolor": {
+    "message": "Your father’s legacy of caring, from the bountiful apples to the quiet beauty of the orchard, will forever be cherished in our hearts.",
+    "closing": "Thinking of you with heartfelt sympathy.",
+    "variants": {
+      "short": "Walt's orchard will always remind us of his generosity.",
+      "medium": "Your father’s legacy of caring, from the bountiful apples to the quiet beauty of the orchard, will forever be cherished in our hearts.",
+      "long": "In the misty autumn of your father’s orchard, we find solace in the memories of his kindness and the way he shared his harvest each year. Walt’s spirit and generosity will always remain part of our lives."
+    }
+  },
+  "get-well-cards/grandpa-chess-watercolor": {
+    "message": "Get well soon, Grandpa! I can’t wait to see you back at the park for our Tuesday chess games with friends. Your presence is truly missed.",
+    "closing": "Sending all my love your way.",
+    "variants": {
+      "short": "Wishing you a speedy recovery, Grandpa! We miss our Tuesday chess games.",
+      "medium": "Get well soon, Grandpa! I can’t wait to see you back at the park for our Tuesday chess games with friends. Your presence is truly missed.",
+      "long": "I hope you’re feeling better soon, Grandpa! It’s tough not having you at our Tuesday chess games in the park. Your friends and I are all thinking of you and can’t wait to share some laughs again. Take care!"
+    }
+  },
+  "get-well-cards/mom-get-well-pencil": {
+    "message": "I hope you’re feeling better every day. Enjoy your chamomile tea and those crossword puzzles! Kiwi is waiting for your company and sending chirps of love.",
+    "closing": "Get well soon!",
+    "variants": {
+      "short": "Sending healing thoughts as you sip chamomile tea with Kiwi by your side.",
+      "medium": "I hope you’re feeling better every day. Enjoy your chamomile tea and those crossword puzzles! Kiwi is waiting for your company and sending chirps of love.",
+      "long": "Wishing you a smooth recovery filled with cozy moments sipping chamomile tea. Take your time with crossword puzzles, and enjoy the sweet company of Kiwi. You’re in my thoughts, and I can’t wait to see you back to your wonderful self."
+    }
+  },
+  "sympathy-cards/friend-loss-editorial": {
+    "message": "As you walk through the trails of the Sierra Nevada, remember that Hector is now part of every peaceful sunset and every golden hour.",
+    "closing": "With heartfelt sympathy in this difficult time.",
+    "variants": {
+      "short": "Hector is on every peaceful trail in the Sierra Nevada now.",
+      "medium": "As you walk through the trails of the Sierra Nevada, remember that Hector is now part of every peaceful sunset and every golden hour.",
+      "long": "In the quiet moments along the Sierra Nevada trails, may you find solace in knowing Hector is now part of every serene view, every golden hour, and every peaceful step you take. His spirit will always accompany you."
+    }
+  },
+  "congratulations-cards/new-home-claymation": {
+    "message": "Cheers to your fabulous yellow bungalow! May your days be filled with laughter on the porch swing and sweet treats from your lemon tree!",
+    "closing": "Wishing you sunny adventures ahead!",
+    "variants": {
+      "short": "Congrats on your new yellow bungalow! Enjoy that swing and the delicious lemonade!",
+      "medium": "Cheers to your fabulous yellow bungalow! May your days be filled with laughter on the porch swing and sweet treats from your lemon tree!",
+      "long": "Congratulations on owning your charming yellow bungalow! The big porch swing is perfect for lazy afternoons, and I can already imagine the refreshing lemonade from your blossoming lemon tree. Here’s to countless happy memories in your new home!"
+    }
+  },
+  "congratulations-cards/promotion-collage": {
+    "message": "Congratulations on becoming Vice President, Victor! Your commitment over the past ten years truly deserves this recognition. Wishing you success in your new role, and may your fountain pen and vintage watch inspire many more achievements.",
+    "closing": "Best wishes for your continued success.",
+    "variants": {
+      "short": "Congratulations on your promotion, Victor! You've earned it after ten years of dedication.",
+      "medium": "Congratulations on becoming Vice President, Victor! Your commitment over the past ten years truly deserves this recognition. Wishing you success in your new role, and may your fountain pen and vintage watch inspire many more achievements.",
+      "long": "Congratulations on your well-deserved promotion to Vice President, Victor! Your hard work and dedication over the last ten years have truly paid off. I am excited to see how you will lead us to new heights. May your love for fountain pens and vintage watches remind you of the timeless value you bring to our team."
+    }
+  },
+  "graduation-cards/kindergarten-grad-storybook": {
+    "message": "Way to go, Zoe! Graduating kindergarten is a huge milestone, and you can count all the way to 100! Peanut the hamster is lucky to have you as a friend!",
+    "closing": "Onward to new adventures!",
+    "variants": {
+      "short": "Congratulations on graduating kindergarten! You're a counting superstar! Enjoy your adventures with Peanut!",
+      "medium": "Way to go, Zoe! Graduating kindergarten is a huge milestone, and you can count all the way to 100! Peanut the hamster is lucky to have you as a friend!",
+      "long": "Zoe, you've done it! Graduating kindergarten is a fantastic achievement! Your ability to count all the way to 100 shows just how amazing you are. I know Peanut the hamster must be cheering for you too! Enjoy every moment of your exciting journey ahead!"
+    }
+  },
+  "graduation-cards/college-grad-watercolor": {
+    "message": "Congratulations on being the first in our family to earn your marine biology degree! Your dedication to volunteering at the aquarium shows your passion. You’ve truly made us proud.",
+    "closing": "With all my love and pride.",
+    "variants": {
+      "short": "Proud of you for earning your marine biology degree and volunteering at the aquarium. You inspire us all.",
+      "medium": "Congratulations on being the first in our family to earn your marine biology degree! Your dedication to volunteering at the aquarium shows your passion. You’ve truly made us proud.",
+      "long": "Sofia, your journey to earning your marine biology degree is an incredible achievement, especially as the first in our family to graduate. Your years of volunteering at the aquarium highlight your commitment and passion for marine life. You have inspired so many, and I couldn’t be prouder of you."
+    }
+  },
+  "graduation-cards/career-change-grad-3d": {
+    "message": "Congratulations on earning your culinary degree! Your hard work is inspiring, and I’m excited to see your food truck bring joy to many this summer.",
+    "closing": "Here’s to your exciting new journey!",
+    "variants": {
+      "short": "Congrats on your graduation! Can’t wait for your food truck debut this summer.",
+      "medium": "Congratulations on earning your culinary degree! Your hard work is inspiring, and I’m excited to see your food truck bring joy to many this summer.",
+      "long": "You’ve shown incredible dedication by going back to school and earning your culinary degree. Your ambition to open a food truck this summer will undoubtedly inspire others. I’m so proud of you and can’t wait to taste your creations!"
+    }
+  },
+  "graduation-cards/law-school-grad-editorial": {
+    "message": "After countless late nights and dedication, you've graduated law school and passed the bar on your first attempt. Your perseverance is inspiring—congratulations on this remarkable journey!",
+    "closing": "With pride and joy on your success!",
+    "variants": {
+      "short": "Your hard work has truly paid off—congratulations on this incredible achievement!",
+      "medium": "After countless late nights and dedication, you've graduated law school and passed the bar on your first attempt. Your perseverance is inspiring—congratulations on this remarkable journey!",
+      "long": "Graduating law school and passing the bar on your first try is no small feat. Your commitment during those late nights in the library with your study group has been truly admirable. Celebrate this monumental achievement—today marks the beginning of a bright future!"
+    }
+  },
+  "wedding-cards/two-grooms-editorial": {
+    "message": "Wishing you both endless joy as you embark on this new chapter. From our pottery class beginnings to your elegant wedding in the library, your love story inspires us all.",
+    "closing": "Wishing you a lifetime of love and happiness.",
+    "variants": {
+      "short": "Congratulations on your beautiful journey together!",
+      "medium": "Wishing you both endless joy as you embark on this new chapter. From our pottery class beginnings to your elegant wedding in the library, your love story inspires us all.",
+      "long": "As you tie the knot in such a magnificent setting, may your love continue to grow as beautifully as the pieces we crafted together in pottery class. Your union is a testament to friendship and love. Congratulations!"
+    }
+  },
+  "graduation-cards/grad-travel-poster": {
+    "message": "Congrats, Hannah! Your hard work has paid off, and now you’re off to Spain to teach English. Embrace the flamenco, savor the tapas, and capture every beautiful moment.",
+    "closing": "Wishing you all the best on this amazing adventure!",
+    "variants": {
+      "short": "Congratulations on your graduation! Enjoy teaching English in Spain—flamenco and tapas await you!",
+      "medium": "Congrats, Hannah! Your hard work has paid off, and now you’re off to Spain to teach English. Embrace the flamenco, savor the tapas, and capture every beautiful moment.",
+      "long": "Hannah, I’m so proud of you! Graduating college is just the beginning. As you embark on this exciting journey to Spain to teach English, remember to dance to the flamenco rhythm and enjoy every delicious bite of tapas. Capture all the incredible moments ahead!"
+    }
+  },
+  "wedding-cards/second-wedding-vintage": {
+    "message": "Your love story is a beautiful reminder that great things can bloom at any age. May your new journey together be filled with joy, laughter, and endless memories.",
+    "closing": "With all my love and best wishes.",
+    "variants": {
+      "short": "Wishing you both a lifetime of love and happiness together.",
+      "medium": "Your love story is a beautiful reminder that great things can bloom at any age. May your new journey together be filled with joy, laughter, and endless memories.",
+      "long": "As you embark on this beautiful new chapter together, may your days be filled with shared laughter, cherished moments, and a love that only deepens with time. Your journey inspires us all, proving that love knows no age and can be found again."
+    }
+  },
+  "wedding-cards/courthouse-wedding-vector": {
+    "message": "Congrats on pulling off the ultimate elopement! From City Hall to tacos and margaritas, you two sure know how to kick off a marriage with a fiesta!",
+    "closing": "Wishing you a lifetime of fun and laughter!",
+    "variants": {
+      "short": "Tacos, margaritas, and a surprise wedding? You two know how to keep it spicy!",
+      "medium": "Congrats on pulling off the ultimate elopement! From City Hall to tacos and margaritas, you two sure know how to kick off a marriage with a fiesta!",
+      "long": "Who knew that a spontaneous city hall wedding could lead to epic tacos and margaritas? Congratulations on your elopement! Your celebration is proof that love is best served with a side of spice and laughter. Here's to many more adventures together!"
+    }
+  },
+  "new-baby-cards/baby-girl-nursery": {
+    "message": "Congratulations on the arrival of baby Ivy! Her nursery filled with bunnies and stars is sure to be a place of love and dreams.",
+    "closing": "With all our love and joy",
+    "variants": {
+      "short": "Welcome to the world, Ivy! Your nursery sounds magical.",
+      "medium": "Congratulations on the arrival of baby Ivy! Her nursery filled with bunnies and stars is sure to be a place of love and dreams.",
+      "long": "We are so excited to welcome sweet baby Ivy into the world! May her nursery, filled with bunnies and stars, be a cozy haven for beautiful memories. Wishing your family endless love and joy as you embark on this wonderful journey together."
+    }
+  },
+  "new-baby-cards/twins-claymation": {
+    "message": "Welcome to the double trouble club! With Max and Eli, it’s double the diapers and double the joy. Get ready for twice the fun!",
+    "closing": "Wishing you all the best on this incredible journey!",
+    "variants": {
+      "short": "Double the diapers, double the joy! Congrats on Max and Eli!",
+      "medium": "Welcome to the double trouble club! With Max and Eli, it’s double the diapers and double the joy. Get ready for twice the fun!",
+      "long": "Congratulations, Andre and Dana! Welcome Max and Eli to the wild world of parenting. Get ready for double the diapers, double the joy, and maybe a bit of double the sleep deprivation! Let the adventures begin!"
+    }
+  },
+  "new-baby-cards/baby-with-dog-pencil": {
+    "message": "So thrilled for you both on the arrival of baby Arjun! It’s wonderful to see Bear taking his role as protector so seriously. Wishing your family all the love and joy.",
+    "closing": "With love and joy for your growing family.",
+    "variants": {
+      "short": "Congratulations on baby Arjun! It’s heartwarming to see Bear as his guardian.",
+      "medium": "So thrilled for you both on the arrival of baby Arjun! It’s wonderful to see Bear taking his role as protector so seriously. Wishing your family all the love and joy.",
+      "long": "Congratulations on the arrival of baby Arjun! It warms my heart to see Bear taking up the important role of protector beside him. What a beautiful friendship is blossoming. Wishing you all a lifetime of love, laughter, and sweet memories together."
+    }
+  },
+  "retirement-cards/teacher-retire-watercolor": {
+    "message": "Congratulations on your retirement after 35 amazing years! I can't wait to see you finally write that mystery novel you've been dreaming about. Enjoy every moment of this new adventure!",
+    "closing": "With heartfelt gratitude and best wishes for your next adventure.",
+    "variants": {
+      "short": "Wishing you all the best in your retirement and your mystery novel journey!",
+      "medium": "Congratulations on your retirement after 35 amazing years! I can't wait to see you finally write that mystery novel you've been dreaming about. Enjoy every moment of this new adventure!",
+      "long": "Your retirement marks the end of an incredible 35-year journey in teaching, shaping countless lives. As you embark on writing your long-awaited mystery novel, may this new chapter be filled with inspiration and joy. Thank you for everything you've shared with us over the years!"
+    }
+  },
+  "new-baby-cards/adoption-watercolor": {
+    "message": "After a long wait, Grace is finally home! Here’s to new adventures and cherished memories as you grow together as a family of three in your cozy house.",
+    "closing": "With all my love and joy for your new adventure.",
+    "variants": {
+      "short": "Welcome home, Grace! Your beautiful journey begins as a family of three.",
+      "medium": "After a long wait, Grace is finally home! Here’s to new adventures and cherished memories as you grow together as a family of three in your cozy house.",
+      "long": "Congratulations on welcoming sweet Grace home after such a long wait! May your lives together be filled with laughter, love, and unforgettable moments as you start this new chapter as a family of three in your cozy house."
+    }
+  },
+  "new-baby-cards/grandbaby-vintage": {
+    "message": "So excited for you both as you embrace the joy of being grandparents! Baby Hazel is lucky to have you to share love and wisdom with.",
+    "closing": "With all my love and excitement",
+    "variants": {
+      "short": "Congratulations on becoming wonderful grandparents to baby Hazel!",
+      "medium": "So excited for you both as you embrace the joy of being grandparents! Baby Hazel is lucky to have you to share love and wisdom with.",
+      "long": "Congratulations on the arrival of baby Hazel! This is such an exciting new chapter, and I know you will both be the most loving grandparents. I can't wait to see all the joy and laughter she brings to our family."
+    }
+  },
+  "retirement-cards/pilot-retire-editorial": {
+    "message": "Congratulations on your retirement, Barbara! After 35 years as an airline captain, it's time to create beautiful memories with your six grandkids. Wishing you all the joy in this new chapter!",
+    "closing": "Wishing you all the best in your new journey!",
+    "variants": {
+      "short": "Enjoy every moment with your grandkids! You’ve earned it.",
+      "medium": "Congratulations on your retirement, Barbara! After 35 years as an airline captain, it's time to create beautiful memories with your six grandkids. Wishing you all the joy in this new chapter!",
+      "long": "Congratulations on reaching this incredible milestone, Barbara! After 35 remarkable years as an airline captain, your next adventure awaits with your six grandkids. Cherish every moment together and enjoy the joys of retirement. You truly deserve it!"
+    }
+  },
+  "retirement-cards/trains-retire-pencil": {
+    "message": "Cheers to your retirement, Grandpa Lou! After 32 years at the post office, it's time to turn the basement into a world of your model railroad dreams. Enjoy every moment!",
+    "closing": "Wishing you endless joy in this new chapter!",
+    "variants": {
+      "short": "Here’s to new adventures in the basement! Enjoy building your dream railroad, Grandpa Lou.",
+      "medium": "Cheers to your retirement, Grandpa Lou! After 32 years at the post office, it's time to turn the basement into a world of your model railroad dreams. Enjoy every moment!",
+      "long": "Congratulations on your well-deserved retirement, Grandpa Lou! After 32 amazing years at the post office, it’s finally time to dive into your passion. I can't wait to see the incredible model railroad you create in the basement. Happy building and enjoy each journey!"
+    }
+  },
+  "christmas-cards/cabin-christmas-watercolor": {
+    "message": "May our time together at the snowy log cabin in Vermont fill your hearts with joy. The glowing windows and wreath on the door remind us of the love that binds our family.",
+    "closing": "With all my love this holiday season.",
+    "variants": {
+      "short": "Wishing you joy and warmth from our snowy log cabin this Christmas.",
+      "medium": "May our time together at the snowy log cabin in Vermont fill your hearts with joy. The glowing windows and wreath on the door remind us of the love that binds our family.",
+      "long": "As we gather again at our snowy log cabin in Vermont, the warmth of family and love shines brighter than the glowing windows. The wreath on the door is a symbol of the joy you both bring to our Christmas celebrations. Cherishing these moments with you."
+    }
+  },
+  "valentines-day-cards/galentine-3d": {
+    "message": "Here's to ten years of laughter, trivia victories, and that tiny trophy. You guys are the best teammates I could ask for on and off the quiz stage!",
+    "closing": "Love you all, champions!",
+    "variants": {
+      "short": "Cheers to our trivia mastery and friendship!",
+      "medium": "Here's to ten years of laughter, trivia victories, and that tiny trophy. You guys are the best teammates I could ask for on and off the quiz stage!",
+      "long": "Happy Valentine's Day to my trivia team! Our ten years of undefeated champions have been filled with laughter, inside jokes, and that tiny trophy that holds all our memories. I'm grateful for every Friday night spent with the best friends anyone could ask for. Let's keep the fun going!"
+    }
+  },
+  "christmas-cards/ornaments-mom-pencil": {
+    "message": "Decorating the tree with you each year is one of my favorite traditions. I love hearing the stories behind every ornament. Thank you for making Christmas so special, Mom.",
+    "closing": "With all my love this Christmas.",
+    "variants": {
+      "short": "Every ornament tells a cherished story. I love our tree-decorating tradition, Mom.",
+      "medium": "Decorating the tree with you each year is one of my favorite traditions. I love hearing the stories behind every ornament. Thank you for making Christmas so special, Mom.",
+      "long": "Every year, decorating the tree with you is a treasure. I cherish the way you share the stories behind each ornament, bringing back wonderful memories. Thank you for filling our Christmas with love and meaning, Mom."
+    }
+  },
+  "mothers-day-cards/mom-pottery-watercolor": {
+    "message": "Each lopsided mug you create carries love and joy. Thank you for sharing your passion with us. Happy Mother's Day!",
+    "closing": "With all my love on this special day.",
+    "variants": {
+      "short": "Your pottery brings warmth to our hearts and homes. Happy Mother's Day!",
+      "medium": "Each lopsided mug you create carries love and joy. Thank you for sharing your passion with us. Happy Mother's Day!",
+      "long": "Your pottery journey inspires us all, and those lopsided mugs you lovingly give remind us of your creativity and warmth. Thank you for filling our lives with your passion. Happy Mother's Day!"
+    }
+  },
+  "mothers-day-cards/grandma-mothers-day-pencil": {
+    "message": "Your kitchen table turned into a world of creativity every winter break. Thank you for sharing your love and patience as we learn to knit. You make these moments unforgettable.",
+    "closing": "With all my love this Mother’s Day.",
+    "variants": {
+      "short": "Thank you for teaching us the magic of knitting and love each winter break.",
+      "medium": "Your kitchen table turned into a world of creativity every winter break. Thank you for sharing your love and patience as we learn to knit. You make these moments unforgettable.",
+      "long": "Every winter break, your kitchen table becomes a special place where we learn and create together. Thank you for sharing your wisdom and warmth as we knit new memories. Your love and guidance inspire us more than words can say."
+    }
+  },
+  "mothers-day-cards/new-mom-nursery": {
+    "message": "Celebrating your first Mother’s Day, Kate. Watching you with baby Nora fills my heart with joy. You're doing an incredible job as a mother.",
+    "closing": "With all my love, today and always.",
+    "variants": {
+      "short": "Happy first Mother’s Day, Kate! You are an amazing mom to little Nora.",
+      "medium": "Celebrating your first Mother’s Day, Kate. Watching you with baby Nora fills my heart with joy. You're doing an incredible job as a mother.",
+      "long": "This first Mother’s Day with our sweet Nora is a beautiful milestone. Kate, your love and care shine through every moment. I am constantly in awe of the wonderful mother you are. Let’s cherish this journey together."
+    }
+  },
+  "mothers-day-cards/stepmom-editorial": {
+    "message": "Your unwavering support at every game means the world to me. I’m grateful for all the moments we've shared over the past ten years.",
+    "closing": "With love on this special day.",
+    "variants": {
+      "short": "Thank you for being my biggest supporter for ten years.",
+      "medium": "Your unwavering support at every game means the world to me. I’m grateful for all the moments we've shared over the past ten years.",
+      "long": "Celebrating ten wonderful years since you came into our lives! Your dedication and encouragement at every softball game have made such a difference. I'm so thankful for your support and the love you bring to our family."
+    }
+  },
+  "fathers-day-cards/dad-air-guitar-comic": {
+    "message": "Happy Father’s Day to the ultimate air guitar champion! Your knowledge of 80s rock anthems brings the party to life. Keep shredding those hits and inspiring us all!",
+    "closing": "Keep on rocking, Dad!",
+    "variants": {
+      "short": "Thanks for rocking every family party, Dad! You're the real air guitar champion!",
+      "medium": "Happy Father’s Day to the ultimate air guitar champion! Your knowledge of 80s rock anthems brings the party to life. Keep shredding those hits and inspiring us all!",
+      "long": "On this special day, I just want to say thanks for being our family’s air guitar champion and for knowing every word to those epic 80s rock hits. Your passion for music and fun always brings joy to our gatherings. Keep on rocking, Dad!"
+    }
+  },
+  "fathers-day-cards/stepdad-editorial": {
+    "message": "Your patience while teaching me to drive meant the world. You guided me through those early lessons without ever raising your voice, and I’m grateful for your support.",
+    "closing": "Happy Father’s Day to a wonderful stepdad!",
+    "variants": {
+      "short": "Thanks for teaching me to drive patiently and calmly.",
+      "medium": "Your patience while teaching me to drive meant the world. You guided me through those early lessons without ever raising your voice, and I’m grateful for your support.",
+      "long": "On this Father’s Day, I want to thank you for being such a patient teacher. From our days in the empty parking lot to the endless support you provided without raising your voice, you showed me the importance of calmness and encouragement. I truly appreciate everything you've done."
     }
   }
 }
