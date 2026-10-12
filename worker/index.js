@@ -6349,7 +6349,7 @@ const handleAdminResendCardEmail = async (request, env) => {
     return denied
   }
 
-  const { cardId, to } = (await readJson(request)) || {}
+  const { cardId, to, kind } = (await readJson(request)) || {}
   const record = await getCardRecord(env, String(cardId || '').trim())
   if (!record) {
     return jsonResponse(request, env, { error: 'Card not found.' }, 404)
@@ -6363,7 +6363,17 @@ const handleAdminResendCardEmail = async (request, env) => {
   }
 
   try {
-    const copy = buildDeliveryCopy(record, getShareUrl(request, env, record.id), getEmailCoverUrl(request, env, record.id))
+    const shareUrl = getShareUrl(request, env, record.id)
+    const coverUrl = getEmailCoverUrl(request, env, record.id)
+    const copy =
+      kind === 'sender-copy'
+        ? buildSenderCopyDeliveryCopy(
+            record,
+            shareUrl,
+            coverUrl,
+            `${getPublicAppUrl(request, env)}/?resume=${encodeURIComponent(record.id)}&print=1`,
+          )
+        : buildDeliveryCopy(record, shareUrl, coverUrl)
     const deliveredTo = await sendEmailDelivery({ env, to: normalizedTo, copy })
     return jsonResponse(request, env, { ok: true, deliveredTo, subject: copy.subject })
   } catch (error) {
