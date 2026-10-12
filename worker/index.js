@@ -1553,14 +1553,33 @@ const reviewRequestHtml = (source) =>
   `<p style="margin-top: 22px; color: #444;">Enjoying Card Genie? <a href="${reviewRequestUrl(source)}" style="color:#3f9b91;font-weight:700;">Leave a quick review</a>. It helps other shoppers find us.</p>`
 const reviewRequestText = (source) => `Enjoying Card Genie? Leave a quick review: ${reviewRequestUrl(source)}`
 
-const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
+const hasLeftReview = async (env, { userId = '', phone = '', email = '' } = {}) => {
+  if (!env.ACCOUNT_DB || (!userId && !phone && !email)) return false
+  try {
+    const row = await env.ACCOUNT_DB.prepare(
+      `SELECT 1 FROM testimonials t
+        WHERE (?1 <> '' AND t.user_id = ?1)
+           OR (?2 <> '' AND t.phone_e164 = ?2)
+           OR (?3 <> '' AND t.user_id IN (SELECT id FROM users WHERE lower(email) = ?3))
+        LIMIT 1`,
+    )
+      .bind(String(userId || ''), String(phone || ''), String(email || '').trim().toLowerCase())
+      .first()
+    return Boolean(row)
+  } catch (error) {
+    console.error('review lookup failed', error)
+    return false
+  }
+}
+
+const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl, askReview = true) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
   const thumbnailAlt = `Cover of the card you sent to ${recipient}`
 
   return {
     subject: `Your copy of the card for ${recipient}`,
-    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}\n\n${reviewRequestText('email_copy')}`,
+    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}${askReview ? `\n\n${reviewRequestText('email_copy')}` : ''}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
         ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
@@ -1569,7 +1588,7 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
         <p style="margin-top: 22px;">Want it on real cardstock? We’ll print this card and mail it to ${recipient}, or to anyone you choose, by USPS.</p>
         <p><a href="${printUrl}" style="display:inline-block;padding:10px 16px;background:#ffffff;color:#3f9b91;border:2px solid #3f9b91;text-decoration:none;border-radius:12px;font-weight:700;">Mail a printed copy</a></p>
-        ${reviewRequestHtml('email_copy')}
+        ${askReview ? reviewRequestHtml('email_copy') : ''}
         <p style="margin-top: 18px; color: #666;">Sent by ${sender} through Card Genie.</p>
       </div>
     `,
@@ -2070,6 +2089,7 @@ const buildPrintOrderConfirmationCopy = ({
   shipment = null,
   hasCoverPreview = true,
   hasInsidePreview = true,
+  askReview = true,
 }) => {
   const shipToBlock = formatMailingAddressBlock(shipTo)
   const includeReturnAddress = mailFrom && !isDefaultPrintMailFrom(mailFrom)
@@ -2111,8 +2131,8 @@ const buildPrintOrderConfirmationCopy = ({
         : hasInsidePreview
           ? 'A preview of your card inside is included in this email.'
           : null,
-    '',
-    reviewRequestText('email_print'),
+    askReview ? '' : null,
+    askReview ? reviewRequestText('email_print') : null,
   ]
     .filter((line) => line !== null)
     .join('\n')
@@ -2161,7 +2181,7 @@ const buildPrintOrderConfirmationCopy = ({
       </table>`
           : ''
       }
-      ${reviewRequestHtml('email_print')}
+      ${askReview ? reviewRequestHtml('email_print') : ''}
       <p style="margin: 18px 0 0; color: #666; font-size: 0.9rem;">Questions? Email support@card-genie.com and include your order number.</p>
     </div>
   `
@@ -3521,7 +3541,12 @@ const fulfillRecipientPrintOrder = async (request, env, checkoutSession) => {
     await sendEmailDelivery({
       env,
       to: pending.email,
-      copy: buildPrintOrderConfirmationCopy({ orderCode, shipTo: pending.shipTo, mailFrom: DEFAULT_PRINT_MAIL_FROM }),
+      copy: buildPrintOrderConfirmationCopy({
+        orderCode,
+        shipTo: pending.shipTo,
+        mailFrom: DEFAULT_PRINT_MAIL_FROM,
+        askReview: !(await hasLeftReview(env, { email: pending.email })),
+      }),
       attachments: [
         {
           filename: 'print-cover-thumb.jpg',
@@ -4500,7 +4525,8 @@ const handleDeliverCard = async (request, env) => {
       if (senderCopyPending && senderCopyEmail) {
         try {
           const printUrl = `${getPublicAppUrl(request, env)}/?resume=${encodeURIComponent(record.id)}&print=1`
-          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl, printUrl)
+          const reviewed = await hasLeftReview(env, { userId: session.userId, phone: session.phoneE164, email: senderCopyEmail })
+          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl, printUrl, !reviewed)
           senderCopyDeliveredTo = await sendEmailDelivery({
             env,
             to: normalizeEmailAddress(senderCopyEmail),
@@ -4723,10 +4749,12 @@ const handleOrderPrintCard = async (request, env) => {
     }
 
     try {
+      const reviewed = await hasLeftReview(env, { userId: session.userId, phone: session.phoneE164, email: shopperEmail })
       const confirmationCopy = buildPrintOrderConfirmationCopy({
         orderCode,
         shipTo,
         mailFrom,
+        askReview: !reviewed,
       })
       await sendEmailDelivery({
         env,
@@ -6802,7 +6830,12 @@ const sendReviewFollowUpEmails = async (env) => {
       WHERE u.status = 'active'
         AND u.email IS NOT NULL AND u.email <> ''
         AND u.first_card_sent_at BETWEEN ? AND ?
-        AND NOT EXISTS (SELECT 1 FROM testimonials t WHERE t.user_id = u.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM testimonials t
+           WHERE t.user_id = u.id
+              OR (u.phone_e164 IS NOT NULL AND t.phone_e164 = u.phone_e164)
+              OR t.user_id IN (SELECT id FROM users o WHERE lower(o.email) = lower(u.email))
+        )
       ORDER BY u.first_card_sent_at
       LIMIT ?`,
   )
@@ -6814,6 +6847,7 @@ const sendReviewFollowUpEmails = async (env) => {
     const sentKey = `${REVIEW_FOLLOWUP_SENT_PREFIX}${user.id}`
     if (await env.CARD_STORE.get(sentKey)) continue
     if (await env.CARD_STORE.get(`${REVIEW_FOLLOWUP_OPTOUT_PREFIX}${user.id}`)) continue
+    if (await hasLeftReview(env, { userId: user.id, phone: user.phone_e164, email: user.email })) continue
     // Mark first so a failed or retried run can never send twice.
     await env.CARD_STORE.put(sentKey, new Date().toISOString())
     try {
@@ -6914,6 +6948,7 @@ const deliverShipmentEmail = async (env, order) => {
     shipment: { shipDate: order.shipDate, gcuOrderNumber: order.gcuOrderNumber },
     hasCoverPreview: Boolean(cover),
     hasInsidePreview: Boolean(inside),
+    askReview: !(await hasLeftReview(env, { userId: order.userId, email: order.shopperEmail })),
   })
 
   await sendEmailDelivery({ env, to: order.shopperEmail, copy, attachments })
