@@ -14350,6 +14350,7 @@ function App() {
           <button type="button" onClick={() => openContact()}>
             Contact us
           </button>
+          <a href="/occasions/">Occasions</a>
           <a href="/faq/">FAQ</a>
         </div>
         <div className="footer-legal">

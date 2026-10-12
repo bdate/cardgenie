@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personalized Wedding Cards with Custom Art | Card Genie</title>
+    <meta name="description" content="Congratulate the happy couple with a one-of-a-kind wedding card: custom artwork of the two of them and a heartfelt message written just for them. Send by email or text, or mail a printed card." />
+    <link rel="canonical" href="https://www.card-genie.com/wedding-cards/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Card Genie" />
+    <meta property="og:title" content="Personalized Wedding Cards with Custom Art | Card Genie" />
+    <meta property="og:description" content="Congratulate the happy couple with a one-of-a-kind wedding card: custom artwork of the two of them and a heartfelt message written just for them. Send by email or text, or mail a printed card." />
+    <meta property="og:url" content="https://www.card-genie.com/wedding-cards/" />
+    <meta property="og:image" content="https://www.card-genie.com/wedding-cards/img/vineyard-wedding-watercolor.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700;800&family=Playfair+Display:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Card Genie",
+            "item": "https://www.card-genie.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Occasions",
+            "item": "https://www.card-genie.com/occasions/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Wedding cards",
+            "item": "https://www.card-genie.com/wedding-cards/"
+          }
+        ]
+      }
+    </script>
+    <style>
+      :root {
+        --ink: #315f5b;
+        --dark-teal: #3f9b91;
+        --teal: #8fd0c9;
+        --orange: #f59e33;
+        --cream: #fff8ef;
+        --grey: #5f6b6a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 15% 6%, rgba(245, 158, 51, 0.24), transparent 32%),
+          radial-gradient(circle at 85% 2%, rgba(143, 208, 201, 0.34), transparent 28%),
+          linear-gradient(135deg, #fff8ef 0%, #f3fbfa 48%, #eef3ff 100%);
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 20px 72px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+
+      .brand img {
+        width: 44px;
+        height: 44px;
+      }
+
+      .brand span {
+        font-family: "Dancing Script", cursive;
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .hero {
+        display: grid;
+        gap: 14px;
+        max-width: 760px;
+        margin: 28px 0 30px;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: clamp(2.2rem, 5.4vw, 3.8rem);
+        line-height: 1.02;
+        letter-spacing: -0.03em;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--grey);
+        font-size: 1.1rem;
+      }
+
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-height: 52px;
+        padding: 0 28px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #f7ad4f, #ee8a1f);
+        box-shadow: 0 14px 30px rgba(238, 138, 31, 0.3);
+        color: #fff;
+        font-size: 1.05rem;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .cta:hover,
+      .cta:focus-visible {
+        filter: brightness(1.04);
+        transform: translateY(-1px);
+      }
+
+      .cta-note {
+        margin: 0;
+        color: var(--grey);
+        font-size: 0.9rem;
+      }
+
+      h2 {
+        margin: 56px 0 8px;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+        line-height: 1.1;
+      }
+
+      .section-intro {
+        max-width: 700px;
+        margin: 0 0 22px;
+        color: var(--grey);
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+        gap: 22px;
+      }
+
+      figure {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        margin: 0;
+        overflow: hidden;
+        border: 1px solid rgba(63, 155, 145, 0.2);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 18px 44px rgba(63, 155, 145, 0.12);
+      }
+
+      figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 528 / 736;
+        object-fit: cover;
+        background: #efe7db;
+      }
+
+      figcaption {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        padding: 14px 16px 16px;
+      }
+
+      .tag {
+        width: fit-content;
+        border-radius: 999px;
+        padding: 3px 9px;
+        background: rgba(143, 208, 201, 0.28);
+        color: var(--dark-teal);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      figcaption strong {
+        font-size: 1rem;
+        line-height: 1.25;
+      }
+
+      .inside {
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: #fbf6ee;
+        color: #4b4440;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .story {
+        margin: 0;
+        color: var(--grey);
+        font-size: 0.84rem;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 16px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+      }
+
+      .steps li {
+        position: relative;
+        padding: 20px 20px 20px 66px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(63, 155, 145, 0.18);
+        counter-increment: step;
+      }
+
+      .steps li::before {
+        content: counter(step);
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--dark-teal);
+        color: #fff;
+        font-weight: 800;
+      }
+
+      .steps strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .steps p {
+        margin: 0;
+        color: var(--grey);
+        font-size: 0.95rem;
+      }
+
+      .ideas {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+
+      .idea {
+        padding: 18px 20px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(63, 155, 145, 0.18);
+      }
+
+      .idea h3 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+      }
+
+      .idea p {
+        margin: 0 0 8px;
+        color: var(--grey);
+        font-size: 0.95rem;
+      }
+
+      .idea blockquote {
+        margin: 0;
+        padding-left: 12px;
+        border-left: 3px solid var(--orange);
+        color: #4b4440;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 0.95rem;
+      }
+
+      .faq {
+        display: grid;
+        gap: 10px;
+        max-width: 820px;
+      }
+
+      details {
+        padding: 14px 18px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(63, 155, 145, 0.18);
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      details p {
+        margin: 10px 0 2px;
+        color: var(--grey);
+      }
+
+      .closing {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        margin-top: 64px;
+        padding: 36px 20px;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at top right, rgba(245, 158, 51, 0.18), transparent 40%),
+          rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(63, 155, 145, 0.2);
+        text-align: center;
+      }
+
+      .closing h2 {
+        margin: 0;
+      }
+
+      .closing p {
+        margin: 0;
+        color: var(--grey);
+      }
+
+      footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px 22px;
+        margin-top: 40px;
+        font-size: 0.9rem;
+      }
+
+      footer a,
+      a {
+        color: var(--dark-teal);
+        font-weight: 700;
+      }
+
+      footer a {
+        text-decoration: none;
+      }
+
+      .more {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .more a {
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(63, 155, 145, 0.25);
+        text-decoration: none;
+      }
+
+      .more a:hover,
+      .more a:focus-visible {
+        background: rgba(143, 208, 201, 0.25);
+      }
+
+      .hub {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+        gap: 20px;
+      }
+
+      .hub a {
+        display: grid;
+        overflow: hidden;
+        border: 1px solid rgba(63, 155, 145, 0.2);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 18px 44px rgba(63, 155, 145, 0.12);
+        color: var(--ink);
+        text-decoration: none;
+      }
+
+      .hub img {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 528 / 560;
+        object-fit: cover;
+        object-position: top;
+      }
+
+      .hub span {
+        padding: 14px 16px 16px;
+        font-size: 1.05rem;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="brand" href="/"><img src="/logo-mark.png" alt="" width="44" height="44" /><span>Card Genie</span></a>
+
+      <section class="hero">
+        <h1>Personalized wedding cards for the happy couple</h1>
+        <p class="lede">How they met, where they’re marrying, the honeymoon they’ve planned — tell Card Genie, and get a wedding card with custom artwork of the couple and a warm message of congratulations. Send it instantly or have it printed and mailed.</p>
+        <a class="cta" href="/?occasion=Wedding">Make a wedding card</a>
+        <p class="cta-note">Creating a card is free, and so is your first send.</p>
+      </section>
+
+      <h2>Wedding cards our genie has made</h2>
+      <p class="section-intro">
+        Every card starts from a few details. Here’s what Card Genie made from each story — the cover art and the
+        inside message.
+      </p>
+      <div class="gallery">
+        <figure>
+          <img
+            src="img/vineyard-wedding-watercolor.jpg"
+            alt="Watercolor wedding card of a couple at a vineyard at sunset"
+            width="528"
+            height="736"
+            loading="eager"
+          />
+          <figcaption>
+            <span class="tag">Watercolor</span>
+            <strong>Wedding card for friends</strong>
+            <p class="story">The story: marrying at a vineyard in Napa at sunset.</p>
+            <p class="inside">“Congratulations on your beautiful union! May your wedding at the vineyard in Napa be a breathtaking celebration of love and cherished memories under the sunset.”</p>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/beach-wedding-poster.jpg"
+            alt="Retro travel poster wedding card of a couple on a Maui beach"
+            width="528"
+            height="736"
+            loading="eager"
+          />
+          <figcaption>
+            <span class="tag">Retro travel poster</span>
+            <strong>Wedding card for a sister</strong>
+            <p class="story">The story: barefoot beach wedding in Maui.</p>
+            <p class="inside">“Congratulations, Jess and Kai! Your barefoot beach wedding in Maui was a magical celebration, complete with leis and ukulele music.”</p>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/two-grooms-editorial.jpg"
+            alt="Editorial illustration wedding card of two grooms in a library"
+            width="528"
+            height="736"
+            loading="eager"
+          />
+          <figcaption>
+            <span class="tag">Editorial illustration</span>
+            <strong>Wedding card for two grooms</strong>
+            <p class="story">The story: met in a choir, marrying in a historic library.</p>
+            <p class="inside">“Congratulations on your wedding! From meeting in the choir to celebrating love in a historic library, your story is a beautiful melody.”</p>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/rustic-wedding-papercut.jpg"
+            alt="Botanical paper-cut wedding card of wildflowers and a barn"
+            width="528"
+            height="736"
+            loading="lazy"
+          />
+          <figcaption>
+            <span class="tag">Botanical paper-cut</span>
+            <strong>Wedding card for a coworker</strong>
+            <p class="story">The story: rustic barn wedding with wildflowers.</p>
+            <p class="inside">“May your life together bloom as beautifully as the wildflowers surrounding your rustic barn. Congratulations on this wonderful journey.”</p>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/second-wedding-vintage.jpg"
+            alt="Vintage wedding card of an older couple dancing"
+            width="528"
+            height="736"
+            loading="lazy"
+          />
+          <figcaption>
+            <span class="tag">Vintage</span>
+            <strong>Wedding card for Mom</strong>
+            <p class="story">The story: remarrying at 62 to her high school sweetheart.</p>
+            <p class="inside">“Congratulations on finding your way back to each other. May your love only deepen from here as you celebrate this new journey together with laughter and joy.”</p>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/courthouse-wedding-vector.jpg"
+            alt="Modern flat wedding card of a couple on City Hall steps with tacos"
+            width="528"
+            height="736"
+            loading="lazy"
+          />
+          <figcaption>
+            <span class="tag">Modern flat</span>
+            <strong>Wedding card for an elopement</strong>
+            <p class="story">The story: eloped at City Hall, then tacos with friends.</p>
+            <p class="inside">“You two eloped at City Hall, then celebrated with tacos and margaritas! It seems you’ve found the perfect recipe for love.”</p>
+          </figcaption>
+        </figure>
+      </div>
+      <p class="section-intro" style="margin-top: 16px">
+        People and stories above are made up for these examples. See all 15 art styles in the
+        <a href="/styles/">style lookbook</a>.
+      </p>
+
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <strong>Tell Genie about them</strong>
+          <p>Fill in a few fields or just chat with Genie: their name, what they love, a memory, and how they look.</p>
+        </li>
+        <li>
+          <strong>Get your card in minutes</strong>
+          <p>Custom cover art in the style you pick, plus a message written for them. Revise anything you like.</p>
+        </li>
+        <li>
+          <strong>Send it your way</strong>
+          <p>By email or text for instant delivery, or printed on cardstock and mailed by USPS.</p>
+        </li>
+      </ol>
+
+      <h2>What to write in a wedding card</h2>
+      <p class="section-intro">Congratulate them as a couple, add a personal touch, and send them off with a wish for their life together. A few starting points:</p>
+      <div class="ideas">
+        <div class="idea">
+          <h3>For close friends</h3>
+          <p>Recall when you knew they were meant to be.</p>
+          <blockquote>“We knew it from the first dinner party. Here’s to a lifetime of sunsets together.”</blockquote>
+        </div>
+        <div class="idea">
+          <h3>For family</h3>
+          <p>Welcome the new member.</p>
+          <blockquote>“Kai, welcome to the family. You make our girl so happy.”</blockquote>
+        </div>
+        <div class="idea">
+          <h3>For a coworker</h3>
+          <p>Keep it warm and simple.</p>
+          <blockquote>“Wishing you both a lifetime of love and laughter. Congratulations!”</blockquote>
+        </div>
+        <div class="idea">
+          <h3>For a parent</h3>
+          <p>Share your joy for them.</p>
+          <blockquote>“Seeing you this happy is the best gift. Congratulations, Mom.”</blockquote>
+        </div>
+        <div class="idea">
+          <h3>With a gift</h3>
+          <p>Tie it to their plans.</p>
+          <blockquote>“A little something for the honeymoon fund. Enjoy every minute of Maui!”</blockquote>
+        </div>
+        <div class="idea">
+          <h3>If you can’t attend</h3>
+          <p>Let them know you’re with them in spirit.</p>
+          <blockquote>“So sorry to miss the big day. We’ll be raising a glass to you from here.”</blockquote>
+        </div>
+      </div>
+
+      <h2>Wedding card questions</h2>
+      <div class="faq">
+        <details>
+          <summary>How much does a card cost?</summary>
+          <p>Creating and previewing a card is free. Sending it by email or text uses 3 credits, and new accounts get enough free credits for their first send. Credit packs start at $5 for 10 credits. A printed card mailed by USPS uses 10 credits.</p>
+        </details>
+        <details>
+          <summary>Can the card look like the couple?</summary>
+          <p>Yes. Describe how they look, or add a clear close-up photo, and Genie draws them on the cover in the art style you choose. Looks are used for the artwork only — they won’t show up in the inside message.</p>
+        </details>
+        <details>
+          <summary>Can I send it on the wedding day?</summary>
+          <p>Yes. Most cards are ready in a few minutes, and email or text delivery is instant. For a printed card, allow time for USPS delivery.</p>
+        </details>
+        <details>
+          <summary>Can I change the message or the picture?</summary>
+          <p>Yes. Edit the inside message yourself for free, switch between short, medium, and long versions, or ask Genie to redo the cover for 1 credit.</p>
+        </details>
+      </div>
+
+      <section class="closing">
+        <h2>Make their wedding card</h2>
+        <p>A few details are all it takes. Your first card is free.</p>
+        <a class="cta" href="/?occasion=Wedding">Make a wedding card</a>
+      </section>
+
+      <h2>Cards for every occasion</h2>
+      <div class="more">
+        <a href="/birthday-cards/">Birthday</a>
+        <a href="/thank-you-cards/">Thank you</a>
+        <a href="/anniversary-cards/">Anniversary</a>
+        <a href="/get-well-cards/">Get well</a>
+        <a href="/sympathy-cards/">Sympathy</a>
+        <a href="/congratulations-cards/">Congratulations</a>
+        <a href="/graduation-cards/">Graduation</a>
+        <a href="/new-baby-cards/">New baby</a>
+        <a href="/retirement-cards/">Retirement</a>
+        <a href="/christmas-cards/">Christmas</a>
+        <a href="/valentines-day-cards/">Valentine’s Day</a>
+        <a href="/mothers-day-cards/">Mother’s Day</a>
+        <a href="/fathers-day-cards/">Father’s Day</a>
+      </div>
+
+      <footer>
+        <a href="/">Card Genie</a>
+        <a href="/occasions/">All occasions</a>
+        <a href="/styles/">Art styles</a>
+        <a href="/faq/">FAQ</a>
+        <a href="/?contact=general">Contact us</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </footer>
+    </main>
+  </body>
+</html>
