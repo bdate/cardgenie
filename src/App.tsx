@@ -428,6 +428,8 @@ type MailingAddress = {
   country: 'US'
 }
 type PrintOrderStep = 'closed' | 'ship-to' | 'mail-from' | 'review'
+type FeedbackSource = 'post_send' | 'account' | 'footer'
+type PublicReview = { id: string; name: string; rating: number | null; comment: string; createdAt: string }
 type AdminCostSummary = {
   days: number
   startDay: string
@@ -3281,7 +3283,7 @@ function App() {
     }
   })
   const [showFeedbackForm, setShowFeedbackForm] = useState(false)
-  const [feedbackSource, setFeedbackSource] = useState<'post_send' | 'account'>('post_send')
+  const [feedbackSource, setFeedbackSource] = useState<FeedbackSource>('post_send')
   const [feedbackName, setFeedbackName] = useState('')
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null)
   const [feedbackComment, setFeedbackComment] = useState('')
@@ -3613,6 +3615,51 @@ function App() {
     setContactFromLink(null)
     openContact(contactFromLink)
   }, [contactFromLink])
+
+  const [reviewsOpen, setReviewsOpen] = useState(false)
+  const [publicReviews, setPublicReviews] = useState<PublicReview[] | null>(null)
+  const [reviewsError, setReviewsError] = useState('')
+
+  const openReviews = async () => {
+    setReviewsOpen(true)
+    setReviewsError('')
+    try {
+      const response = await fetch(apiUrl('/api/testimonials'))
+      const data = await getApiJson(response, 'We couldn’t load reviews just now.')
+      if (!response.ok) {
+        throw new Error(data.error || 'We couldn’t load reviews just now.')
+      }
+      setPublicReviews(Array.isArray(data.reviews) ? data.reviews : [])
+    } catch (caughtError) {
+      setReviewsError(caughtError instanceof Error ? caughtError.message : 'We couldn’t load reviews just now.')
+    }
+  }
+
+  const closeReviews = () => {
+    setReviewsOpen(false)
+    if (feedbackSource === 'footer') {
+      setShowFeedbackForm(false)
+      if (feedbackSubmitted) setFeedbackSubmitted(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!reviewsOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeReviews()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('reviews')) return
+    params.delete('reviews')
+    const nextQuery = params.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    void openReviews()
+  }, [])
 
   useEffect(() => {
     if (!isSignedIn || isRecipientView || !accountSenderName || senderNameClearedByShopperRef.current) {
@@ -8861,7 +8908,7 @@ function App() {
     setFeedbackNotice('')
   }
 
-  const openFeedbackForm = (source: 'post_send' | 'account') => {
+  const openFeedbackForm = (source: FeedbackSource) => {
     setFeedbackDismissed(false)
     setFeedbackSubmitted(false)
     setFeedbackSource(source)
@@ -8925,7 +8972,7 @@ function App() {
     }
   }
 
-  const renderFeedbackPrompt = (source: 'post_send' | 'account') => {
+  const renderFeedbackPrompt = (source: FeedbackSource) => {
     if (feedbackSubmitted) {
       if (source !== feedbackSource) {
         return null
@@ -8973,6 +9020,7 @@ function App() {
     return (
       <div className="feedback-prompt feedback-form">
         <p>Please share your feedback.</p>
+        <p className="feedback-public-note">Approved reviews may be shown on Card Genie with your first name and last initial.</p>
         <label>
           Name <span className="field-optional">(optional)</span>
           <input
@@ -14350,6 +14398,9 @@ function App() {
           <button type="button" onClick={() => openContact()}>
             Contact us
           </button>
+          <button type="button" onClick={() => void openReviews()}>
+            Reviews
+          </button>
           <a href="/occasions/">Occasions</a>
           <a href="/faq/">FAQ</a>
         </div>
@@ -14363,6 +14414,61 @@ function App() {
           )}
         </div>
       </footer>
+      {reviewsOpen && (
+        <div
+          className="contact-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeReviews()
+          }}
+        >
+          <div className="contact-dialog reviews-dialog" role="dialog" aria-modal="true" aria-labelledby="reviews-title">
+            <button className="contact-close" type="button" onClick={closeReviews} aria-label="Close">
+              ×
+            </button>
+            <div>
+              <h3 id="reviews-title">Reviews</h3>
+              <p className="contact-subtitle">What shoppers are saying about Card Genie.</p>
+            </div>
+            {feedbackSource === 'footer' && (showFeedbackForm || feedbackSubmitted) ? (
+              renderFeedbackPrompt('footer')
+            ) : (
+              <button className="secondary-button reviews-write" type="button" onClick={() => openFeedbackForm('footer')}>
+                Write a review
+              </button>
+            )}
+            {reviewsError ? (
+              <div className="field-notice">{reviewsError}</div>
+            ) : publicReviews === null ? (
+              <div className="reviews-loading" role="status">
+                <span className="reviews-spinner" aria-hidden="true" />
+                Loading reviews…
+              </div>
+            ) : publicReviews.length === 0 ? (
+              <p className="reviews-empty">No reviews yet — be the first!</p>
+            ) : (
+              <ul className="reviews-list">
+                {publicReviews.map((review) => (
+                  <li key={review.id} className="review-item">
+                    {review.rating ? (
+                      <div className="review-stars" aria-label={`${review.rating} out of 5 stars`}>
+                        {'★'.repeat(review.rating)}
+                        <span aria-hidden="true">{'★'.repeat(5 - review.rating)}</span>
+                      </div>
+                    ) : null}
+                    <p className="review-comment">“{review.comment}”</p>
+                    <p className="review-meta">
+                      {review.name || 'Card Genie shopper'}
+                      {review.createdAt
+                        ? ` · ${new Date(review.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+                        : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
       {contactOpen && (
         <div
           className="contact-backdrop"

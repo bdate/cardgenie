@@ -4177,7 +4177,28 @@ const handleAdminGrantCredits = async (request, env) => {
 
 const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
-const feedbackSources = new Set(['post_send', 'account'])
+const feedbackSources = new Set(['post_send', 'account', 'footer'])
+
+const publicReviewerName = (name) => {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return ''
+  const last = words.length > 1 ? ` ${words[words.length - 1][0].toUpperCase()}.` : ''
+  return `${words[0]}${last}`
+}
+
+const handlePublicTestimonials = async (request, env) => {
+  const testimonials = await listTestimonials(env, { status: 'approved', limit: 100 })
+  const reviews = testimonials.map((review) => ({
+    id: review.id,
+    name: publicReviewerName(review.name),
+    rating: review.rating,
+    comment: review.comment,
+    createdAt: review.createdAt,
+  }))
+  const response = jsonResponse(request, env, { ok: true, reviews })
+  response.headers.set('Cache-Control', 'public, max-age=300')
+  return response
+}
 
 const REVIEW_ALERT_TO = DEPLOY_SUMMARY_TO
 
@@ -7116,6 +7137,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/billing/webhook') {
     return handleStripeWebhook(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/testimonials') {
+    return handlePublicTestimonials(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/testimonials') {

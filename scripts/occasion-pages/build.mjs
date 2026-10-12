@@ -78,6 +78,7 @@ const footer = `
         <a href="/styles/">Art styles</a>
         <a href="/faq/">FAQ</a>
         <a href="/?contact=general">Contact us</a>
+        <a href="/?reviews=1">Reviews</a>
         <a href="/privacy/">Privacy</a>
         <a href="/terms/">Terms</a>
       </footer>
