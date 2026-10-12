@@ -1547,6 +1547,12 @@ const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
   }
 }
 
+const REVIEW_SITE_URL = 'https://www.card-genie.com'
+const reviewRequestUrl = (source) => `${REVIEW_SITE_URL}/?reviews=write&src=${source}`
+const reviewRequestHtml = (source) =>
+  `<p style="margin-top: 22px; color: #444;">Enjoying Card Genie? <a href="${reviewRequestUrl(source)}" style="color:#3f9b91;font-weight:700;">Leave a quick review</a>. It helps other shoppers find us.</p>`
+const reviewRequestText = (source) => `Enjoying Card Genie? Leave a quick review: ${reviewRequestUrl(source)}`
+
 const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
@@ -1554,7 +1560,7 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
 
   return {
     subject: `Your copy of the card for ${recipient}`,
-    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}`,
+    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}\n\n${reviewRequestText('email_copy')}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
         ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
@@ -1563,6 +1569,7 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
         <p style="margin-top: 22px;">Want it on real cardstock? We’ll print this card and mail it to ${recipient}, or to anyone you choose, by USPS.</p>
         <p><a href="${printUrl}" style="display:inline-block;padding:10px 16px;background:#ffffff;color:#3f9b91;border:2px solid #3f9b91;text-decoration:none;border-radius:12px;font-weight:700;">Mail a printed copy</a></p>
+        ${reviewRequestHtml('email_copy')}
         <p style="margin-top: 18px; color: #666;">Sent by ${sender} through Card Genie.</p>
       </div>
     `,
@@ -2104,6 +2111,8 @@ const buildPrintOrderConfirmationCopy = ({
         : hasInsidePreview
           ? 'A preview of your card inside is included in this email.'
           : null,
+    '',
+    reviewRequestText('email_print'),
   ]
     .filter((line) => line !== null)
     .join('\n')
@@ -2152,6 +2161,7 @@ const buildPrintOrderConfirmationCopy = ({
       </table>`
           : ''
       }
+      ${reviewRequestHtml('email_print')}
       <p style="margin: 18px 0 0; color: #666; font-size: 0.9rem;">Questions? Email support@card-genie.com and include your order number.</p>
     </div>
   `
@@ -4177,7 +4187,7 @@ const handleAdminGrantCredits = async (request, env) => {
 
 const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
-const feedbackSources = new Set(['post_send', 'account', 'footer'])
+const feedbackSources = new Set(['post_send', 'account', 'footer', 'email_copy', 'email_print', 'email_followup'])
 
 const publicReviewerName = (name) => {
   const words = String(name || '').trim().split(/\s+/).filter(Boolean)
@@ -6719,6 +6729,137 @@ const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
   return jsonResponse(request, env, { ok: true, order: updated, sentTo: order.shopperEmail })
 }
 
+const REVIEW_FOLLOWUP_MIN_DAYS = 3
+const REVIEW_FOLLOWUP_MAX_DAYS = 7
+const REVIEW_FOLLOWUP_BATCH = 20
+const REVIEW_FOLLOWUP_SENT_PREFIX = 'review-followup:sent:'
+const REVIEW_FOLLOWUP_OPTOUT_PREFIX = 'review-followup:optout:'
+const GCU_MAILING_ADDRESS = 'Card Genie by Greeting Card Universe · 154 East Prospect Avenue, Suite B · Danville, CA 94526'
+
+const signReviewOptOut = async (env, userId) => {
+  const secret = String(env.REVIEW_EMAIL_SECRET || '').trim()
+  if (!secret) return ''
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`review-optout:${userId}`))
+  return [...new Uint8Array(signature)].slice(0, 16).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+const reviewOptOutUrl = async (env, userId) => {
+  const token = await signReviewOptOut(env, userId)
+  const base = String(env.API_PUBLIC_URL || 'https://api.card-genie.com').replace(/\/$/, '')
+  return `${base}/api/reviews/unsubscribe?u=${encodeURIComponent(userId)}&t=${token}`
+}
+
+const buildReviewFollowUpCopy = ({ name, optOutUrl }) => {
+  const firstName = String(name || '').trim().split(/\s+/)[0] || ''
+  const greeting = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi there,'
+  const reviewUrl = reviewRequestUrl('email_followup')
+  return {
+    subject: firstName ? `${firstName}, how did your Card Genie card go?` : 'How did your Card Genie card go?',
+    fromName: 'Card Genie',
+    replyTo: PRINT_ORDER_SUPPORT_EMAIL,
+    replyToName: 'Card Genie Support',
+    text: [
+      firstName ? `Hi ${firstName},` : 'Hi there,',
+      '',
+      'Thanks for making a card with Card Genie! We hope it made someone smile.',
+      '',
+      'If you have a minute, would you leave a quick review? A star rating and a sentence or two helps other shoppers find us.',
+      reviewUrl,
+      '',
+      'Thank you,',
+      'The Card Genie team at Greeting Card Universe',
+      '',
+      `Don't want review requests? Unsubscribe: ${optOutUrl}`,
+      GCU_MAILING_ADDRESS,
+    ].join('\n'),
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5; max-width: 560px;">
+        <p>${greeting}</p>
+        <p>Thanks for making a card with Card Genie! We hope it made someone smile.</p>
+        <p>If you have a minute, would you leave a quick review? A star rating and a sentence or two helps other shoppers find us.</p>
+        <p><a href="${reviewUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Leave a quick review</a></p>
+        <p>Thank you,<br />The Card Genie team at Greeting Card Universe</p>
+        <p style="margin-top: 28px; color: #888; font-size: 12px;">You're getting this one-time note because you sent a card with Card Genie. <a href="${optOutUrl}" style="color:#888;">Unsubscribe from review requests</a>.<br />${GCU_MAILING_ADDRESS}</p>
+      </div>
+    `,
+  }
+}
+
+const isReviewFollowUpHour = (date = new Date()) => {
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hourCycle: 'h23' }).format(date))
+  return hour >= 9 && hour < 18
+}
+
+const sendReviewFollowUpEmails = async (env) => {
+  if (!env.ACCOUNT_DB || !env.CARD_STORE || !env.REVIEW_EMAIL_SECRET || !isReviewFollowUpHour()) return
+  const now = Date.now()
+  const newest = new Date(now - REVIEW_FOLLOWUP_MIN_DAYS * 86400000).toISOString()
+  const oldest = new Date(now - REVIEW_FOLLOWUP_MAX_DAYS * 86400000).toISOString()
+  const { results = [] } = await env.ACCOUNT_DB.prepare(
+    `SELECT u.id, u.email, u.phone_e164, u.preferred_name
+       FROM users u
+      WHERE u.status = 'active'
+        AND u.email IS NOT NULL AND u.email <> ''
+        AND u.first_card_sent_at BETWEEN ? AND ?
+        AND NOT EXISTS (SELECT 1 FROM testimonials t WHERE t.user_id = u.id)
+      ORDER BY u.first_card_sent_at
+      LIMIT ?`,
+  )
+    .bind(oldest, newest, REVIEW_FOLLOWUP_BATCH)
+    .all()
+
+  for (const user of results) {
+    if (isAdminPhone(user.phone_e164)) continue
+    const sentKey = `${REVIEW_FOLLOWUP_SENT_PREFIX}${user.id}`
+    if (await env.CARD_STORE.get(sentKey)) continue
+    if (await env.CARD_STORE.get(`${REVIEW_FOLLOWUP_OPTOUT_PREFIX}${user.id}`)) continue
+    // Mark first so a failed or retried run can never send twice.
+    await env.CARD_STORE.put(sentKey, new Date().toISOString())
+    try {
+      const copy = buildReviewFollowUpCopy({ name: user.preferred_name, optOutUrl: await reviewOptOutUrl(env, user.id) })
+      await sendEmailDelivery({ env, to: user.email, copy })
+    } catch (error) {
+      console.error('review follow-up email failed', user.id, error)
+    }
+  }
+}
+
+const handleReviewOptOut = async (request, env) => {
+  const url = new URL(request.url)
+  const userId = String(url.searchParams.get('u') || '').trim()
+  const token = String(url.searchParams.get('t') || '').trim()
+  const expected = userId ? await signReviewOptOut(env, userId) : ''
+  const ok = Boolean(expected && token && token === expected)
+  if (ok && env.CARD_STORE) {
+    await env.CARD_STORE.put(`${REVIEW_FOLLOWUP_OPTOUT_PREFIX}${userId}`, new Date().toISOString())
+  }
+  const message = ok
+    ? "You're unsubscribed. Card Genie won't send you review requests anymore."
+    : 'That unsubscribe link is not valid. Please email support@card-genie.com and we will take care of it.'
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Card Genie</title></head><body style="font-family: Arial, sans-serif; color: #302632; max-width: 520px; margin: 60px auto; padding: 0 20px; line-height: 1.5;"><h1 style="font-size: 1.4rem;">Card Genie</h1><p>${message}</p><p><a href="${REVIEW_SITE_URL}" style="color:#3f9b91;">Back to Card Genie</a></p></body></html>`,
+    { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+  )
+}
+
+const handleAdminReviewFollowUpTest = async (request, env) => {
+  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
+  const provided = String(readAccountToken(request) || '').trim()
+  if (!expected || provided !== expected) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+  const body = (await readJson(request)) || {}
+  const allowed = new Set([DEPLOY_SUMMARY_TO, 'support@card-genie.com', 'cards@card-genie.com'])
+  const to = String(body.to || DEPLOY_SUMMARY_TO).trim().toLowerCase()
+  if (!allowed.has(to)) {
+    return jsonResponse(request, env, { error: 'Test sends are limited to internal inboxes.' }, 400)
+  }
+  const copy = buildReviewFollowUpCopy({ name: body.name || 'Nasser', optOutUrl: await reviewOptOutUrl(env, 'test-user') })
+  await sendEmailDelivery({ env, to, copy })
+  return jsonResponse(request, env, { ok: true, to })
+}
+
 const sendScheduledShipmentEmails = async (env) => {
   const due = await listDueShipmentEmailOrders(env, new Date().toISOString())
   for (const order of due) {
@@ -7026,6 +7167,14 @@ const handleRequest = async (request, env, ctx) => {
     return handleAdminGrantCredits(request, env)
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/reviews/unsubscribe') {
+    return handleReviewOptOut(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/review-followup-test') {
+    return handleAdminReviewFollowUpTest(request, env)
+  }
+
   if (request.method === 'GET' && url.pathname === '/api/occasions') {
     return handlePopularOccasions(request, env)
   }
@@ -7290,5 +7439,6 @@ export default {
   },
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(sendScheduledShipmentEmails(env))
+    ctx.waitUntil(sendReviewFollowUpEmails(env).catch((error) => console.error('review follow-ups failed', error)))
   },
 }

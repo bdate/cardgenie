@@ -428,7 +428,8 @@ type MailingAddress = {
   country: 'US'
 }
 type PrintOrderStep = 'closed' | 'ship-to' | 'mail-from' | 'review'
-type FeedbackSource = 'post_send' | 'account' | 'footer'
+type FeedbackSource = 'post_send' | 'account' | 'footer' | 'email_copy' | 'email_print' | 'email_followup'
+const emailFeedbackSources: FeedbackSource[] = ['email_copy', 'email_print', 'email_followup']
 type PublicReview = { id: string; name: string; rating: number | null; comment: string; createdAt: string }
 type AdminCostSummary = {
   days: number
@@ -3619,6 +3620,7 @@ function App() {
   const [reviewsOpen, setReviewsOpen] = useState(false)
   const [publicReviews, setPublicReviews] = useState<PublicReview[] | null>(null)
   const [reviewsError, setReviewsError] = useState('')
+  const [reviewsPanelSource, setReviewsPanelSource] = useState<FeedbackSource>('footer')
 
   const openReviews = async () => {
     setReviewsOpen(true)
@@ -3637,10 +3639,11 @@ function App() {
 
   const closeReviews = () => {
     setReviewsOpen(false)
-    if (feedbackSource === 'footer') {
+    if (feedbackSource === reviewsPanelSource) {
       setShowFeedbackForm(false)
       if (feedbackSubmitted) setFeedbackSubmitted(false)
     }
+    setReviewsPanelSource('footer')
   }
 
   useEffect(() => {
@@ -3655,10 +3658,17 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (!params.has('reviews')) return
+    const wantsForm = params.get('reviews') === 'write'
+    const linkSource = emailFeedbackSources.find((source) => source === params.get('src')) ?? 'footer'
     params.delete('reviews')
+    params.delete('src')
     const nextQuery = params.toString()
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
     void openReviews()
+    if (wantsForm) {
+      setReviewsPanelSource(linkSource)
+      openFeedbackForm(linkSource)
+    }
   }, [])
 
   useEffect(() => {
@@ -14426,10 +14436,10 @@ function App() {
               <h3 id="reviews-title">Reviews</h3>
               <p className="contact-subtitle">What shoppers are saying about Card Genie.</p>
             </div>
-            {feedbackSource === 'footer' && (showFeedbackForm || feedbackSubmitted) ? (
-              renderFeedbackPrompt('footer')
+            {feedbackSource === reviewsPanelSource && (showFeedbackForm || feedbackSubmitted) ? (
+              renderFeedbackPrompt(reviewsPanelSource)
             ) : (
-              <button className="secondary-button reviews-write" type="button" onClick={() => openFeedbackForm('footer')}>
+              <button className="secondary-button reviews-write" type="button" onClick={() => openFeedbackForm(reviewsPanelSource)}>
                 Write a review
               </button>
             )}
