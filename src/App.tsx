@@ -8918,6 +8918,10 @@ function App() {
 
   const submitFeedback = async () => {
     const comment = feedbackComment.trim()
+    if (feedbackRating === null) {
+      setFeedbackNotice('Please choose a star rating.')
+      return
+    }
     if (!comment) {
       setFeedbackNotice('Write a short review before sending.')
       return
@@ -8943,7 +8947,7 @@ function App() {
         headers,
         body: JSON.stringify({
           name: feedbackName.trim() || undefined,
-          rating: feedbackRating ?? undefined,
+          rating: feedbackRating,
           comment,
           source: feedbackSource,
         }),
@@ -9032,9 +9036,7 @@ function App() {
           />
         </label>
         <fieldset className="feedback-rating">
-          <legend>
-            Stars <span className="field-optional">(optional)</span>
-          </legend>
+          <legend>Stars</legend>
           <div className="feedback-stars" role="group" aria-label="Star rating">
             {[1, 2, 3, 4, 5].map((value) => {
               const selected = feedbackRating !== null && value <= feedbackRating
@@ -9051,11 +9053,6 @@ function App() {
                 </button>
               )
             })}
-            {feedbackRating !== null && (
-              <button className="text-action-link" type="button" onClick={() => setFeedbackRating(null)}>
-                Clear
-              </button>
-            )}
           </div>
         </fieldset>
         <label>

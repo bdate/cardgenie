@@ -4320,13 +4320,11 @@ const handleCreateTestimonial = async (request, env) => {
     const rawRating = body.rating
     let rating = null
 
-    if (rawRating !== undefined && rawRating !== null && rawRating !== '') {
-      const parsed = Number(rawRating)
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
-        return jsonResponse(request, env, { error: 'Choose a rating from 1 to 5 stars, or leave it blank.' }, 400)
-      }
-      rating = parsed
+    const parsed = Number(rawRating)
+    if (rawRating === undefined || rawRating === null || rawRating === '' || !Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+      return jsonResponse(request, env, { error: 'Please choose a star rating from 1 to 5.' }, 400)
     }
+    rating = parsed
 
     if (!comment) {
       return jsonResponse(request, env, { error: 'Write a short review before sending.' }, 400)
