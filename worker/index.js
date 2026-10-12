@@ -1737,6 +1737,34 @@ const buildDeploySummaryCopy = ({ subject, summary }) => {
   }
 }
 
+// Only occasions typed by several different shoppers are shared, so nobody's personal wording leaks.
+const OCCASION_MIN_SHOPPERS = 3
+const OCCASION_CACHE_KEY = 'occasions:popular:v1'
+
+const handlePopularOccasions = async (request, env) => {
+  let occasions = env.CARD_STORE ? await env.CARD_STORE.get(OCCASION_CACHE_KEY, 'json') : null
+  if (!occasions && env.ACCOUNT_DB) {
+    const { results = [] } = await env.ACCOUNT_DB.prepare(
+      `SELECT lower(trim(occasion)) AS label, COUNT(*) AS uses, COUNT(DISTINCT user_id) AS shoppers
+         FROM cards
+        WHERE occasion IS NOT NULL AND length(trim(occasion)) BETWEEN 3 AND 32
+        GROUP BY label
+       HAVING shoppers >= ?
+        ORDER BY uses DESC
+        LIMIT 60`,
+    )
+      .bind(OCCASION_MIN_SHOPPERS)
+      .all()
+    occasions = results
+      .map((row) => ({ label: String(row.label || '').replace(/[!.?\s]+$/, ''), uses: Number(row.uses) || 0 }))
+      .filter((row) => row.label && row.label.split(/\s+/).length <= 4 && !/[@/\\<>]|https?:/.test(row.label))
+    if (env.CARD_STORE) {
+      await env.CARD_STORE.put(OCCASION_CACHE_KEY, JSON.stringify(occasions), { expirationTtl: 3600 })
+    }
+  }
+  return jsonResponse(request, env, { occasions: occasions || [] })
+}
+
 const CONTACT_TO = 'cardgenie@gcuniverse.com'
 const CONTACT_TOPICS = new Set(['General questions', 'Credits and Billing', 'Privacy', 'Suggestions', 'Other'])
 const CONTACT_MIN_FILL_MS = 3000
@@ -6977,6 +7005,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/grant-credits') {
     return handleAdminGrantCredits(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/occasions') {
+    return handlePopularOccasions(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/contact') {

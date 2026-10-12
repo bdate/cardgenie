@@ -897,6 +897,122 @@ const contactTopics = [
     hint: 'Tell us what’s on your mind.',
   },
 ]
+const commonOccasions = [
+  'Birthday',
+  'Thank you',
+  'Anniversary',
+  'Get well',
+  'Sympathy',
+  'Congratulations',
+  'Graduation',
+  'Wedding',
+  'Engagement',
+  'New baby',
+  'Baby shower',
+  'Bridal shower',
+  'Retirement',
+  'New job',
+  'Promotion',
+  'Work anniversary',
+  'Welcome to the team',
+  'Farewell',
+  'Good luck',
+  'Bon voyage',
+  'Welcome home',
+  'Housewarming',
+  'Just because',
+  'Thinking of you',
+  'Miss you',
+  'Love you',
+  'Friendship',
+  'Encouragement',
+  'Apology',
+  'Pet sympathy',
+  'Teacher appreciation',
+  'Nurse appreciation',
+  'Boss’s Day',
+  'Valentine’s Day',
+  'Mother’s Day',
+  'Father’s Day',
+  'Grandparents Day',
+  'Easter',
+  'Passover',
+  'Thanksgiving',
+  'Halloween',
+  'Christmas',
+  'Hanukkah',
+  'Happy holidays',
+  'New Year',
+  'St. Patrick’s Day',
+  'Diwali',
+  'Eid',
+  'Lunar New Year',
+  'Bar mitzvah',
+  'Bat mitzvah',
+  'Quinceañera',
+  'First communion',
+  'Baptism',
+]
+
+const ordinalSuffix = (n: number) => {
+  const tens = n % 100
+  if (tens >= 11 && tens <= 13) return 'th'
+  return ['th', 'st', 'nd', 'rd'][n % 10] || 'th'
+}
+
+const normalizeOccasion = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[’']/g, '')
+    .replace(/[^a-z0-9ñ ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const formatOccasionLabel = (value: string) => {
+  const trimmed = value.trim()
+  return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : ''
+}
+
+const MAX_OCCASION_SUGGESTIONS = 7
+
+const buildOccasionSuggestions = (typed: string, popular: { label: string; uses: number }[]) => {
+  const query = normalizeOccasion(typed)
+  if (!query) return []
+  const uses = new Map<string, number>()
+  const labels = new Map<string, string>()
+  commonOccasions.forEach((label) => labels.set(normalizeOccasion(label), label))
+  popular.forEach((entry) => {
+    const key = normalizeOccasion(entry.label)
+    if (!key) return
+    uses.set(key, (uses.get(key) || 0) + entry.uses)
+    if (!labels.has(key)) labels.set(key, formatOccasionLabel(entry.label))
+  })
+  const number = query.match(/^(\d{1,3})(st|nd|rd|th)?\b/)
+  if (number) {
+    const n = Number(number[1])
+    if (n > 0) {
+      for (const kind of ['birthday', 'anniversary']) {
+        const label = `${n}${ordinalSuffix(n)} ${kind}`
+        if (!labels.has(normalizeOccasion(label))) labels.set(normalizeOccasion(label), formatOccasionLabel(label))
+      }
+    }
+  }
+  const scored: { label: string; score: number }[] = []
+  labels.forEach((label, key) => {
+    if (key === query) return
+    let rank = -1
+    if (key.startsWith(query)) rank = 3
+    else if (key.split(' ').some((word) => word.startsWith(query))) rank = 2
+    else if (query.length >= 3 && key.includes(query)) rank = 1
+    if (rank < 0) return
+    scored.push({ label, score: rank * 10000 + (uses.get(key) || 0) * 10 - key.length })
+  })
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_OCCASION_SUGGESTIONS)
+    .map((entry) => entry.label)
+}
+
 const companyAddressLines = ['Card-Genie.com', '154 East Prospect Avenue', 'Suite B', 'Danville, CA 94526']
 const accountSessionStorageKey = 'cardGenieAccountSession'
 const preferredNamePromptStorageKey = (phoneE164: string) =>
@@ -3259,6 +3375,9 @@ function App() {
   const [selectedRecipientId, setSelectedRecipientId] = useState('')
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
   const recipientFieldRef = useRef<HTMLLabelElement | null>(null)
+  const [popularOccasions, setPopularOccasions] = useState<{ label: string; uses: number }[]>([])
+  const [showOccasionSuggestions, setShowOccasionSuggestions] = useState(false)
+  const [activeOccasionIndex, setActiveOccasionIndex] = useState(-1)
   const recipientApplyTokenRef = useRef(0)
   const autoFilledRecipientRef = useRef<AutoFilledRecipient | null>(null)
   const [saveRecipientPhotosOptIn, setSaveRecipientPhotosOptIn] = useState(false)
@@ -6149,6 +6268,45 @@ function App() {
       reader.onerror = () => reject(reader.error)
       reader.readAsDataURL(blob)
     })
+
+  useEffect(() => {
+    if (isRecipientView) return
+    let cancelled = false
+    fetch(apiUrl('/api/occasions'))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.occasions)) setPopularOccasions(data.occasions)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isRecipientView])
+
+  const occasionSuggestions = useMemo(
+    () => buildOccasionSuggestions(details.occasion, popularOccasions),
+    [details.occasion, popularOccasions],
+  )
+
+  useEffect(() => {
+    setActiveOccasionIndex(-1)
+  }, [details.occasion])
+
+  const pickOccasion = (label: string) => {
+    updateDetails('occasion', label)
+    setShowOccasionSuggestions(false)
+  }
+
+  useEffect(() => {
+    if (isRecipientView) return
+    const params = new URLSearchParams(window.location.search)
+    const occasionParam = params.get('occasion')?.trim().slice(0, 40)
+    if (!occasionParam) return
+    params.delete('occasion')
+    const nextQuery = params.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    updateDetails('occasion', occasionParam)
+  }, [])
 
   const recipientSuggestions = useMemo(() => {
     const query = details.recipientName.trim().toLowerCase()
@@ -12536,14 +12694,69 @@ function App() {
           </div>
 
           <div className="field-grid">
-            <label>
+            <label className="recipient-name-field">
               Occasion
               <input
                 required
                 value={details.occasion}
-                onChange={(event) => updateDetails('occasion', event.target.value)}
-                placeholder="Example: birthday, thank you, anniversary"
+                onChange={(event) => {
+                  updateDetails('occasion', event.target.value)
+                  setShowOccasionSuggestions(true)
+                }}
+                onFocus={() => setShowOccasionSuggestions(true)}
+                onBlur={(event) => {
+                  const input = event.currentTarget
+                  window.setTimeout(() => {
+                    if (document.activeElement !== input) setShowOccasionSuggestions(false)
+                  }, 150)
+                }}
+                onKeyDown={(event) => {
+                  const listOpen = showOccasionSuggestions && occasionSuggestions.length > 0
+                  if (event.key === 'Escape') {
+                    setShowOccasionSuggestions(false)
+                  } else if (listOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                    event.preventDefault()
+                    const step = event.key === 'ArrowDown' ? 1 : -1
+                    setActiveOccasionIndex((current) =>
+                      current < 0 && step < 0
+                        ? occasionSuggestions.length - 1
+                        : (current + step + occasionSuggestions.length) % occasionSuggestions.length,
+                    )
+                  } else if (event.key === 'Enter' && listOpen && occasionSuggestions[activeOccasionIndex]) {
+                    event.preventDefault()
+                    pickOccasion(occasionSuggestions[activeOccasionIndex])
+                  }
+                }}
+                placeholder="Start typing: birthday, thank you…"
+                autoComplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="occasion-suggestions"
+                aria-expanded={showOccasionSuggestions && occasionSuggestions.length > 0}
+                aria-activedescendant={
+                  occasionSuggestions[activeOccasionIndex] ? `occasion-suggestion-${activeOccasionIndex}` : undefined
+                }
               />
+              {showOccasionSuggestions && occasionSuggestions.length > 0 && (
+                <ul id="occasion-suggestions" className="recipient-suggestions occasion-suggestions" role="listbox" aria-label="Occasions">
+                  {occasionSuggestions.map((label, index) => (
+                    <li key={label} id={`occasion-suggestion-${index}`} role="option" aria-selected={index === activeOccasionIndex}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        className={index === activeOccasionIndex ? 'is-active' : undefined}
+                        onPointerDown={(event) => {
+                          if (event.pointerType === 'mouse') event.preventDefault()
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => pickOccasion(label)}
+                      >
+                        <strong>{label}</strong>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </label>
 
             <label>

@@ -6123,3 +6123,7 @@ select.is-placeholder option {
   font: inherit;
   line-height: inherit;
 }
+
+.occasion-suggestions button {
+  min-height: 42px;
+}
