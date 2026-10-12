@@ -4196,7 +4196,7 @@ const handlePublicTestimonials = async (request, env) => {
     createdAt: review.createdAt,
   }))
   const response = jsonResponse(request, env, { ok: true, reviews })
-  response.headers.set('Cache-Control', 'public, max-age=300')
+  response.headers.set('Cache-Control', 'public, max-age=60')
   return response
 }
 
