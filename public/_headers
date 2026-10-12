@@ -1,0 +1,17 @@
+/c/*
+  X-Robots-Tag: noindex
+
+/font-preview.html
+  X-Robots-Tag: noindex
+
+/loader-preview.html
+  X-Robots-Tag: noindex
+
+/logo-preview.html
+  X-Robots-Tag: noindex
+
+/logo-preview/*
+  X-Robots-Tag: noindex
+
+/sms-opt-in/*
+  X-Robots-Tag: noindex

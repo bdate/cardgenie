@@ -6117,3 +6117,9 @@ select.is-placeholder option {
     grid-template-columns: 1fr;
   }
 }
+
+.brand-heading {
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+}

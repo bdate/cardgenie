@@ -5,16 +5,76 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="format-detection" content="telephone=no, email=no, address=no" />
-    <title>Card Genie</title>
-    <meta name="description" content="Personalized greeting cards, made with a little magic." />
+    <title>Card Genie – Personalized Greeting Cards, Made in Minutes</title>
+    <meta
+      name="description"
+      content="Create a one-of-a-kind greeting card with custom artwork and a heartfelt message written just for them. Send it by email or text, or have it printed and mailed."
+    />
+    <link rel="canonical" href="https://www.card-genie.com/" />
+    <meta name="theme-color" content="#fff8ef" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Card Genie" />
-    <meta property="og:title" content="Card Genie" />
-    <meta property="og:description" content="Personalized greeting cards, made with a little magic." />
+    <meta property="og:title" content="Card Genie – Personalized Greeting Cards, Made in Minutes" />
+    <meta
+      property="og:description"
+      content="Custom artwork and a heartfelt message written just for them. Send by email or text, or mail a printed card."
+    />
     <meta property="og:url" content="https://www.card-genie.com/" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Card Genie" />
-    <meta name="twitter:description" content="Personalized greeting cards, made with a little magic." />
+    <meta property="og:image" content="https://www.card-genie.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Card Genie – personalized greeting cards, made with a little magic" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Card Genie – Personalized Greeting Cards, Made in Minutes" />
+    <meta
+      name="twitter:description"
+      content="Custom artwork and a heartfelt message written just for them. Send by email or text, or mail a printed card."
+    />
+    <meta name="twitter:image" content="https://www.card-genie.com/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://www.card-genie.com/#org",
+            "name": "Card Genie",
+            "url": "https://www.card-genie.com/",
+            "logo": "https://www.card-genie.com/logo.png",
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": "154 East Prospect Avenue, Suite B",
+              "addressLocality": "Danville",
+              "addressRegion": "CA",
+              "postalCode": "94526",
+              "addressCountry": "US"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://www.card-genie.com/#website",
+            "name": "Card Genie",
+            "url": "https://www.card-genie.com/",
+            "publisher": { "@id": "https://www.card-genie.com/#org" }
+          }
+        ]
+      }
+    </script>
+    <script>
+      // Personal card links and unknown paths all load this page; keep them out of search results.
+      ;(function () {
+        var path = location.pathname
+        var personal = /^\/c\//.test(path) || /[?&](card|resume)=/.test(location.search)
+        var known = path === '/' || path === '/index.html' || /^\/gcu\//i.test(path)
+        if (personal || !known) {
+          var meta = document.createElement('meta')
+          meta.name = 'robots'
+          meta.content = 'noindex'
+          document.head.appendChild(meta)
+        }
+      })()
+    </script>
     <script>
       // Keep everyone on www so sign-ins and saved drafts live under one origin.
       if (location.hostname === 'card-genie.com') {

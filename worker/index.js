@@ -7203,10 +7203,23 @@ const handleGenerateQueue = async (batch, env) => {
   }
 }
 
+// Everything on the API host (share previews, GCU copies, JSON) stays out of search results.
+const withNoindex = (response) => {
+  if (!response || response.status === 101 || response.webSocket) return response
+  try {
+    response.headers.set('X-Robots-Tag', 'noindex')
+    return response
+  } catch {
+    const copy = new Response(response.body, response)
+    copy.headers.set('X-Robots-Tag', 'noindex')
+    return copy
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
-      return await handleRequest(request, env, ctx)
+      return withNoindex(await handleRequest(request, env, ctx))
     } catch (error) {
       console.error(error)
       return jsonResponse(

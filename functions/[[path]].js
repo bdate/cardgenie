@@ -12,6 +12,7 @@ export const onRequestGet = async ({ request, next }) => {
     return next()
   }
   return new Response(page.body, {
-    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' },
+    // GCU's own product pages should rank for these cards, not this copy.
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'x-robots-tag': 'noindex' },
   })
 }

@@ -9954,9 +9954,11 @@ function App() {
                 alt=""
               />
             </button>
-            <a className="brand-wordmark-link" href="/" aria-label="Card Genie home">
-              <span className="brand-wordmark">Card Genie</span>
-            </a>
+            <h1 className="brand-heading">
+              <a className="brand-wordmark-link" href="/" aria-label="Card Genie home">
+                <span className="brand-wordmark">Card Genie</span>
+              </a>
+            </h1>
           </div>
         )}
         <a
