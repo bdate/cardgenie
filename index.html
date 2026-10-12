@@ -16,7 +16,13 @@
     <meta name="twitter:title" content="Card Genie" />
     <meta name="twitter:description" content="Personalized greeting cards, made with a little magic." />
     <script>
-      // www.card-genie.com is served by GitHub Pages, so /gcu/<card#> lands here (via 404.html);
+      // Keep everyone on www so sign-ins and saved drafts live under one origin.
+      if (location.hostname === 'card-genie.com') {
+        location.replace('https://www.card-genie.com' + location.pathname + location.search + location.hash)
+      }
+    </script>
+    <script>
+      // Fallback when /gcu/<card#> reaches the SPA instead of the Pages function;
       // swap in the GCU animation page the API serves, keeping this URL.
       ;(function () {
         var m = location.pathname.match(/^\/gcu\/0*(\d{1,10})\/?$/i)
