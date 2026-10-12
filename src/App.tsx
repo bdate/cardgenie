@@ -2802,6 +2802,7 @@ function App() {
   const [card, setCard] = useState<GeneratedCard | null>(null)
   const [step, setStep] = useState<ExperienceStep>('envelope')
   const pendingEnvelopeSettleRef = useRef<EnvelopeSettle | null>(null)
+  const [openPrintFromLink, setOpenPrintFromLink] = useState(false)
   useLayoutEffect(() => {
     const settle = pendingEnvelopeSettleRef.current
     pendingEnvelopeSettleRef.current = null
@@ -3909,6 +3910,13 @@ function App() {
 
     const params = new URLSearchParams(window.location.search)
     const urlResumeCardId = params.get('resume')
+    // "Mail a printed copy" in the sender's copy email links to ?resume=<card>&print=1.
+    const wantsPrintFromEmail = params.get('print') === '1'
+    if (params.has('print')) {
+      params.delete('print')
+      const nextQuery = params.toString()
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    }
     const storedResume = readCheckoutResume()
     const resumeCardId =
       (isCheckoutResumeCardId(urlResumeCardId) && urlResumeCardId.trim()) ||
@@ -4072,6 +4080,10 @@ function App() {
       const restoredPrintStep =
         storedResume && isPrintOrderStep(storedResume.printOrderStep) ? storedResume.printOrderStep : 'closed'
       const restoredPrintOrder = restoredPrintStep !== 'closed'
+      if (wantsPrintFromEmail && !restoredPrintOrder) {
+        setOpenPrintFromLink(true)
+        return
+      }
       setDeliveryNotice(
         restoredPrintOrder
           ? 'Welcome back — your credits are updated and your print order details are ready.'
@@ -7913,6 +7925,14 @@ function App() {
       document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
   }
+
+  useEffect(() => {
+    if (!openPrintFromLink || !card || !showSendActions) {
+      return
+    }
+    setOpenPrintFromLink(false)
+    openPrintOrder()
+  }, [openPrintFromLink, card, showSendActions])
 
   const previewPrintEnvelope = () => {
     if (printOrderStep === 'review') {

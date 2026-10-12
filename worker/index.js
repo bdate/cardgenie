@@ -1547,20 +1547,22 @@ const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
   }
 }
 
-const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl) => {
+const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl) => {
   const recipient = record.details.recipientName?.trim() || record.details.recipientType?.trim() || 'your recipient'
   const sender = record.signature || record.details.senderName || 'You'
   const thumbnailAlt = `Cover of the card you sent to ${recipient}`
 
   return {
     subject: `Your copy of the card for ${recipient}`,
-    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}`,
+    text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
         ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
+        <p style="margin-top: 22px;">Want it on real cardstock? We’ll print this card and mail it to ${recipient}, or to anyone you choose, by USPS.</p>
+        <p><a href="${printUrl}" style="display:inline-block;padding:10px 16px;background:#ffffff;color:#3f9b91;border:2px solid #3f9b91;text-decoration:none;border-radius:12px;font-weight:700;">Mail a printed copy</a></p>
         <p style="margin-top: 18px; color: #666;">Sent by ${sender} through Card Genie.</p>
       </div>
     `,
@@ -4350,7 +4352,8 @@ const handleDeliverCard = async (request, env) => {
 
       if (senderCopyPending && senderCopyEmail) {
         try {
-          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl)
+          const printUrl = `${getPublicAppUrl(request, env)}/?resume=${encodeURIComponent(record.id)}&print=1`
+          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl, printUrl)
           senderCopyDeliveredTo = await sendEmailDelivery({
             env,
             to: normalizeEmailAddress(senderCopyEmail),
