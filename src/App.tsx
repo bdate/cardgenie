@@ -12479,7 +12479,7 @@ function App() {
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
               placeholder={
-                'Add memories, interests, stories, or scene ideas for the card.\n\nPhysical traits (tall, green eyes, blonde hair, etc.) help draw people on the cover — they won\u2019t appear in the inside message.\n\nDescribe how people should look if you want them on the cover. Those details shape the artwork, not the inside note.'
+                'Add memories, interests, stories, or scene ideas for the card.\n\nTo put people on the cover, describe how they look (tall, green eyes, blonde hair, etc.). Looks shape the artwork only \u2014 they won\u2019t appear in the inside message.'
               }
             />
           </label>
