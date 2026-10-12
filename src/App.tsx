@@ -872,6 +872,41 @@ const staticPageRedirects: Record<string, string> = {
 
 const supportEmail = 'support@card-genie.com'
 const supportMailto = `mailto:${supportEmail}`
+const contactTopics = [
+  {
+    label: 'Help making a card',
+    hint: 'What were you trying to make, and where did you get stuck? Include any error message you saw.',
+  },
+  {
+    label: 'My card wasn’t received or won’t open',
+    hint: 'Who was it sent to (email or phone), about when, and what happens when they open it?',
+  },
+  {
+    label: 'Printed card order',
+    hint: 'Include the recipient’s name and roughly when you ordered. Need to change the address? Tell us the new one.',
+  },
+  {
+    label: 'Billing, credits, or refunds',
+    hint: 'What happened, about when, and the amount charged? Please don’t include full card numbers.',
+  },
+  {
+    label: 'Account or sign-in',
+    hint: 'What phone number do you sign in with, and what happens when you try?',
+  },
+  {
+    label: 'Suggestion or feedback',
+    hint: 'We’d love to hear it — a new occasion, a style, a feature, or anything that would make Card Genie better.',
+  },
+  {
+    label: 'Business or bulk orders',
+    hint: 'Tell us about your business, how many cards you need, and for what occasions.',
+  },
+  {
+    label: 'Something else',
+    hint: 'How can we help?',
+  },
+]
+const companyAddressLines = ['Card-Genie.com', '154 East Prospect Avenue', 'Suite B', 'Danville, CA 94526']
 const accountSessionStorageKey = 'cardGenieAccountSession'
 const preferredNamePromptStorageKey = (phoneE164: string) =>
   `cardGeniePreferredNamePrompt:${String(phoneE164 || '').trim()}`
@@ -3382,6 +3417,74 @@ function App() {
     (accountProfileMailing.name.trim() || accountSession?.mailingAddress?.name?.trim() || '').split(/\s+/)[0] ||
     ''
   const senderNameClearedByShopperRef = useRef(false)
+  const [contactOpen, setContactOpen] = useState(false)
+  const [contactForm, setContactForm] = useState({ name: '', email: '', topic: '', message: '', website: '' })
+  const [contactStartedAt, setContactStartedAt] = useState(0)
+  const [contactStatus, setContactStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [contactError, setContactError] = useState('')
+
+  const openContact = () => {
+    setContactForm((current) => ({
+      ...current,
+      name: current.name || accountPreferredName.trim() || accountSession?.preferredName?.trim() || accountSession?.mailingAddress?.name?.trim() || '',
+      email: current.email || accountSession?.copyEmail || '',
+    }))
+    setContactStartedAt(Date.now())
+    setContactStatus('idle')
+    setContactError('')
+    setContactOpen(true)
+  }
+
+  const closeContact = () => {
+    setContactOpen(false)
+    if (contactStatus === 'sent') {
+      setContactForm((current) => ({ ...current, topic: '', message: '' }))
+      setContactStatus('idle')
+    }
+  }
+
+  const submitContact = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (contactStatus === 'sending') return
+    setContactError('')
+    if (!contactForm.topic) {
+      setContactError('Please pick a topic.')
+      return
+    }
+    setContactStatus('sending')
+    try {
+      const response = await fetch(apiUrl('/api/contact'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
+        },
+        body: JSON.stringify({
+          ...contactForm,
+          startedAt: contactStartedAt,
+          cardId: sharedCard?.id || sharedCardId || '',
+          page: window.location.href,
+        }),
+      })
+      const data = await getApiJson(response, 'We couldn’t send that just now.')
+      if (!response.ok) {
+        throw new Error(data.error || 'We couldn’t send that just now.')
+      }
+      setContactStatus('sent')
+    } catch (caughtError) {
+      setContactStatus('idle')
+      setContactError(caughtError instanceof Error ? caughtError.message : 'We couldn’t send that just now.')
+    }
+  }
+
+  useEffect(() => {
+    if (!contactOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeContact()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   useEffect(() => {
     if (!isSignedIn || isRecipientView || !accountSenderName || senderNameClearedByShopperRef.current) {
@@ -14020,7 +14123,9 @@ function App() {
               {accountButtonLabel}
             </button>
           )}
-          <a href={supportMailto}>Email us</a>
+          <button type="button" onClick={openContact}>
+            Contact us
+          </button>
           <a href="/faq/">FAQ</a>
         </div>
         <div className="footer-legal">
@@ -14033,6 +14138,118 @@ function App() {
           )}
         </div>
       </footer>
+      {contactOpen && (
+        <div
+          className="contact-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeContact()
+          }}
+        >
+          <div className="contact-dialog" role="dialog" aria-modal="true" aria-labelledby="contact-title">
+            <button className="contact-close" type="button" onClick={closeContact} aria-label="Close">
+              ×
+            </button>
+            {contactStatus === 'sent' ? (
+              <div className="contact-sent">
+                <h3 id="contact-title">Thanks — message sent!</h3>
+                <p>
+                  We’ll reply to <strong>{contactForm.email}</strong>, usually within one business day.
+                </p>
+                <button className="primary-button" type="button" onClick={closeContact}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form className="contact-form" onSubmit={submitContact}>
+                <div>
+                  <h3 id="contact-title">Contact us</h3>
+                  <p className="contact-subtitle">Questions, problems, or ideas — we read every message.</p>
+                </div>
+                <div className="contact-row">
+                  <label>
+                    Your name
+                    <input
+                      required
+                      maxLength={100}
+                      autoComplete="name"
+                      value={contactForm.name}
+                      onChange={(event) => setContactForm({ ...contactForm, name: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Your email
+                    <input
+                      required
+                      type="email"
+                      autoComplete="email"
+                      value={contactForm.email}
+                      onChange={(event) => setContactForm({ ...contactForm, email: event.target.value })}
+                      placeholder="So we can reply"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Topic
+                  <select
+                    required
+                    value={contactForm.topic}
+                    onChange={(event) => setContactForm({ ...contactForm, topic: event.target.value })}
+                  >
+                    <option value="" disabled>
+                      Pick a topic
+                    </option>
+                    {contactTopics.map((topic) => (
+                      <option key={topic.label} value={topic.label}>
+                        {topic.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Message
+                  <textarea
+                    required
+                    rows={6}
+                    minLength={10}
+                    maxLength={4000}
+                    value={contactForm.message}
+                    onChange={(event) => setContactForm({ ...contactForm, message: event.target.value })}
+                    placeholder={
+                      contactTopics.find((topic) => topic.label === contactForm.topic)?.hint ||
+                      'Pick a topic above and we’ll suggest what to include.'
+                    }
+                  />
+                </label>
+                <label className="contact-trap" aria-hidden="true">
+                  Website
+                  <input
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={contactForm.website}
+                    onChange={(event) => setContactForm({ ...contactForm, website: event.target.value })}
+                  />
+                </label>
+                {contactError && <p className="contact-error">{contactError}</p>}
+                <div className="contact-actions">
+                  <button className="primary-button" type="submit" disabled={contactStatus === 'sending'}>
+                    {contactStatus === 'sending' && <span className="contact-spinner" aria-hidden="true" />}
+                    {contactStatus === 'sending' ? 'Sending…' : 'Send message'}
+                  </button>
+                  <button className="text-action-link" type="button" onClick={closeContact}>
+                    Cancel
+                  </button>
+                </div>
+                <div className="contact-fineprint">
+                  <span>
+                    Prefer email? <a href={supportMailto}>{supportEmail}</a>
+                  </span>
+                  <address>{companyAddressLines.join(' · ')}</address>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }

@@ -1596,6 +1596,7 @@ const sendSendGridEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
       },
     ],
     from: { ...parseEmailSender(env.EMAIL_FROM), ...(copy.fromName ? { name: copy.fromName } : {}) },
+    ...(copy.replyTo ? { reply_to: { email: copy.replyTo, ...(copy.replyToName ? { name: copy.replyToName } : {}) } } : {}),
     content: [
       { type: 'text/plain', value: copy.text },
       { type: 'text/html', value: copy.html },
@@ -1646,6 +1647,7 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
   const payload = {
     From: copy.fromName ? `${copy.fromName} <${parseEmailSender(env.EMAIL_FROM).email}>` : env.EMAIL_FROM,
     To: to,
+    ...(copy.replyTo ? { ReplyTo: copy.replyTo } : {}),
     Subject: copy.subject,
     TextBody: copy.text,
     HtmlBody: copy.html,
@@ -1733,6 +1735,103 @@ const buildDeploySummaryCopy = ({ subject, summary }) => {
       </div>
     `,
   }
+}
+
+const CONTACT_TO = 'cardgenie@gcuniverse.com'
+const CONTACT_TOPICS = new Set([
+  'Help making a card',
+  'My card wasn’t received or won’t open',
+  'Printed card order',
+  'Billing, credits, or refunds',
+  'Account or sign-in',
+  'Suggestion or feedback',
+  'Business or bulk orders',
+  'Something else',
+])
+const CONTACT_MIN_FILL_MS = 3000
+const CONTACT_MAX_PER_HOUR = 5
+const CONTACT_MAX_PER_DAY_TOTAL = 200
+
+const bumpContactCounter = async (env, key, limit, ttlSeconds) => {
+  if (!env.CARD_STORE) return true
+  const count = Number((await env.CARD_STORE.get(key)) || 0)
+  if (count >= limit) return false
+  await env.CARD_STORE.put(key, String(count + 1), { expirationTtl: ttlSeconds })
+  return true
+}
+
+const handleContact = async (request, env) => {
+  const body = (await readJson(request)) || {}
+  const accepted = () => jsonResponse(request, env, { ok: true })
+
+  // Bots fill the hidden field or submit instantly; pretend success so they don't retry.
+  if (String(body.website || '').trim()) return accepted()
+  const elapsed = Date.now() - Number(body.startedAt || 0)
+  if (!Number.isFinite(elapsed) || elapsed < CONTACT_MIN_FILL_MS) return accepted()
+
+  const name = String(body.name || '').trim().slice(0, 100)
+  const topic = String(body.topic || '').trim()
+  const message = String(body.message || '').trim()
+  let email = ''
+  try {
+    email = normalizeEmailAddress(String(body.email || ''))
+  } catch {
+    return jsonResponse(request, env, { error: 'Please enter a valid email so we can reply.' }, 400)
+  }
+  if (!name) return jsonResponse(request, env, { error: 'Please enter your name.' }, 400)
+  if (!CONTACT_TOPICS.has(topic)) return jsonResponse(request, env, { error: 'Please pick a topic.' }, 400)
+  if (message.length < 10) return jsonResponse(request, env, { error: 'Please tell us a little more.' }, 400)
+  if (message.length > 4000) return jsonResponse(request, env, { error: 'Please keep your message under 4,000 characters.' }, 400)
+  if ((message.match(/https?:\/\/|www\./gi) || []).length > 3) {
+    return jsonResponse(request, env, { error: 'Please include no more than 3 links.' }, 400)
+  }
+
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  const hour = new Date().toISOString().slice(0, 13)
+  const day = hour.slice(0, 10)
+  const tooMany = { error: 'You’ve sent several messages already. Please try again in a little while.' }
+  if (!(await bumpContactCounter(env, `contact:ip:${ip}:${hour}`, CONTACT_MAX_PER_HOUR, 7200))) {
+    return jsonResponse(request, env, tooMany, 429)
+  }
+  if (!(await bumpContactCounter(env, `contact:day:${day}`, CONTACT_MAX_PER_DAY_TOTAL, 172800))) {
+    return jsonResponse(request, env, tooMany, 429)
+  }
+
+  const session = await getAccountSession(env, readAccountToken(request))
+  const details = [
+    ['Name', name],
+    ['Email', email],
+    ['Topic', topic],
+    ['Signed-in phone', session?.phoneE164 || 'Not signed in'],
+    ['Card ID', String(body.cardId || '').slice(0, 80) || 'None'],
+    ['Page', String(body.page || '').slice(0, 300)],
+    ['Browser', (request.headers.get('User-Agent') || '').slice(0, 300)],
+    ['Country', request.cf?.country || ''],
+  ]
+  const copy = {
+    subject: `Card Genie contact: ${topic} — ${name}`,
+    replyTo: email,
+    replyToName: name,
+    text: `${message}\n\n---\n${details.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nReply to this email to answer ${name} directly.`,
+    html: `
+      <div style="font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #1f1a17; line-height: 1.55; max-width: 640px;">
+        <p style="margin: 0 0 12px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #7a6a60;">Card Genie contact form</p>
+        <div style="white-space: pre-wrap; font-size: 15px; padding: 14px 16px; background: #f6f3ee; border-radius: 10px;">${escapeHtml(message)}</div>
+        <table style="margin-top: 16px; font-size: 13px; color: #4a403a; border-collapse: collapse;">
+          ${details.map(([k, v]) => `<tr><td style="padding: 2px 12px 2px 0; color: #7a6a60; vertical-align: top;">${escapeHtml(k)}</td><td style="padding: 2px 0;">${escapeHtml(String(v))}</td></tr>`).join('')}
+        </table>
+        <p style="margin-top: 16px; font-size: 13px; color: #7a6a60;">Reply to this email to answer ${escapeHtml(name)} directly.</p>
+      </div>
+    `,
+  }
+
+  try {
+    await sendEmailDelivery({ env, to: CONTACT_TO, copy })
+  } catch (error) {
+    console.error('contact send failed', error)
+    return jsonResponse(request, env, { error: 'We couldn’t send that just now. Please try again in a minute.' }, 502)
+  }
+  return accepted()
 }
 
 const handleAdminDeploySummary = async (request, env) => {
@@ -6887,6 +6986,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/grant-credits') {
     return handleAdminGrantCredits(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/contact') {
+    return handleContact(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/deploy-summary') {
