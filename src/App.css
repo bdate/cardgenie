@@ -2213,6 +2213,61 @@ textarea:focus {
   transform: translate(-50%, -50%);
 }
 
+.cover-animation-panel {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  width: min(450px, 100%);
+  margin: 18px auto 0;
+  padding: 14px 16px;
+  border: 1px dashed rgba(63, 155, 145, 0.55);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.cover-animation-kicker {
+  color: var(--gcu-dark-teal);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cover-animation-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.cover-animation-actions p,
+.cover-animation-progress,
+.cover-animation-notice {
+  margin: 0;
+  color: var(--gcu-ink);
+  font-size: 0.92rem;
+}
+
+.cover-animation-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cover-animation-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(245, 158, 51, 0.28);
+  border-top-color: var(--gcu-orange);
+  border-radius: 50%;
+  animation: actionFeedbackSpin 700ms linear infinite;
+}
+
+.cover-animation-notice {
+  color: var(--gcu-dark-grey);
+}
+
 .cover-video-play {
   width: 0;
   height: 0;

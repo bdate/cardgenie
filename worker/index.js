@@ -1238,8 +1238,9 @@ const updateCardCoverImage = async (
     return null
   }
 
+  const { coverVideoKey: _staleVideo, coverVideoVersion: _staleVersion, coverVideoJob: _staleJob, ...current } = existing
   const next = {
-    ...existing,
+    ...current,
     updatedAt: new Date().toISOString(),
     details: details
       ? {
@@ -1505,11 +1506,13 @@ const processGenerateJob = async (env, jobInput) => {
 }
 
 const getCardSummary = (record, request, env) => {
-  const { editor: _editor, coverVideoKey, ...publicRecord } = record
+  const { editor: _editor, coverVideoKey, coverVideoVersion, coverVideoJob: _coverVideoJob, ...publicRecord } = record
   return {
     ...publicRecord,
     shareUrl: getShareUrl(request, env, record.id),
-    ...(coverVideoKey ? { coverVideoUrl: `${getShareUrl(request, env, record.id)}/video` } : {}),
+    ...(coverVideoKey
+      ? { coverVideoUrl: `${getShareUrl(request, env, record.id)}/video${coverVideoVersion ? `?v=${coverVideoVersion}` : ''}` }
+      : {}),
   }
 }
 
@@ -2643,6 +2646,12 @@ const handleSaveCard = async (request, env) => {
     if (existing?.createdAt) {
       record.createdAt = existing.createdAt
       record.updatedAt = new Date().toISOString()
+    }
+    // The client re-encodes the cover on every save, so it tells us whether the cover is still the animated one.
+    if (existing && payload?.keepCoverVideo === true) {
+      for (const field of ['coverVideoKey', 'coverVideoVersion', 'coverVideoJob']) {
+        if (existing[field]) record[field] = existing[field]
+      }
     }
     await saveCardRecord(env, record, {
       coverThumbDataUrl: payload?.coverThumb,
@@ -6601,6 +6610,156 @@ const handleAdminResendCardEmail = async (request, env) => {
 }
 
 const coverVideoMaxBytes = 50 * 1024 * 1024
+const COVER_ANIMATION_CREDIT_COST = 3
+const COVER_ANIMATION_MODEL = 'fal-ai/kling-video/v3/pro/image-to-video'
+const COVER_ANIMATION_TIMEOUT_MS = 15 * 60 * 1000
+const COVER_ANIMATION_PROMPT = [
+  'Bring this greeting card cover to life with subtle, natural motion.',
+  'People smile, blink and move gently; candles, lights, steam, water, leaves, flowers and fabric shimmer or sway softly; slow gentle camera push-in.',
+  'The greeting lettering stays perfectly still, sharp and unchanged.',
+  'Keep the original art style, colors, composition and faces exactly the same.',
+].join(' ')
+
+const putCardRecordRaw = (env, record) =>
+  env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+
+const coverAnimationResponse = (request, env, record, extra = {}) =>
+  jsonResponse(request, env, {
+    status: record.coverVideoJob ? 'pending' : record.coverVideoKey ? 'ready' : 'none',
+    ...(record.coverVideoKey ? { coverVideoUrl: getCardSummary(record, request, env).coverVideoUrl } : {}),
+    ...extra,
+  })
+
+const getAdminAnimationContext = async (request, env, cardId) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session?.phoneE164 || !isAdminPhone(session.phoneE164)) {
+    return { error: jsonResponse(request, env, { error: 'Not found.' }, 404) }
+  }
+  if (!env.FAL_KEY || !env.CARD_ASSETS || !env.CARD_STORE) {
+    return { error: jsonResponse(request, env, { error: 'Cover animation is not configured.' }, 503) }
+  }
+  const record = await getCardRecord(env, cardId)
+  if (!record?.card?.imageUrl) {
+    return { error: jsonResponse(request, env, { error: 'Card not found.' }, 404) }
+  }
+  return { session, record }
+}
+
+const refundCoverAnimation = async (env, job) => {
+  if (!job?.userId || !job.charged) return undefined
+  return applyCreditChange(env, { userId: job.userId, delta: job.charged, reason: 'cover_animate_refund', kind: 'adjustment' }).catch(
+    (error) => {
+      console.error('cover animation refund failed', error)
+      return undefined
+    },
+  )
+}
+
+const handleStartCoverAnimation = async (request, env, cardId) => {
+  const { session, record, error } = await getAdminAnimationContext(request, env, cardId)
+  if (error) return error
+  if (record.coverVideoJob) return coverAnimationResponse(request, env, record)
+
+  const user = env.ACCOUNT_DB
+    ? await env.ACCOUNT_DB.prepare('SELECT credit_balance FROM users WHERE id = ?').bind(session.userId).first()
+    : null
+  if ((Number(user?.credit_balance) || 0) < COVER_ANIMATION_CREDIT_COST) {
+    return jsonResponse(request, env, { error: `You need ${COVER_ANIMATION_CREDIT_COST} credits to animate the cover.` }, 402)
+  }
+
+  const submit = await fetch(`https://queue.fal.run/${COVER_ANIMATION_MODEL}`, {
+    method: 'POST',
+    headers: { Authorization: `Key ${env.FAL_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      start_image_url: record.card.imageUrl,
+      prompt: COVER_ANIMATION_PROMPT,
+      negative_prompt: 'blur, distort, low quality, changing or melting text, morphing faces, extra people',
+      duration: '5',
+      generate_audio: false,
+    }),
+  })
+  const job = await submit.json().catch(() => ({}))
+  if (!submit.ok || !job.status_url || !job.response_url) {
+    console.error('cover animation submit failed', submit.status, JSON.stringify(job).slice(0, 300))
+    return jsonResponse(request, env, { error: 'The animation service could not start. No credits were used.' }, 502)
+  }
+
+  const creditBalance = await applyCreditChange(env, {
+    userId: session.userId,
+    phoneE164: session.phoneE164,
+    delta: -COVER_ANIMATION_CREDIT_COST,
+    reason: 'cover_animate',
+  })
+  record.coverVideoJob = {
+    requestId: job.request_id,
+    statusUrl: job.status_url,
+    responseUrl: job.response_url,
+    startedAt: Date.now(),
+    userId: session.userId,
+    charged: COVER_ANIMATION_CREDIT_COST,
+  }
+  await putCardRecordRaw(env, record)
+  return coverAnimationResponse(request, env, record, { creditBalance })
+}
+
+const handleCheckCoverAnimation = async (request, env, cardId) => {
+  const { record, error } = await getAdminAnimationContext(request, env, cardId)
+  if (error) return error
+  const job = record.coverVideoJob
+  if (!job) return coverAnimationResponse(request, env, record)
+
+  const fail = async (message) => {
+    delete record.coverVideoJob
+    await putCardRecordRaw(env, record)
+    const creditBalance = await refundCoverAnimation(env, job)
+    return coverAnimationResponse(request, env, record, { status: 'failed', error: message, creditBalance })
+  }
+
+  const auth = { Authorization: `Key ${env.FAL_KEY}` }
+  const statusRes = await fetch(job.statusUrl, { headers: auth })
+  const status = await statusRes.json().catch(() => ({}))
+  if (status.status !== 'COMPLETED') {
+    if (Date.now() - job.startedAt > COVER_ANIMATION_TIMEOUT_MS) {
+      return fail('The animation took too long. Your credits were refunded.')
+    }
+    return coverAnimationResponse(request, env, record, { queuePosition: status.queue_position ?? null })
+  }
+
+  const resultRes = await fetch(job.responseUrl, { headers: auth })
+  const result = await resultRes.json().catch(() => ({}))
+  const videoUrl = result?.video?.url
+  if (!resultRes.ok || !videoUrl) {
+    console.error('cover animation failed', resultRes.status, JSON.stringify(result).slice(0, 300))
+    return fail('The animation could not be made for this cover. Your credits were refunded.')
+  }
+  const videoRes = await fetch(videoUrl)
+  const bytes = videoRes.ok ? await videoRes.arrayBuffer() : null
+  if (!bytes?.byteLength || bytes.byteLength > coverVideoMaxBytes) {
+    return fail('The finished animation could not be saved. Your credits were refunded.')
+  }
+
+  const version = Date.now()
+  const key = `covers/${record.id}/cover-${version}.mp4`
+  await env.CARD_ASSETS.put(key, bytes, { httpMetadata: { contentType: 'video/mp4' } })
+  const fresh = (await getCardRecord(env, record.id)) || record
+  if (fresh.coverVideoJob?.requestId !== job.requestId) {
+    return coverAnimationResponse(request, env, fresh)
+  }
+  delete fresh.coverVideoJob
+  fresh.coverVideoKey = key
+  fresh.coverVideoVersion = version
+  await putCardRecordRaw(env, fresh)
+  return coverAnimationResponse(request, env, fresh)
+}
+
+const handleRemoveCoverAnimation = async (request, env, cardId) => {
+  const { record, error } = await getAdminAnimationContext(request, env, cardId)
+  if (error) return error
+  delete record.coverVideoKey
+  delete record.coverVideoVersion
+  await putCardRecordRaw(env, record)
+  return coverAnimationResponse(request, env, record)
+}
 
 const handleAdminCardCoverVideo = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
@@ -7275,6 +7434,14 @@ const handleRequest = async (request, env, ctx) => {
       decodeURIComponent(revisionImageMatch[1]),
       decodeURIComponent(revisionImageMatch[2]),
     )
+  }
+
+  const animateMatch = url.pathname.match(/^\/api\/cards\/([^/]+)\/animate(\/remove)?$/)
+  if (animateMatch) {
+    const cardId = decodeURIComponent(animateMatch[1])
+    if (request.method === 'POST' && animateMatch[2]) return handleRemoveCoverAnimation(request, env, cardId)
+    if (request.method === 'POST') return handleStartCoverAnimation(request, env, cardId)
+    if (request.method === 'GET') return handleCheckCoverAnimation(request, env, cardId)
   }
 
   const revisionsMatch = url.pathname.match(/^\/api\/cards\/([^/]+)\/revisions$/)

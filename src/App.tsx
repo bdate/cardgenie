@@ -403,6 +403,7 @@ const sendCreditCostSingle = 3
 const sendCreditCostPerRecipient = 2
 const maxDeliveryRecipients = 10
 const coverRevisionCost = 1
+const coverAnimationCreditCost = 3
 const aiCopyCost = 1
 const printCardCreditCost = 10
 const usStateOptions = [
@@ -3230,34 +3231,11 @@ function App() {
   const [coverVideoStatus, setCoverVideoStatus] = useState<'loading' | 'playing' | 'needsTap'>('loading')
   const [coverVideoDone, setCoverVideoDone] = useState(false)
   const coverVideoRef = useRef<HTMLVideoElement | null>(null)
-  const hasCoverVideo = Boolean(isRecipientView && sharedCard?.coverVideoUrl && !coverVideoFailed)
-  const coverLocked = hasCoverVideo && !coverVideoDone
-
-  const startCoverVideo = () => {
-    const video = coverVideoRef.current
-    if (!video) return
-    // iOS only autoplays when muted is set on the element itself, which React's prop does not do.
-    video.muted = true
-    video.defaultMuted = true
-    video.setAttribute('muted', '')
-    video.setAttribute('playsinline', '')
-    video.play().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === 'NotAllowedError') {
-        setCoverVideoStatus('needsTap')
-      }
-    })
-  }
-
-  useEffect(() => {
-    if (!hasCoverVideo || step !== 'front') return
-    setCoverVideoStatus('loading')
-    startCoverVideo()
-    const giveUp = window.setTimeout(() => {
-      const video = coverVideoRef.current
-      if (!video || (video.paused && video.currentTime === 0)) setCoverVideoFailed(true)
-    }, 25000)
-    return () => window.clearTimeout(giveUp)
-  }, [hasCoverVideo, step])
+  const [coverAnimation, setCoverAnimation] = useState<{ status: 'idle' | 'starting' | 'pending' | 'removing'; notice: string }>({
+    status: 'idle',
+    notice: '',
+  })
+  const [animatedCoverImageUrl, setAnimatedCoverImageUrl] = useState<string | null>(null)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(
     () => (initialFormDraft?.deliveryMethod === 'text' ? 'text' : 'email'),
@@ -3547,6 +3525,44 @@ function App() {
   const hasEnoughCreditsForAiCopy = credits >= aiCopyCost
   const isAdmin = Boolean(accountSession?.phoneE164 && adminPhoneNumbers.has(accountSession.phoneE164))
   const isSignedIn = Boolean(accountSession?.token)
+  const isCoverStillAnimated = Boolean(animatedCoverImageUrl && card?.imageUrl === animatedCoverImageUrl)
+  const coverVideoSrc = isRecipientView
+    ? sharedCard?.coverVideoUrl
+    : isAdmin && isCoverStillAnimated
+      ? sharedCard?.coverVideoUrl
+      : undefined
+  const hasCoverVideo = Boolean(coverVideoSrc && !coverVideoFailed)
+  const coverLocked = isRecipientView && hasCoverVideo && !coverVideoDone
+
+  const startCoverVideo = () => {
+    const video = coverVideoRef.current
+    if (!video) return
+    // iOS only autoplays when muted is set on the element itself, which React's prop does not do.
+    video.muted = true
+    video.defaultMuted = true
+    video.setAttribute('muted', '')
+    video.setAttribute('playsinline', '')
+    video.play().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setCoverVideoStatus('needsTap')
+      }
+    })
+  }
+
+  useEffect(() => {
+    setCoverVideoFailed(false)
+  }, [coverVideoSrc])
+
+  useEffect(() => {
+    if (!hasCoverVideo || step !== 'front') return
+    setCoverVideoStatus('loading')
+    startCoverVideo()
+    const giveUp = window.setTimeout(() => {
+      const video = coverVideoRef.current
+      if (!video || (video.paused && video.currentTime === 0)) setCoverVideoFailed(true)
+    }, 25000)
+    return () => window.clearTimeout(giveUp)
+  }, [hasCoverVideo, step, coverVideoSrc])
   const accountFirstName = (
     accountPreferredName.trim() ||
     accountSession?.preferredName?.trim() ||
@@ -4385,6 +4401,7 @@ function App() {
       setCard(restoredCard)
       if (restoredShared) {
         setSharedCard(restoredShared)
+        if (restoredShared.coverVideoUrl) setAnimatedCoverImageUrl(restoredCard.imageUrl)
       } else if (resume.cardId) {
         setSharedCard({
           id: resume.cardId,
@@ -9344,6 +9361,75 @@ function App() {
     }
   }
 
+  const coverAnimationRequest = async (cardId: string, method: 'GET' | 'POST', suffix = '') => {
+    const response = await fetch(apiUrl(`/api/cards/${encodeURIComponent(cardId)}/animate${suffix}`), {
+      method,
+      headers: { Authorization: `Bearer ${accountSession?.token || ''}` },
+    })
+    const data = await getApiJson(response, 'The cover animation is unavailable right now.')
+    if (!response.ok) {
+      throw new Error(data.error || 'The cover animation is unavailable right now.')
+    }
+    return data as { status: string; coverVideoUrl?: string; creditBalance?: number; error?: string }
+  }
+
+  const applyCoverAnimationResult = (data: { status: string; coverVideoUrl?: string; error?: string; creditBalance?: number }) => {
+    if (typeof data.creditBalance === 'number') rememberCredits(data.creditBalance)
+    if (data.status === 'pending') {
+      setCoverAnimation({ status: 'pending', notice: '' })
+      return
+    }
+    setSharedCard((current) => (current ? { ...current, coverVideoUrl: data.coverVideoUrl } : current))
+    if (data.status === 'failed') {
+      setAnimatedCoverImageUrl(null)
+      setCoverAnimation({ status: 'idle', notice: data.error || 'The animation could not be made. Your credits were refunded.' })
+      return
+    }
+    setCoverAnimation({ status: 'idle', notice: data.status === 'ready' ? 'Your animated cover is ready.' : '' })
+  }
+
+  const startCoverAnimation = async () => {
+    if (!card || !isAdmin || coverAnimation.status !== 'idle') return
+    if (credits < coverAnimationCreditCost) {
+      setCoverAnimation({ status: 'idle', notice: `You need ${coverAnimationCreditCost} credits to animate the cover.` })
+      return
+    }
+    setCoverAnimation({ status: 'starting', notice: '' })
+    try {
+      const target = sharedCard ?? (await saveCurrentCard())
+      const data = await coverAnimationRequest(target.id, 'POST')
+      setAnimatedCoverImageUrl(card.imageUrl)
+      setStep('front')
+      applyCoverAnimationResult(data)
+    } catch (caughtError) {
+      setCoverAnimation({ status: 'idle', notice: getFriendlyErrorMessage(caughtError, 'The cover animation could not start.') })
+    }
+  }
+
+  const removeCoverAnimation = async () => {
+    if (!sharedCard?.id || coverAnimation.status !== 'idle') return
+    setCoverAnimation({ status: 'removing', notice: '' })
+    try {
+      await coverAnimationRequest(sharedCard.id, 'POST', '/remove')
+      setSharedCard((current) => (current ? { ...current, coverVideoUrl: undefined } : current))
+      setAnimatedCoverImageUrl(null)
+      setCoverAnimation({ status: 'idle', notice: 'Animation removed. The card will be sent with the still cover.' })
+    } catch (caughtError) {
+      setCoverAnimation({ status: 'idle', notice: getFriendlyErrorMessage(caughtError, 'Unable to remove the animation.') })
+    }
+  }
+
+  useEffect(() => {
+    if (coverAnimation.status !== 'pending' || !sharedCard?.id || !accountSession?.token) return
+    const cardId = sharedCard.id
+    const timer = window.setInterval(() => {
+      coverAnimationRequest(cardId, 'GET')
+        .then(applyCoverAnimationResult)
+        .catch(() => {})
+    }, 8000)
+    return () => window.clearInterval(timer)
+  }, [coverAnimation.status, sharedCard?.id, accountSession?.token])
+
   const saveCurrentCard = async ({ replacesCardId }: { replacesCardId?: string } = {}) => {
     let coverThumb = ''
     let storedCover = card!.imageUrl
@@ -9369,6 +9455,7 @@ function App() {
         ...(sharedCard?.id ? { cardId: sharedCard.id } : {}),
         ...(replacesCardId ? { replacesCardId } : {}),
         ...(coverThumb ? { coverThumb } : {}),
+        ...(isCoverStillAnimated ? { keepCoverVideo: true } : {}),
       }),
     })
     const data = await getApiJson(response, 'Unable to save the card for delivery.')
@@ -13195,11 +13282,12 @@ function App() {
                   aria-label={coverLocked ? `Card for ${recipientLabel} is playing` : `Show inside of card for ${recipientLabel}`}
                 >
                   <div className={coverPreviewClass('card-cover-frame')}>
-                    {hasCoverVideo && sharedCard?.coverVideoUrl ? (
+                    {hasCoverVideo && coverVideoSrc ? (
                       <>
                         <video
+                          key={coverVideoSrc}
                           ref={coverVideoRef}
-                          src={sharedCard.coverVideoUrl}
+                          src={coverVideoSrc}
                           poster={card.imageUrl}
                           aria-label={`Front of card for ${recipientLabel}`}
                           autoPlay
@@ -13560,6 +13648,44 @@ function App() {
                     </a>
                   </div>
                 </aside>
+              )}
+              {isAdmin && card && showSendActions && !isRecipientView && !showEditor && (
+                <div className="cover-animation-panel">
+                  <span className="cover-animation-kicker">Admin only</span>
+                  {coverAnimation.status === 'pending' || coverAnimation.status === 'starting' ? (
+                    <p className="cover-animation-progress" role="status">
+                      <span className="cover-animation-spinner" aria-hidden="true" />
+                      {coverAnimation.status === 'starting'
+                        ? 'Starting the animation…'
+                        : 'Animating your cover. This usually takes about 3 minutes; you can keep working.'}
+                    </p>
+                  ) : isCoverStillAnimated && sharedCard?.coverVideoUrl ? (
+                    <div className="cover-animation-actions">
+                      <p>This card will be sent with its animated cover.</p>
+                      <button className="secondary-button cost-button" type="button" onClick={startCoverAnimation}>
+                        <span>Redo animation</span>
+                        <span className="button-points">{coverAnimationCreditCost} credits</span>
+                      </button>
+                      <button
+                        className="text-action-link"
+                        type="button"
+                        onClick={removeCoverAnimation}
+                        disabled={coverAnimation.status === 'removing'}
+                      >
+                        Remove animation
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="cover-animation-actions">
+                      <p>Bring the cover to life with a 5-second animation that plays when the card is opened.</p>
+                      <button className="secondary-button cost-button" type="button" onClick={startCoverAnimation}>
+                        <span>Animate cover</span>
+                        <span className="button-points">{coverAnimationCreditCost} credits</span>
+                      </button>
+                    </div>
+                  )}
+                  {coverAnimation.notice ? <p className="cover-animation-notice">{coverAnimation.notice}</p> : null}
+                </div>
               )}
               {showSendActions && !isRecipientView && !showEditor && showReviseButton && (
                 <div className="proof-actions revise-actions">
