@@ -564,7 +564,7 @@ const giftCopy = ({ fromName, toName, shareUrl, imageUrl, title, escapeHtml }) =
     text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${imageUrl ? `<p style="margin: 0 0 16px;"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title || 'Greeting card')}" width="160" style="display:block;width:160px;max-width:160px;height:auto;border:0;border-radius:8px;" /></p>` : ''}
+        ${imageUrl ? `<p style="margin: 0 0 16px;"><a href="${shareUrl}" style="display:inline-block;text-decoration:none;border:0;"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title || 'Greeting card')}" width="160" style="display:block;width:160px;max-width:160px;height:auto;border:0;border-radius:8px;" /></a></p>` : ''}
         <p>${escapeHtml(openLine)}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>

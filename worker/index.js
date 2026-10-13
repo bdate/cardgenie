@@ -1519,15 +1519,18 @@ const getCardSummary = (record, request, env) => {
 const getEmailCoverUrl = (request, env, cardId) =>
   `${String(env.PUBLIC_API_URL || '').replace(/\/$/, '') || new URL(request.url).origin}/c/${encodeURIComponent(cardId)}/cover`
 
-const buildCoverThumbnailHtml = (coverUrl, alt = 'Card cover') => `
-        <p style="margin: 0 0 16px;">
-          <img
+const buildCoverThumbnailHtml = (coverUrl, alt = 'Card cover', href = '') => {
+  const img = `<img
             src="${coverUrl}"
             alt="${escapeHtml(alt)}"
             width="120"
             style="display:block;width:120px;max-width:120px;height:auto;border:0;border-radius:10px;"
-          />
+          />`
+  return `
+        <p style="margin: 0 0 16px;">
+          ${href ? `<a href="${href}" style="display:inline-block;text-decoration:none;border:0;">${img}</a>` : img}
         </p>`
+}
 
 const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
   const recipientFirstName = (record.details.recipientName || '').trim().split(/\s+/).filter(Boolean)[0] || ''
@@ -1543,7 +1546,7 @@ const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
     text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
+        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt, shareUrl)}
         <p>${openLine}</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
@@ -1587,7 +1590,7 @@ const buildSenderCopyDeliveryCopy = (record, shareUrl, coverUrl, printUrl, askRe
     text: `Here is a copy of the card you sent to ${recipient}. ${shareUrl}\n\nWant it mailed as a printed card? ${printUrl}${askReview ? `\n\n${reviewRequestText('email_copy')}` : ''}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
-        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt)}
+        ${buildCoverThumbnailHtml(coverUrl, thumbnailAlt, shareUrl)}
         <p>Here is a copy of the card you sent to ${recipient}.</p>
         <p><a href="${shareUrl}" style="display:inline-block;padding:12px 18px;background:#f59e33;color:#fff;text-decoration:none;border-radius:12px;font-weight:700;">Open your card</a></p>
         <p>If the button does not work, copy and paste this link: <br /><a href="${shareUrl}">${shareUrl}</a></p>
