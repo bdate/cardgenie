@@ -51,6 +51,7 @@ type SharedCard = {
   card: GeneratedCard
   greeting?: string
   signature?: string
+  coverVideoUrl?: string
 }
 
 const CARD_COVER_WIDTH = 1056
@@ -3225,6 +3226,7 @@ function App() {
   }
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
+  const [coverVideoFailed, setCoverVideoFailed] = useState(false)
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(
     () => (initialFormDraft?.deliveryMethod === 'text' ? 'text' : 'email'),
@@ -13156,7 +13158,21 @@ function App() {
                   aria-label={`Show inside of card for ${recipientLabel}`}
                 >
                   <div className={coverPreviewClass('card-cover-frame')}>
-                    <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
+                    {isRecipientView && sharedCard?.coverVideoUrl && !coverVideoFailed ? (
+                      <video
+                        src={sharedCard.coverVideoUrl}
+                        poster={card.imageUrl}
+                        aria-label={`Front of card for ${recipientLabel}`}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        preload="auto"
+                        onError={() => setCoverVideoFailed(true)}
+                      />
+                    ) : (
+                      <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
+                    )}
                   </div>
                 </button>
               )}

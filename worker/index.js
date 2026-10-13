@@ -1048,7 +1048,7 @@ const getShareBaseUrl = (request, env) =>
 const getShareUrl = (request, env, cardId) => `${getShareBaseUrl(request, env)}/c/${encodeURIComponent(cardId)}`
 
 const getSharePathParts = (pathname) => {
-  const match = pathname.match(/^\/c\/([^/]+)(?:\/(cover|thumb))?\/?$/)
+  const match = pathname.match(/^\/c\/([^/]+)(?:\/(cover|thumb|video))?\/?$/)
 
   if (!match) {
     return null
@@ -1058,6 +1058,7 @@ const getSharePathParts = (pathname) => {
     cardId: decodeURIComponent(match[1]),
     isCover: match[2] === 'cover',
     isThumb: match[2] === 'thumb',
+    isVideo: match[2] === 'video',
   }
 }
 
@@ -1504,10 +1505,11 @@ const processGenerateJob = async (env, jobInput) => {
 }
 
 const getCardSummary = (record, request, env) => {
-  const { editor: _editor, ...publicRecord } = record
+  const { editor: _editor, coverVideoKey, ...publicRecord } = record
   return {
     ...publicRecord,
     shareUrl: getShareUrl(request, env, record.id),
+    ...(coverVideoKey ? { coverVideoUrl: `${getShareUrl(request, env, record.id)}/video` } : {}),
   }
 }
 
@@ -2944,6 +2946,47 @@ const handleShareCover = async (request, env, cardId) => {
   }
 
   return jsonResponse(request, env, { error: 'Card cover is unavailable.' }, 404)
+}
+
+const handleShareVideo = async (request, env, cardId) => {
+  const record = await getCardRecord(env, cardId)
+  if (!record?.coverVideoKey || !env.CARD_ASSETS) {
+    return jsonResponse(request, env, { error: 'Card video not found.' }, 404)
+  }
+
+  let object
+  try {
+    object = await env.CARD_ASSETS.get(record.coverVideoKey, { range: request.headers })
+  } catch {
+    const head = await env.CARD_ASSETS.head(record.coverVideoKey)
+    return new Response(null, {
+      status: 416,
+      headers: { 'Content-Range': `bytes */${head?.size || 0}`, 'Access-Control-Allow-Origin': '*' },
+    })
+  }
+  if (!object) {
+    return jsonResponse(request, env, { error: 'Card video not found.' }, 404)
+  }
+
+  const headers = new Headers({
+    'Content-Type': object.httpMetadata?.contentType || 'video/mp4',
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=86400',
+    'Access-Control-Allow-Origin': '*',
+    'X-Content-Type-Options': 'nosniff',
+    ETag: object.httpEtag,
+  })
+  const range = request.headers.has('range') ? object.range : null
+  if (range) {
+    const suffix = Number(range.suffix) || 0
+    const offset = suffix ? object.size - suffix : Number(range.offset) || 0
+    const length = suffix || Number(range.length) || object.size - offset
+    headers.set('Content-Range', `bytes ${offset}-${offset + length - 1}/${object.size}`)
+    headers.set('Content-Length', String(length))
+    return new Response(object.body, { status: 206, headers })
+  }
+  headers.set('Content-Length', String(object.size))
+  return new Response(object.body, { status: 200, headers })
 }
 
 const publicDeliveryError = (error, method = 'email') => {
@@ -6557,6 +6600,50 @@ const handleAdminResendCardEmail = async (request, env) => {
   }
 }
 
+const coverVideoMaxBytes = 50 * 1024 * 1024
+
+const handleAdminCardCoverVideo = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
+  }
+  if (!env.CARD_ASSETS) {
+    return jsonResponse(request, env, { error: 'Asset storage unavailable.' }, 503)
+  }
+
+  const url = new URL(request.url)
+  const copyFrom = String(url.searchParams.get('copyFrom') || '').trim()
+  const targetId = String(url.searchParams.get('cardId') || '').trim()
+  const source = await getCardRecord(env, copyFrom || targetId)
+  if (!source?.card) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
+
+  const contentType = (request.headers.get('content-type') || '').split(';')[0].trim()
+  if (contentType !== 'video/mp4') {
+    return jsonResponse(request, env, { error: 'Send the video as video/mp4.' }, 400)
+  }
+  const bytes = await request.arrayBuffer()
+  if (!bytes.byteLength || bytes.byteLength > coverVideoMaxBytes) {
+    return jsonResponse(request, env, { error: 'Video is empty or too large.' }, 400)
+  }
+
+  const record = copyFrom
+    ? { ...source, id: createCardId(), createdAt: new Date().toISOString(), updatedAt: undefined, copiedFrom: source.id }
+    : { ...source, updatedAt: new Date().toISOString() }
+  record.coverVideoKey = `covers/${record.id}/cover.mp4`
+  await env.CARD_ASSETS.put(record.coverVideoKey, bytes, { httpMetadata: { contentType: 'video/mp4' } })
+  await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+
+  return jsonResponse(request, env, {
+    ok: true,
+    cardId: record.id,
+    copiedFrom: record.copiedFrom,
+    videoBytes: bytes.byteLength,
+    ...getCardSummary(record, request, env),
+  })
+}
+
 const handleAdminShoppers = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) {
@@ -7155,6 +7242,10 @@ const handleRequest = async (request, env, ctx) => {
     return handleGetCoverThumb(request, env, sharePath.cardId)
   }
 
+  if (sharePath?.isVideo) {
+    return handleShareVideo(request, env, sharePath.cardId)
+  }
+
   if (sharePath) {
     return handleSharePreview(request, env, sharePath.cardId)
   }
@@ -7258,6 +7349,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
     return handleAdminResendCardEmail(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/card-cover-video') {
+    return handleAdminCardCoverVideo(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/recipient-print/checkout') {
