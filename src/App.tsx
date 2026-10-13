@@ -601,7 +601,7 @@ const getSendCreditCost = (recipientCount: number) => {
 
   return Math.max(sendCreditCostSingle, sendCreditCostPerRecipient * count)
 }
-const adminPhoneNumbers = new Set(['+19259637453'])
+const adminPhoneNumbers = new Set(['+19259637453', '+19254511586'])
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
   { id: '21', credits: 21, price: 10, priceId: 'price_1UOrSv1GfvmAXQBhNrH4obMu' },

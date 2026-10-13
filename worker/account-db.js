@@ -1024,7 +1024,7 @@ export const recordFailedDelivery = async (env, { userId, cardId, method, destin
   await env.ACCOUNT_DB.batch(statements)
 }
 
-const adminPhoneNumbers = new Set(['+19259637453'])
+const adminPhoneNumbers = new Set(['+19259637453', '+19254511586'])
 
 export const isAdminPhone = (phoneE164) => Boolean(phoneE164 && adminPhoneNumbers.has(phoneE164))
 

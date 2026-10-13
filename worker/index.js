@@ -7143,6 +7143,30 @@ const handleAdminReviewFollowUpTest = async (request, env) => {
   return jsonResponse(request, env, { ok: true, to })
 }
 
+// Texts only go to admin phones, so this can't be used to message shoppers.
+const handleAdminTeamText = async (request, env) => {
+  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
+  const provided = String(readAccountToken(request) || '').trim()
+  if (!expected || provided !== expected) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+  const body = (await readJson(request)) || {}
+  const to = String(body.to || '').trim()
+  const text = String(body.text || '').trim()
+  if (!isAdminPhone(to)) {
+    return jsonResponse(request, env, { error: 'Team texts are limited to admin phones.' }, 400)
+  }
+  if (!text) {
+    return jsonResponse(request, env, { error: 'Missing text.' }, 400)
+  }
+  try {
+    await sendAccountSms({ env, to, body: text })
+  } catch (error) {
+    return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to send text.' }, 400)
+  }
+  return jsonResponse(request, env, { ok: true, to })
+}
+
 const INTERNAL_EMAIL_RECIPIENTS = new Set([DEPLOY_SUMMARY_TO, 'support@card-genie.com', 'cards@card-genie.com'])
 
 const handleAdminInternalEmail = async (request, env) => {
@@ -7499,6 +7523,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/internal-email') {
     return handleAdminInternalEmail(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/team-text') {
+    return handleAdminTeamText(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/review-followup-test') {
