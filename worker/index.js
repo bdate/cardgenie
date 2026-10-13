@@ -4272,7 +4272,7 @@ const feedbackSources = new Set(['post_send', 'account', 'footer', 'email_copy',
 const publicReviewerName = (name) => {
   const words = String(name || '').trim().split(/\s+/).filter(Boolean)
   if (!words.length) return ''
-  const last = words.length > 1 ? ` ${words[words.length - 1][0].toUpperCase()}.` : ''
+  const last = words.length > 1 ? ` ${words[words.length - 1][0].toUpperCase()}` : ''
   return `${words[0]}${last}`
 }
 
