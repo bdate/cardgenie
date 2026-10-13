@@ -3227,6 +3227,37 @@ function App() {
   const [highlightInvalidFields, setHighlightInvalidFields] = useState(false)
   const [sharedCard, setSharedCard] = useState<SharedCard | null>(null)
   const [coverVideoFailed, setCoverVideoFailed] = useState(false)
+  const [coverVideoStatus, setCoverVideoStatus] = useState<'loading' | 'playing' | 'needsTap'>('loading')
+  const [coverVideoDone, setCoverVideoDone] = useState(false)
+  const coverVideoRef = useRef<HTMLVideoElement | null>(null)
+  const hasCoverVideo = Boolean(isRecipientView && sharedCard?.coverVideoUrl && !coverVideoFailed)
+  const coverLocked = hasCoverVideo && !coverVideoDone
+
+  const startCoverVideo = () => {
+    const video = coverVideoRef.current
+    if (!video) return
+    // iOS only autoplays when muted is set on the element itself, which React's prop does not do.
+    video.muted = true
+    video.defaultMuted = true
+    video.setAttribute('muted', '')
+    video.setAttribute('playsinline', '')
+    video.play().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setCoverVideoStatus('needsTap')
+      }
+    })
+  }
+
+  useEffect(() => {
+    if (!hasCoverVideo || step !== 'front') return
+    setCoverVideoStatus('loading')
+    startCoverVideo()
+    const giveUp = window.setTimeout(() => {
+      const video = coverVideoRef.current
+      if (!video || (video.paused && video.currentTime === 0)) setCoverVideoFailed(true)
+    }, 25000)
+    return () => window.clearTimeout(giveUp)
+  }, [hasCoverVideo, step])
   const [isLoadingSharedCard, setIsLoadingSharedCard] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(
     () => (initialFormDraft?.deliveryMethod === 'text' ? 'text' : 'email'),
@@ -13152,24 +13183,50 @@ function App() {
 
               {step === 'front' && (
                 <button
-                  className="proof-stage card-reveal front-reveal"
+                  className={`proof-stage card-reveal front-reveal${coverLocked ? ' is-cover-locked' : ''}`}
                   type="button"
-                  onClick={() => setStep('inside')}
-                  aria-label={`Show inside of card for ${recipientLabel}`}
+                  onClick={() => {
+                    if (coverLocked) {
+                      if (coverVideoStatus === 'needsTap') startCoverVideo()
+                      return
+                    }
+                    setStep('inside')
+                  }}
+                  aria-label={coverLocked ? `Card for ${recipientLabel} is playing` : `Show inside of card for ${recipientLabel}`}
                 >
                   <div className={coverPreviewClass('card-cover-frame')}>
-                    {isRecipientView && sharedCard?.coverVideoUrl && !coverVideoFailed ? (
-                      <video
-                        src={sharedCard.coverVideoUrl}
-                        poster={card.imageUrl}
-                        aria-label={`Front of card for ${recipientLabel}`}
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        preload="auto"
-                        onError={() => setCoverVideoFailed(true)}
-                      />
+                    {hasCoverVideo && sharedCard?.coverVideoUrl ? (
+                      <>
+                        <video
+                          ref={coverVideoRef}
+                          src={sharedCard.coverVideoUrl}
+                          poster={card.imageUrl}
+                          aria-label={`Front of card for ${recipientLabel}`}
+                          autoPlay
+                          muted
+                          playsInline
+                          preload="auto"
+                          onPlaying={() => setCoverVideoStatus('playing')}
+                          onEnded={(event) => {
+                            setCoverVideoDone(true)
+                            event.currentTarget.loop = true
+                            void event.currentTarget.play().catch(() => {})
+                          }}
+                          onError={() => setCoverVideoFailed(true)}
+                        />
+                        {coverVideoStatus === 'loading' ? (
+                          <span className="cover-video-status" role="status">
+                            <span className="cover-video-spinner" aria-hidden="true" />
+                            Bringing your card to life…
+                          </span>
+                        ) : null}
+                        {coverVideoStatus === 'needsTap' ? (
+                          <span className="cover-video-status cover-video-tap">
+                            <span className="cover-video-play" aria-hidden="true" />
+                            Tap to play your card
+                          </span>
+                        ) : null}
+                      </>
                     ) : (
                       <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
                     )}
@@ -13233,6 +13290,7 @@ function App() {
                     className={step === 'inside' ? 'is-selected' : ''}
                     type="button"
                     onClick={() => setStep('inside')}
+                    disabled={coverLocked}
                   >
                     Inside
                   </button>

@@ -2175,6 +2175,52 @@ textarea:focus {
   animation: none;
 }
 
+.front-reveal.is-cover-locked {
+  cursor: default;
+}
+
+.cover-video-status {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(22, 39, 43, 0.22);
+  color: var(--gcu-dark-teal);
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.cover-video-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(245, 158, 51, 0.28);
+  border-top-color: var(--gcu-orange);
+  border-radius: 50%;
+  animation: actionFeedbackSpin 700ms linear infinite;
+}
+
+.cover-video-tap {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+}
+
+.cover-video-play {
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 13px solid var(--gcu-orange);
+}
+
 .open-card {
   container-type: inline-size;
   container-name: card-inside;
@@ -2450,6 +2496,11 @@ textarea:focus {
 .card-view-toggle button.is-selected {
   color: var(--gcu-ink);
   text-decoration: none;
+  cursor: default;
+}
+
+.card-view-toggle button:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
