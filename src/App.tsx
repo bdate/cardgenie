@@ -7366,7 +7366,7 @@ function App() {
     }
     const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
     const rows = [
-      ['GCU artist ID', 'Artist', 'Artist page', 'Cards sent', 'Amount owed', 'GCU card numbers (sends)'],
+      ['GCU artist ID', 'Artist', 'Artist page', 'Cards sent', 'Amount owed', 'GCU Product Ids (sends)'],
       ...artistPayouts.artists.map((row) => [
         row.artistId ?? '',
         row.artist,
@@ -11839,7 +11839,7 @@ function App() {
                       <th>Artist</th>
                       <th>Cards sent</th>
                       <th>Owed</th>
-                      <th>GCU card numbers</th>
+                      <th>GCU Product Ids</th>
                     </tr>
                   </thead>
                   <tbody>
