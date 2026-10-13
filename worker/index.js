@@ -6894,6 +6894,36 @@ const handleAdminReviewFollowUpTest = async (request, env) => {
   return jsonResponse(request, env, { ok: true, to })
 }
 
+const INTERNAL_EMAIL_RECIPIENTS = new Set([DEPLOY_SUMMARY_TO, 'support@card-genie.com', 'cards@card-genie.com'])
+
+const handleAdminInternalEmail = async (request, env) => {
+  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
+  const provided = String(readAccountToken(request) || '').trim()
+  if (!expected || provided !== expected) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+  const body = (await readJson(request)) || {}
+  const to = String(body.to || DEPLOY_SUMMARY_TO).trim().toLowerCase()
+  if (!INTERNAL_EMAIL_RECIPIENTS.has(to)) {
+    return jsonResponse(request, env, { error: 'Internal emails are limited to internal inboxes.' }, 400)
+  }
+  const subject = String(body.subject || '').trim()
+  const text = String(body.text || '').trim()
+  if (!subject || !text) {
+    return jsonResponse(request, env, { error: 'Missing subject or text.' }, 400)
+  }
+  const attachments = (Array.isArray(body.attachments) ? body.attachments : [])
+    .filter((file) => file?.filename && file?.content)
+    .map((file) => ({
+      filename: String(file.filename),
+      type: String(file.type || 'application/octet-stream'),
+      content: String(file.content),
+      ...(file.contentId ? { disposition: 'inline', contentId: String(file.contentId) } : {}),
+    }))
+  await sendEmailDelivery({ env, to, copy: { subject, text, html: String(body.html || '') || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${escapeHtml(text)}</pre>` }, attachments })
+  return jsonResponse(request, env, { ok: true, to })
+}
+
 const sendScheduledShipmentEmails = async (env) => {
   const due = await listDueShipmentEmailOrders(env, new Date().toISOString())
   for (const order of due) {
@@ -7204,6 +7234,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/reviews/unsubscribe') {
     return handleReviewOptOut(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/internal-email') {
+    return handleAdminInternalEmail(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/review-followup-test') {
