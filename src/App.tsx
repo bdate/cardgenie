@@ -69,8 +69,20 @@ type ArtistPayoutReport = {
   centsPerSend: number
   totalSends: number
   totalCents: number
-  artists: { artist: string; artistUrl: string | null; sends: number; cents: number; cards: string[] }[]
+  artists: {
+    artistId: number | null
+    storeId: number | null
+    artist: string
+    artistUrl: string | null
+    sends: number
+    cents: number
+    cards: string[]
+    cardSends?: { pid: string; sends: number }[]
+  }[]
 }
+
+const artistCardSends = (row: ArtistPayoutReport['artists'][number]) =>
+  row.cardSends ?? row.cards.map((pid) => ({ pid, sends: 0 }))
 
 type DeliveryLog = {
   id: string
@@ -7354,15 +7366,16 @@ function App() {
     }
     const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
     const rows = [
-      ['Artist', 'Artist page', 'Cards sent', 'Amount owed', 'GCU card numbers'],
+      ['GCU artist ID', 'Artist', 'Artist page', 'Cards sent', 'Amount owed', 'GCU card numbers (sends)'],
       ...artistPayouts.artists.map((row) => [
+        row.artistId ?? '',
         row.artist,
         row.artistUrl || '',
         row.sends,
         (row.cents / 100).toFixed(2),
-        row.cards.join(' '),
+        artistCardSends(row).map((card) => `${card.pid} (${card.sends})`).join(' '),
       ]),
-      ['Total', '', artistPayouts.totalSends, (artistPayouts.totalCents / 100).toFixed(2), ''],
+      ['', 'Total', '', artistPayouts.totalSends, (artistPayouts.totalCents / 100).toFixed(2), ''],
     ]
     const blob = new Blob([rows.map((row) => row.map(cell).join(',')).join('\n')], { type: 'text/csv' })
     const link = document.createElement('a')
@@ -11822,14 +11835,17 @@ function App() {
                 <table className="admin-daily-table">
                   <thead>
                     <tr>
+                      <th>Artist ID</th>
                       <th>Artist</th>
                       <th>Cards sent</th>
                       <th>Owed</th>
+                      <th>GCU card numbers</th>
                     </tr>
                   </thead>
                   <tbody>
                     {artistPayouts.artists.map((row) => (
-                      <tr key={`${row.artist}|${row.artistUrl || ''}`}>
+                      <tr key={`${row.artistId ?? ''}|${row.artist}|${row.artistUrl || ''}`}>
+                        <td>{row.artistId ?? '—'}</td>
                         <td>
                           {row.artistUrl ? (
                             <a href={row.artistUrl} target="_blank" rel="noopener noreferrer">
@@ -11841,9 +11857,21 @@ function App() {
                         </td>
                         <td>{row.sends}</td>
                         <td>${(row.cents / 100).toFixed(2)}</td>
+                        <td>
+                          {artistCardSends(row).map((card, index) => (
+                            <span key={card.pid}>
+                              {index > 0 ? ', ' : ''}
+                              <a href={`https://www.greetingcarduniverse.com/${card.pid}`} target="_blank" rel="noopener noreferrer">
+                                {card.pid}
+                              </a>
+                              {` (${card.sends})`}
+                            </span>
+                          ))}
+                        </td>
                       </tr>
                     ))}
                     <tr>
+                      <td />
                       <td>
                         <strong>Total</strong>
                       </td>
@@ -11853,6 +11881,7 @@ function App() {
                       <td>
                         <strong>${(artistPayouts.totalCents / 100).toFixed(2)}</strong>
                       </td>
+                      <td />
                     </tr>
                   </tbody>
                 </table>

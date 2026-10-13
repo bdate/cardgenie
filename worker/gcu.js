@@ -12,7 +12,7 @@ const SITE = 'https://www.greetingcarduniverse.com'
 // Bump when the browser-side inside renderer changes so stored inside images are rebuilt.
 const INSIDE_VERSION = 5
 // Bump when scrape() collects new product-page fields so cached rows are refreshed on next visit.
-const DETAILS_VERSION = 3
+const DETAILS_VERSION = 4
 const MAX_INSIDE_BYTES = 6 * 1024 * 1024
 const insideAsset = (pid) => ({ r2Key: `gcu/inside/${pid}.jpg`, kvKey: `gcu:inside:${pid}` })
 // GCU's bot protection challenges clients that claim to be a browser but don't act like one.
@@ -36,6 +36,9 @@ const DETAIL_COLUMNS = {
   price: 'TEXT',
   artist: 'TEXT',
   artist_url: 'TEXT',
+  // GCU's numeric artist and store ids, read from the artist's store page (null when it can't be read).
+  artist_id: 'INTEGER',
+  artist_store_id: 'INTEGER',
   artist_notes: 'TEXT',
   size_text: 'TEXT',
   customize: 'TEXT',
@@ -52,6 +55,8 @@ const SEND_COLUMNS = {
   // The card's artist when it was sent, and what we owe them for it (paid out quarterly).
   artist: 'TEXT',
   artist_url: 'TEXT',
+  artist_id: 'INTEGER',
+  artist_store_id: 'INTEGER',
   artist_payout_cents: 'INTEGER NOT NULL DEFAULT 0',
 }
 
@@ -245,12 +250,53 @@ let gcuFetchKey = ''
 const fetchGcu = (url, init = {}) =>
   fetch(url, { redirect: 'follow', ...init, headers: { ...GCU_HEADERS, ...(gcuFetchKey ? { 'X-CardGenie-Key': gcuFetchKey } : {}) } })
 
+const ARTIST_IDS_TTL = 30 * 86400
+const ARTIST_IDS_MISS_TTL = 86400
+
+// The product page has no numeric artist id; the artist's store page sets `artist_id = N` and `store_id = N`.
+// Never throws: payouts fall back to the artist URL and name when the ids can't be read.
+const resolveArtistIds = async (kv, artistUrl) => {
+  const none = { artistId: null, storeId: null }
+  let url
+  try {
+    url = new URL(artistUrl)
+  } catch {
+    return none
+  }
+  const slug = url.pathname.replace(/^\/+|\/+$/g, '').toLowerCase()
+  if (url.origin !== SITE || !slug || slug.includes('/')) return none
+  const key = `gcu-artist:${slug}`
+  try {
+    const cached = kv ? await kv.get(key, 'json') : null
+    if (cached) return cached
+    const res = await fetchGcu(`${SITE}/${url.pathname.replace(/^\/+|\/+$/g, '')}`)
+    if (!res.ok) {
+      if (res.status === 404 && kv) await kv.put(key, JSON.stringify(none), { expirationTtl: ARTIST_IDS_MISS_TTL })
+      return none
+    }
+    const html = await res.text()
+    let artistId = html.match(/\bartist_id\s*=\s*(\d+)/)?.[1]
+    if (!artistId) {
+      const counts = {}
+      for (const [, id] of html.matchAll(/[?&]aid=(\d+)/g)) if (id !== '0') counts[id] = (counts[id] || 0) + 1
+      artistId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+    }
+    const storeId = html.match(/\bstore_id\s*=\s*(\d+)/)?.[1]
+    const ids = { artistId: artistId ? Number(artistId) : null, storeId: storeId ? Number(storeId) : null }
+    if (kv) await kv.put(key, JSON.stringify(ids), { expirationTtl: ids.artistId ? ARTIST_IDS_TTL : ARTIST_IDS_MISS_TTL })
+    return ids
+  } catch (error) {
+    console.error('gcu artist ids', artistUrl, error)
+    return none
+  }
+}
+
 const exists = async (url) => {
   const res = await fetchGcu(url, { method: 'HEAD' }).catch(() => null)
   return Boolean(res?.ok && (res.headers.get('content-type') || '').startsWith('image/'))
 }
 
-const scrape = async (pid) => {
+const scrape = async (pid, kv) => {
   const [pageRes, zoomRes] = await Promise.all([
     fetchGcu(`${SITE}/${pid}`),
     fetchGcu(`${SITE}/shopping/zoom.asp?pid=${pid}&view=front&popin=1`),
@@ -266,10 +312,13 @@ const scrape = async (pid) => {
   const page = await pageRes.text()
   const details = parseDetails(page)
   const printUrl = paths.front.replace('_hres.', '_print.')
-  const [front, related] = await Promise.all([
+  const [front, related, artistIds] = await Promise.all([
     printUrl !== paths.front ? exists(printUrl).then((ok) => (ok ? printUrl : paths.front)) : paths.front,
     details.extra.cid ? fetchRelated(pid, details.extra.cid) : [],
+    resolveArtistIds(kv, details.artistUrl),
   ])
+  details.artistId = artistIds.artistId
+  details.artistStoreId = artistIds.storeId
   details.extra.back = paths.back
   details.extra.related = related
   details.extra.shadow = details.image3d ? details.image3d.replace(/_3d\.jpg(\?.*)?$/, '_shadow.jpg') : null
@@ -354,6 +403,8 @@ const detailValues = (d) => [
   d.price,
   d.artist,
   d.artistUrl,
+  d.artistId ?? null,
+  d.artistStoreId ?? null,
   d.artistNotes,
   d.size,
   d.customize,
@@ -365,12 +416,13 @@ const detailValues = (d) => [
 
 // Scrapes new cards; rows cached before the product-page fields existed are refreshed once.
 // Failed scrapes are never stored, so the next visit retries.
-const loadRow = async (db, pid) => {
+const loadRow = async (env, pid) => {
+  const db = env.ACCOUNT_DB
   const row = await getRow(db, pid)
   if (row && row.details_version >= DETAILS_VERSION) return row
   let card
   try {
-    card = await scrape(pid)
+    card = await scrape(pid, env.CARD_STORE)
   } catch (error) {
     console.error('gcu scrape', pid, error)
     if (row) return row
@@ -381,7 +433,7 @@ const loadRow = async (db, pid) => {
   if (row) {
     await db
       .prepare(
-        `UPDATE gcu_cards SET title = ?, product_url = ?, price = ?, artist = ?, artist_url = ?, artist_notes = ?,
+        `UPDATE gcu_cards SET title = ?, product_url = ?, price = ?, artist = ?, artist_url = ?, artist_id = ?, artist_store_id = ?, artist_notes = ?,
            size_text = ?, customize = ?, categories_json = ?, image3d_url = ?, extra_json = ?, details_version = ? WHERE pid = ?`,
       )
       .bind(card.title || row.title, card.productUrl, ...detailValues(card.details), pid)
@@ -390,9 +442,9 @@ const loadRow = async (db, pid) => {
     await db
       .prepare(
         `INSERT OR IGNORE INTO gcu_cards (pid, title, product_url, front_url, inside_preview_url, inside_lines_json,
-           price, artist, artist_url, artist_notes, size_text, customize, categories_json, image3d_url, extra_json,
-           details_version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           price, artist, artist_url, artist_id, artist_store_id, artist_notes, size_text, customize, categories_json, image3d_url,
+           extra_json, details_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(pid, card.title, card.productUrl, card.front, card.insidePreview, JSON.stringify(card.lines), ...detailValues(card.details), now, now)
       .run()
@@ -402,7 +454,7 @@ const loadRow = async (db, pid) => {
 
 const handleInfo = async (env, pid) => {
   const db = env.ACCOUNT_DB
-  const row = await loadRow(db, pid)
+  const row = await loadRow(env, pid)
   if (row.error) return json({ error: row.error }, row.status)
   await db.prepare('UPDATE gcu_cards SET views = views + 1 WHERE pid = ?').bind(pid).run()
   return json(rowInfo(row))
@@ -556,6 +608,18 @@ const handleSend = async (request, env, pid, deps) => {
 
   const row = await getRow(db, pid)
   if (!row) return json({ error: 'Open the card page again, then send.' }, 404)
+  if (row.artist_id == null && row.artist_url) {
+    const ids = await resolveArtistIds(env.CARD_STORE, row.artist_url)
+    if (ids.artistId) {
+      row.artist_id = ids.artistId
+      row.artist_store_id = ids.storeId
+      await db
+        .prepare('UPDATE gcu_cards SET artist_id = ?, artist_store_id = ? WHERE pid = ?')
+        .bind(ids.artistId, ids.storeId, pid)
+        .run()
+        .catch((error) => console.error('gcu artist ids save', pid, error))
+    }
+  }
 
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   const recent = await db
@@ -611,12 +675,12 @@ const handleSend = async (request, env, pid, deps) => {
   await db
     .prepare(
       `INSERT INTO gcu_sends (id, pid, user_id, method, destination, from_name, to_name, note, status, created_at,
-         custom_message, signature, custom_inside, artist, artist_url, artist_payout_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+         custom_message, signature, custom_inside, artist, artist_url, artist_id, artist_store_id, artist_payout_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(id, pid, session.userId, method, destination, fromName, toName || null, note || null, now,
       insideBytes ? customMessage || null : null, insideBytes ? signature || null : null, insideBytes ? 1 : 0,
-      row.artist || null, row.artist_url || null, artistPayoutCents)
+      row.artist || null, row.artist_url || null, row.artist_id ?? null, row.artist_store_id ?? null, artistPayoutCents)
     .run()
 
   const copy = giftCopy({ fromName, toName, shareUrl, imageUrl: row.image3d_url || row.front_url, title: row.title, escapeHtml: deps.escapeHtml })
@@ -737,23 +801,36 @@ export const getArtistPayouts = async (env, quarter) => {
   const to = q === 4 ? pacificMidnightIso(year + 1, 1) : pacificMidnightIso(year, q * 3 + 1)
   await ensureTable(env.ACCOUNT_DB)
   const { results } = await env.ACCOUNT_DB.prepare(
-    `SELECT COALESCE(s.artist, c.artist) AS artist, COALESCE(s.artist_url, c.artist_url) AS artist_url,
-       COUNT(*) AS sends, SUM(s.artist_payout_cents) AS cents,
-       GROUP_CONCAT(DISTINCT s.pid) AS pids
+    `SELECT COALESCE(s.artist_id, c.artist_id) AS artist_id, COALESCE(s.artist_store_id, c.artist_store_id) AS store_id,
+       COALESCE(s.artist, c.artist) AS artist, COALESCE(s.artist_url, c.artist_url) AS artist_url, s.pid,
+       COUNT(*) AS sends, SUM(s.artist_payout_cents) AS cents, MAX(s.created_at) AS last_at
      FROM gcu_sends s LEFT JOIN gcu_cards c ON c.pid = s.pid
      WHERE s.status = 'sent' AND s.artist_payout_cents > 0 AND s.created_at >= ? AND s.created_at < ?
-     GROUP BY COALESCE(s.artist, c.artist), COALESCE(s.artist_url, c.artist_url)
-     ORDER BY cents DESC, artist`,
+     GROUP BY 1, 2, 3, 4, 5
+     ORDER BY last_at DESC`,
   )
     .bind(from, to)
     .all()
-  const artists = (results || []).map((r) => ({
-    artist: r.artist || 'Unknown artist',
-    artistUrl: r.artist_url || null,
-    sends: Number(r.sends) || 0,
-    cents: Number(r.cents) || 0,
-    cards: String(r.pids || '').split(',').filter(Boolean),
-  }))
+  // One payee per GCU artist id; sends without one fall back to the artist page, then the name.
+  const byArtist = new Map()
+  for (const r of results || []) {
+    const key = r.artist_id ? `id:${r.artist_id}` : r.artist_url ? `url:${String(r.artist_url).toLowerCase()}` : `name:${r.artist || ''}`
+    let a = byArtist.get(key)
+    if (!a) {
+      a = { artistId: r.artist_id || null, storeId: r.store_id || null, artist: r.artist || 'Unknown artist', artistUrl: r.artist_url || null, sends: 0, cents: 0, pids: new Map() }
+      byArtist.set(key, a)
+    }
+    const sends = Number(r.sends) || 0
+    a.sends += sends
+    a.cents += Number(r.cents) || 0
+    a.pids.set(r.pid, (a.pids.get(r.pid) || 0) + sends)
+  }
+  const artists = [...byArtist.values()]
+    .map(({ pids, ...a }) => {
+      const cardSends = [...pids].map(([pid, sends]) => ({ pid, sends })).sort((x, y) => y.sends - x.sends || x.pid.localeCompare(y.pid))
+      return { ...a, cards: cardSends.map((c) => c.pid), cardSends }
+    })
+    .sort((x, y) => y.cents - x.cents || x.artist.localeCompare(y.artist))
   return {
     quarter: `${year}-Q${q}`,
     from,
