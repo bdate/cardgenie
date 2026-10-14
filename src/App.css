@@ -2855,6 +2855,7 @@ textarea:focus {
 }
 
 .delivery-recipient-field {
+  position: relative;
   display: grid;
   gap: 8px;
   min-width: 0;

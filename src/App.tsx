@@ -3439,6 +3439,8 @@ function App() {
   const [savedRecipients, setSavedRecipients] = useState<SavedRecipient[]>([])
   const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false)
   const [selectedRecipientId, setSelectedRecipientId] = useState('')
+  const [destinationSuggestField, setDestinationSuggestField] = useState(-1)
+  const [activeDestinationSuggestion, setActiveDestinationSuggestion] = useState(-1)
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
   const recipientFieldRef = useRef<HTMLLabelElement | null>(null)
   const [popularOccasions, setPopularOccasions] = useState<{ label: string; uses: number }[]>([])
@@ -6481,6 +6483,65 @@ function App() {
   useEffect(() => {
     setActiveSuggestionIndex(-1)
   }, [recipientSuggestions])
+
+  const destinationKey = (value: string) =>
+    deliveryMethod === 'email' ? value.trim().toLowerCase() : value.replace(/\D/g, '').slice(-10)
+
+  const hasSavedDestinations = savedRecipients.some((recipient) =>
+    deliveryMethod === 'email' ? recipient.email.trim() : recipient.phoneE164,
+  )
+
+  const getDestinationSuggestions = (index: number) => {
+    const current = deliveryDestinations[index] || ''
+    const query = current.trim().toLowerCase()
+    const queryDigits = query.replace(/\D/g, '')
+    const currentKey = destinationKey(current)
+    const taken = new Set(
+      deliveryDestinations.filter((entry, entryIndex) => entryIndex !== index && entry.trim()).map(destinationKey),
+    )
+    const nameKey = details.recipientName.trim().toLowerCase()
+    const seen = new Set<string>()
+    const suggestions: { id: string; name: string; relation: string; value: string }[] = []
+    for (const recipient of savedRecipients) {
+      const raw = deliveryMethod === 'email' ? recipient.email.trim() : recipient.phoneE164
+      if (!raw) continue
+      const key = destinationKey(raw)
+      if (!key || seen.has(key) || taken.has(key) || key === currentKey) continue
+      const value = deliveryMethod === 'email' ? raw : formatPhoneNumberDisplay(raw)
+      const matches =
+        !query ||
+        recipient.name.toLowerCase().includes(query) ||
+        (deliveryMethod === 'email'
+          ? raw.toLowerCase().includes(query)
+          : Boolean(queryDigits) && key.includes(queryDigits.replace(/^1(?=\d{10}$)/, '')))
+      if (!matches) continue
+      seen.add(key)
+      suggestions.push({ id: recipient.id, name: recipient.name, relation: recipient.relation, value })
+    }
+    return nameKey
+      ? [
+          ...suggestions.filter((entry) => entry.name.trim().toLowerCase() === nameKey),
+          ...suggestions.filter((entry) => entry.name.trim().toLowerCase() !== nameKey),
+        ]
+      : suggestions
+  }
+
+  useEffect(() => {
+    setActiveDestinationSuggestion(-1)
+  }, [destinationSuggestField, deliveryDestinations, deliveryMethod])
+
+  useEffect(() => {
+    if (destinationSuggestField < 0) {
+      return
+    }
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!(event.target as Element | null)?.closest?.('.delivery-recipient-field')) {
+        setDestinationSuggestField(-1)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [destinationSuggestField])
 
   useEffect(() => {
     if (!showRecipientSuggestions) {
@@ -13923,7 +13984,17 @@ function App() {
                   </button>
                 </div>
                 <div className="delivery-recipients">
-                  {deliveryDestinations.map((destination, index) => (
+                  {deliveryDestinations.map((destination, index) => {
+                    const destinationSuggestions =
+                      destinationSuggestField === index ? getDestinationSuggestions(index) : []
+                    const destinationListOpen = destinationSuggestions.length > 0
+                    const destinationListId = `delivery-suggestions-${index}`
+                    const pickDestination = (value: string) => {
+                      updateDeliveryDestination(index, value)
+                      setDeliveryNotice('')
+                      setDestinationSuggestField(-1)
+                    }
+                    return (
                     <label key={`delivery-recipient-${index}`} className="delivery-recipient-field">
                       <span className="delivery-recipient-label-row">
                         <span>
@@ -13948,10 +14019,56 @@ function App() {
                       <input
                         type={deliveryMethod === 'email' ? 'email' : 'tel'}
                         inputMode={deliveryMethod === 'email' ? 'email' : 'tel'}
-                        autoComplete={deliveryMethod === 'email' ? 'email' : 'tel'}
+                        autoComplete={hasSavedDestinations ? 'off' : deliveryMethod === 'email' ? 'email' : 'tel'}
                         value={destination}
-                        onChange={(event) => updateDeliveryDestination(index, event.target.value)}
-                        onBlur={() => {
+                        onChange={(event) => {
+                          updateDeliveryDestination(index, event.target.value)
+                          setDestinationSuggestField(index)
+                        }}
+                        onFocus={() => setDestinationSuggestField(index)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            setDestinationSuggestField(-1)
+                          } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                            if (!destinationListOpen) {
+                              if (destinationSuggestField !== index) {
+                                event.preventDefault()
+                                setDestinationSuggestField(index)
+                              }
+                              return
+                            }
+                            event.preventDefault()
+                            const step = event.key === 'ArrowDown' ? 1 : -1
+                            setActiveDestinationSuggestion((current) =>
+                              current < 0 && step < 0
+                                ? destinationSuggestions.length - 1
+                                : (current + step + destinationSuggestions.length) % destinationSuggestions.length,
+                            )
+                          } else if (
+                            event.key === 'Enter' &&
+                            destinationListOpen &&
+                            destinationSuggestions[activeDestinationSuggestion]
+                          ) {
+                            event.preventDefault()
+                            pickDestination(destinationSuggestions[activeDestinationSuggestion].value)
+                          }
+                        }}
+                        role={hasSavedDestinations ? 'combobox' : undefined}
+                        aria-autocomplete={hasSavedDestinations ? 'list' : undefined}
+                        aria-controls={hasSavedDestinations ? destinationListId : undefined}
+                        aria-expanded={hasSavedDestinations ? destinationListOpen : undefined}
+                        aria-activedescendant={
+                          destinationSuggestions[activeDestinationSuggestion]
+                            ? `${destinationListId}-${activeDestinationSuggestion}`
+                            : undefined
+                        }
+                        onBlur={(event) => {
+                          const input = event.currentTarget
+                          window.setTimeout(() => {
+                            if (document.activeElement !== input) {
+                              setDestinationSuggestField((current) => (current === index ? -1 : current))
+                            }
+                          }, 150)
                           if (!destination.trim()) {
                             return
                           }
@@ -13980,8 +14097,47 @@ function App() {
                         }}
                         placeholder={deliveryMethod === 'email' ? 'jamie@example.com' : '(925) 555-1234'}
                       />
+                      {destinationListOpen && (
+                        <ul
+                          id={destinationListId}
+                          className="recipient-suggestions"
+                          role="listbox"
+                          aria-label={deliveryMethod === 'email' ? 'Previous recipient emails' : 'Previous recipient cellphones'}
+                        >
+                          {destinationSuggestions.map((suggestion, suggestionIndex) => (
+                            <li
+                              key={`${suggestion.id}-${suggestion.value}`}
+                              id={`${destinationListId}-${suggestionIndex}`}
+                              role="option"
+                              aria-selected={suggestionIndex === activeDestinationSuggestion}
+                              ref={(element) => {
+                                if (element && suggestionIndex === activeDestinationSuggestion) {
+                                  element.scrollIntoView({ block: 'nearest' })
+                                }
+                              }}
+                            >
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                className={suggestionIndex === activeDestinationSuggestion ? 'is-active' : undefined}
+                                onPointerDown={(event) => {
+                                  if (event.pointerType === 'mouse') {
+                                    event.preventDefault()
+                                  }
+                                }}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => pickDestination(suggestion.value)}
+                              >
+                                <strong>{suggestion.value}</strong>
+                                <span>{[suggestion.name, suggestion.relation].filter(Boolean).join(' · ')}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </label>
-                  ))}
+                    )
+                  })}
                   {deliveryDestinations.length < maxDeliveryRecipients && (
                     <button className="text-action-link delivery-add-recipient" type="button" onClick={addDeliveryDestination}>
                       Add another recipient
