@@ -576,6 +576,8 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
 
 const maxReferenceImages = 3
 const aiChoosesStyleLabel = 'AI chooses the best style for this card'
+// Photo-realistic faces set an exact-likeness expectation; an illustration is more forgiving.
+const aiChoosesPeoplePhotoStyle = 'Premium editorial illustration'
 const aiChoosesIllustratedStyles = [
   'Watercolor greeting card illustration',
   'Whimsical storybook illustration',
@@ -606,7 +608,7 @@ const buildAiChoosesStyleGuidance = (imageStyle = '', hasReferenceImages = false
   }
 
   if (hasReferenceImages) {
-    return `- The shopper left style as "${aiChoosesStyleLabel}" and provided people photos. Prefer "Photorealistic warm portrait photography" so likeness reads clearly. You may instead choose one illustrated medium from this list if it clearly fits better: ${aiChoosesIllustratedStyles.join('; ')}.`
+    return `- The shopper left style as "${aiChoosesStyleLabel}" and provided people photos. Use "${aiChoosesPeoplePhotoStyle}" as the art direction. Do NOT use photorealistic or photographic styles.`
   }
 
   return `- The shopper left style as "${aiChoosesStyleLabel}" and did not provide people photos. You MUST choose exactly one illustrated medium from this list: ${aiChoosesIllustratedStyles.join('; ')}. Do NOT use photorealistic or photographic styles.`
@@ -2499,12 +2501,16 @@ const getImageUrl = async (imageResponse, fallbackMessage) => {
 const generateImage = async (
   openai,
   env,
-  details,
+  cardDetails,
   refinement = '',
   imageMode = 'new',
   referenceImages = [],
   likenessBrief = '',
 ) => {
+  const details =
+    referenceImages.length > 0 && isAiChoosesImageStyle(cardDetails.imageStyle)
+      ? { ...cardDetails, imageStyle: aiChoosesPeoplePhotoStyle }
+      : cardDetails
   const photoGuidance = buildAttachedPhotoGuidance(referenceImages.length > 0)
   const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
   const prompt = `${buildImagePrompt(details, refinement, imageMode, referenceImages.length > 0)}${photoGuidance}${likenessSection}`
