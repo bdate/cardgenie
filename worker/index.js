@@ -2994,6 +2994,9 @@ const handleShareVideo = async (request, env, cardId) => {
     'X-Content-Type-Options': 'nosniff',
     ETag: object.httpEtag,
   })
+  if (new URL(request.url).searchParams.get('download') === '1') {
+    headers.set('Content-Disposition', 'attachment; filename="card-genie-card.mp4"')
+  }
   const range = request.headers.has('range') ? object.range : null
   if (range) {
     const suffix = Number(range.suffix) || 0

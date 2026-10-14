@@ -1905,6 +1905,46 @@ const downloadImageFallback = (imageUrl: string, fileName: string) => {
   link.remove()
 }
 
+const coverVideoFileName = 'card-genie-card.mp4'
+
+const getCoverVideoDownloadUrl = (videoUrl: string) => {
+  try {
+    const url = new URL(videoUrl)
+    url.searchParams.set('download', '1')
+    return url.toString()
+  } catch {
+    return videoUrl
+  }
+}
+
+const fetchCoverVideoFile = async (videoUrl: string, onProgress: (fraction: number) => void) => {
+  const response = await fetch(videoUrl, { mode: 'cors', credentials: 'omit' })
+  if (!response.ok) {
+    throw new Error(`Unable to fetch video (${response.status}).`)
+  }
+  const total = Number(response.headers.get('Content-Length')) || 0
+  let blob: Blob
+  if (response.body && total > 0) {
+    const reader = response.body.getReader()
+    const chunks: BlobPart[] = []
+    let received = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.byteLength
+      onProgress(Math.min(1, received / total))
+    }
+    blob = new Blob(chunks, { type: 'video/mp4' })
+  } else {
+    blob = await response.blob()
+  }
+  if (!blob.size) {
+    throw new Error('Video response was empty.')
+  }
+  return new File([blob], coverVideoFileName, { type: 'video/mp4' })
+}
+
 const loadImageFromSrc = (imageUrl: string, useCors: boolean) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
@@ -3429,6 +3469,10 @@ function App() {
   const [actionFeedback, setActionFeedback] = useState('')
   const [isOpeningCheckout, setIsOpeningCheckout] = useState(false)
   const [, setIsSavingImage] = useState(false)
+  const [coverVideoSaveState, setCoverVideoSaveState] = useState<'idle' | 'downloading' | 'ready'>('idle')
+  const [coverVideoSaveProgress, setCoverVideoSaveProgress] = useState(0)
+  const [coverVideoSaveNotice, setCoverVideoSaveNotice] = useState('')
+  const coverVideoFileRef = useRef<{ url: string; file: File } | null>(null)
   const [startingInterviewMode, setStartingInterviewMode] = useState<InterviewMode | null>(null)
   const actionFeedbackClearRef = useRef<number | null>(null)
   const screenWakeLockRef = useRef<ScreenWakeLock | null>(null)
@@ -8204,6 +8248,112 @@ function App() {
       setIsSavingImage(false)
       clearActionFeedback()
     }
+  }
+
+  const saveCoverVideoToDevice = async () => {
+    const videoUrl = sharedCard?.coverVideoUrl
+    if (!videoUrl || coverVideoSaveState === 'downloading') {
+      return
+    }
+
+    setCoverVideoSaveNotice('')
+    const downloadVideoFallback = () => {
+      setCoverVideoSaveState('idle')
+      downloadImageFallback(getCoverVideoDownloadUrl(videoUrl), coverVideoFileName)
+      setCoverVideoSaveNotice(
+        prefersPhotoSave
+          ? 'If your phone downloads the video, open it and use the share menu to save it to Photos.'
+          : 'The animated video was saved to your downloads folder.',
+      )
+    }
+
+    if (!prefersPhotoSave || typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') {
+      downloadVideoFallback()
+      return
+    }
+
+    let file = coverVideoFileRef.current?.url === videoUrl ? coverVideoFileRef.current.file : null
+    if (!file) {
+      setCoverVideoSaveState('downloading')
+      setCoverVideoSaveProgress(0)
+      try {
+        file = await fetchCoverVideoFile(videoUrl, setCoverVideoSaveProgress)
+        coverVideoFileRef.current = { url: videoUrl, file }
+      } catch {
+        downloadVideoFallback()
+        return
+      }
+    }
+
+    if (!navigator.canShare({ files: [file] })) {
+      downloadVideoFallback()
+      return
+    }
+
+    try {
+      // Files only: adding title/text hides "Save Video" in the iOS share sheet.
+      await navigator.share({ files: [file] })
+      setCoverVideoSaveState('idle')
+      setCoverVideoSaveNotice('Done. If you chose Save Video, the animated card is in your Photos app.')
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+        setCoverVideoSaveState('idle')
+        return
+      }
+      if (caughtError instanceof DOMException && caughtError.name === 'NotAllowedError') {
+        // The tap "expired" during a long download; the next tap shares the cached file instantly.
+        setCoverVideoSaveState('ready')
+        setCoverVideoSaveNotice('Your video is ready. Tap “Save video to Photos” and choose Save Video.')
+        return
+      }
+      downloadVideoFallback()
+    }
+  }
+
+  const renderCoverVideoSaveActions = () => {
+    if (!sharedCard?.coverVideoUrl) {
+      return null
+    }
+    const isDownloading = coverVideoSaveState === 'downloading'
+    return (
+      <div className="cover-video-save" aria-label="Save this card">
+        <div className="cover-video-save-links">
+          <button
+            className="text-action-link"
+            type="button"
+            onClick={() => void saveImageToDevice(card?.imageUrl || '', `${fileNameBase}-cover.jpg`, 'Card image')}
+          >
+            Save image
+          </button>
+          <span aria-hidden="true"> · </span>
+          <button
+            className="text-action-link cover-video-save-button"
+            type="button"
+            aria-busy={isDownloading}
+            disabled={isDownloading}
+            onClick={() => void saveCoverVideoToDevice()}
+          >
+            {isDownloading ? (
+              <>
+                <span className="cover-video-save-spinner" aria-hidden="true" />
+                {coverVideoSaveProgress > 0
+                  ? `Downloading video… ${Math.round(coverVideoSaveProgress * 100)}%`
+                  : 'Downloading video…'}
+              </>
+            ) : coverVideoSaveState === 'ready' ? (
+              'Save video to Photos'
+            ) : (
+              'Save animated video'
+            )}
+          </button>
+        </div>
+        {(coverVideoSaveNotice || saveNotice) && (
+          <p className="cover-video-save-notice" role="status">
+            {coverVideoSaveNotice || saveNotice}
+          </p>
+        )}
+      </div>
+    )
   }
 
   const prepareAdminPrintFiles = async () => {
@@ -13413,6 +13563,7 @@ function App() {
                   </button>
                 </nav>
               )}
+              {hasCoverVideo && (step === 'front' || step === 'inside') && renderCoverVideoSaveActions()}
               {!isRecipientView &&
                 step === 'inside' &&
                 card?.messageVariants?.short &&
