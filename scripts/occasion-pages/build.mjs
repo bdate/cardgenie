@@ -94,6 +94,27 @@ const breadcrumbs = (items) => ({
 })
 
 const makeHref = (page) => `/?occasion=${encodeURIComponent(page.occasion)}`
+const pageLabel = (page) => page.label || `${page.name} cards`
+
+const renderTypeGroups = (page) =>
+  page.typeGroups
+    ? `
+      <h2>${esc(page.typesHeading)}</h2>
+      <p class="section-intro">${esc(page.typesIntro)}</p>
+      <div class="types">
+${page.typeGroups
+  .map(
+    (group) => `        <div class="type-group">
+          <h3>${esc(group.heading)}</h3>
+          <div class="more">
+${group.types.map((type) => `            <a href="/?occasion=${encodeURIComponent(type)}">${esc(type)}</a>`).join('\n')}
+          </div>
+        </div>`,
+  )
+  .join('\n')}
+      </div>
+`
+    : ''
 
 const renderPage = (page) => {
   const url = `${SITE}/${page.slug}/`
@@ -141,7 +162,7 @@ const renderPage = (page) => {
 
   const others = occasions
     .filter((other) => other.slug !== page.slug)
-    .map((other) => `        <a href="/${other.slug}/">${esc(other.name)}</a>`)
+    .map((other) => `        <a href="/${other.slug}/">${esc(other.label || other.name)}</a>`)
     .join('\n')
 
   return (
@@ -153,7 +174,7 @@ const renderPage = (page) => {
       jsonLd: breadcrumbs([
         ['Card Genie', `${SITE}/`],
         ['Occasions', `${SITE}/occasions/`],
-        [`${page.name} cards`, url],
+        [pageLabel(page), url],
       ]),
     }) +
     `
@@ -163,7 +184,7 @@ const renderPage = (page) => {
         <a class="cta" href="${makeHref(page)}">${esc(page.cta)}</a>
         <p class="cta-note">Creating a card is free, and so is your first send.</p>
       </section>
-
+${renderTypeGroups(page)}
       <h2>${esc(page.galleryHeading)}</h2>
       <p class="section-intro">
         Every card starts from a few details. Here’s what Card Genie made from each story — the cover art and the
@@ -199,7 +220,7 @@ ${figures}
 ${ideas}
       </div>
 
-      <h2>${esc(page.name)} card questions</h2>
+      <h2>${esc(page.faqHeading || `${page.name} card questions`)}</h2>
       <div class="faq">
 ${faqs}
       </div>
@@ -225,7 +246,7 @@ const renderHub = () => {
     .map(
       (page, index) => `        <a href="/${page.slug}/">
           <img src="/${page.slug}/img/${page.samples[0].slug}.jpg" alt="" width="528" height="560" loading="${index < 6 ? 'eager' : 'lazy'}" />
-          <span>${esc(page.name)} cards</span>
+          <span>${esc(pageLabel(page))}</span>
         </a>`,
     )
     .join('\n')
@@ -233,7 +254,7 @@ const renderHub = () => {
     head({
       title: 'Personalized Cards for Every Occasion | Card Genie',
       description:
-        'Birthday, thank you, anniversary, sympathy, holidays, and more: make a one-of-a-kind card with custom artwork and a message written just for them.',
+        'Birthday, thank you, anniversary, sympathy, holidays, invitations, and more: make a one-of-a-kind card with custom artwork and a message written just for them.',
       url,
       image: `${SITE}/og-image.png`,
       jsonLd: breadcrumbs([

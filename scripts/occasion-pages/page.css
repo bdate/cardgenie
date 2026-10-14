@@ -235,6 +235,16 @@ figcaption strong {
   font-size: 0.95rem;
 }
 
+.types {
+  display: grid;
+  gap: 18px;
+}
+
+.type-group h3 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
 .faq {
   display: grid;
   gap: 10px;

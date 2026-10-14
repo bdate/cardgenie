@@ -108,13 +108,63 @@ const getStripe = (env) => {
   })
 }
 
+const invitationOccasionPattern = /\binvit(?:e|es|ation|ations)\b|\bsave[\s-]+the[\s-]+date\b/i
+
+const isInvitationOccasion = (details) => invitationOccasionPattern.test(String(details?.occasion || ''))
+
+// "a Birthday card" for greetings; "an Engagement party invitation" for invitations.
+const describeOccasionForMessage = (occasion) => {
+  const label = String(occasion || '').trim()
+  if (!invitationOccasionPattern.test(label)) {
+    return `a ${label} card`
+  }
+  return `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}`
+}
+
+const invitationCopyGuidance = `
+This card is an INVITATION, not a greeting. The sender is inviting the recipient (a guest) to an event.
+- Write invitation wording for the message body: who is hosting or being celebrated, what the event is, and a warm line asking the guest to come. Do not wish the recipient a happy birthday, congratulate them, or thank them unless the details say the recipient is the guest of honor.
+- Put the logistics in "eventDetails", not in the message body. One short labeled line each, in this order: "When: <day, date, and time>", "Where: <place and address>", "RSVP: <to whom, how, and by when>", then at most two more lines for practical notes the sender mentioned (dress code, what to bring, registry, parking, kids welcome, and so on).
+- Use ONLY facts the sender gave. Never invent dates, times, places, addresses, phone numbers, emails, RSVP deadlines, dress codes, or other notes. A label the sender left blank (for example "RSVP to: " with nothing after it) means they gave nothing for it.
+- If the sender did not give the date or time, write exactly "When: [Add date and time]". If they did not give the place, write exactly "Where: [Add place]". If they gave no RSVP information, leave the RSVP line out entirely. Never add a line saying something is "None" or not needed.
+- Write dates exactly as the sender gave them. Do not add a weekday unless the sender gave one.
+- For a save the date, give the date and city if known, add the unlabeled line "Formal invitation to follow", and leave out any RSVP line.
+- The closing should suit an invitation, for example "Hope to see you there," / "Hope you can make it," / "Can't wait to celebrate with you," / "With love,".
+- Never suggest printing the invitation at home.
+`
+
+const invitationCopyShape = `,
+  "eventDetails": "Event logistics only, one labeled line per item separated by \\n, for example: When: Saturday, November 14 at 6:00 PM\\nWhere: 42 Oak Street, Danville\\nRSVP: Text Sam by November 1"`
+
+// Only When/Where may be left as placeholders; any other unfilled line is dropped.
+const normalizeEventDetails = (value) =>
+  String(value || '')
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-•*]\s*/, '').trim())
+    .map((line) => {
+      const labeled = line.match(/^([^:]{1,40}):\s*(.*)$/)
+      const content = (labeled ? labeled[2] : line).trim()
+      if (content && !/^\[[^\]]*\]$/.test(content)) return line
+      const label = labeled?.[1].trim().toLowerCase()
+      if (label === 'when') return 'When: [Add date and time]'
+      if (label === 'where') return 'Where: [Add place]'
+      return ''
+    })
+    .filter(Boolean)
+    .slice(0, 6)
+    .join('\n')
+
+const withEventDetails = (message, eventDetails) =>
+  eventDetails ? `${String(message || '').trim()}\n\n${eventDetails}` : message
+
 const buildCopyPrompt = (details, refinement = '', messageKeyDetails) => {
+  const isInvitation = isInvitationOccasion(details)
   const personalDetails =
     typeof messageKeyDetails === 'string' ? messageKeyDetails : details.keyDetails || ''
   const appearanceRemoved = personalDetails.trim() !== (details.keyDetails || '').trim()
 
   return `
-Write the inside message for a personalized greeting card.
+Write the inside message for a personalized ${isInvitation ? 'invitation card' : 'greeting card'}.
 
 Recipient: ${details.recipientName || details.recipientType}
 Recipient type or relationship: ${details.recipientType}
@@ -126,12 +176,12 @@ Personal details to include: ${personalDetails || 'Use the occasion, tone, and r
 ${refinement ? `\nUser refinement request: ${refinement}` : ''}
 ${appearanceRemoved ? '\nNote: Physical appearance details were removed from the list above. They are used only for the cover artwork. Do not infer, describe, or compliment anyone\'s looks, height, hair, eyes, figure, or skin tone.' : ''}
 
-Strictly obey the selected Length word-count range for the message body only. Count the body copy words, not the greeting, closing, or signature. Do not exceed the maximum word count in the selected range.
-
+Strictly obey the selected Length word-count range for the message body only. Count the body copy words, not the greeting, closing, or signature${isInvitation ? ', or eventDetails' : ''}. Do not exceed the maximum word count in the selected range.
+${isInvitation ? invitationCopyGuidance : ''}
 Return strict JSON only, with this shape:
 {
   "message": "Body copy only, split into 2-4 short logical paragraphs separated by blank lines. No salutation, closing, sender name, placeholder, or signature.",
-  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship — e.g. With love, / Cheers, / With gratitude, / Warmly, / Your friend, / Here's to you, etc. Never default to 'With all my love' unless it truly fits."
+  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship — e.g. With love, / Cheers, / With gratitude, / Warmly, / Your friend, / Here's to you, etc. Never default to 'With all my love' unless it truly fits."${isInvitation ? invitationCopyShape : ''}
 }
 
 Do not include a salutation like "Dear..." and do not include the sender name, placeholder, or signature. The app will typeset the greeting, closing, and cursive signature separately.
@@ -750,7 +800,9 @@ ${buildAiChoosesStyleGuidance(details.imageStyle, hasReferenceImages)}
 - Text should be large enough to read but never oversized, never crowded, and never inside the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
 - Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
 ${
-  details.recipientName?.trim()
+  isInvitationOccasion(details)
+    ? `- This card is an invitation to an event, and the recipient is a guest. If cover text is used, make it an invitation phrase such as "You're Invited", "Join Us", "Save the Date", or a short event title from the personal context such as "Maya's 30th Birthday Party". Never wish the recipient a happy birthday or congratulate them on the cover, and do not put the recipient's name, dates, times, or addresses on the cover.\n`
+    : details.recipientName?.trim()
     ? `- Personalize that phrase with the recipient's name, "${details.recipientName.trim()}", whenever cover text is used and it suits the occasion, for example "Happy Birthday, Joe" or "Thank You, Nellie". Use the name exactly as written here — first names only, never add a last name. Leave the name off only for somber occasions such as sympathy, or if it is too long to stay legible inside the safe area.\n`
     : ''
 }- Ages may be included when they fit naturally and remain fully inside the central safe area.
@@ -1020,6 +1072,7 @@ const parseCopyResponse = (response) => {
     return {
       message: parsed.message?.trim() || text,
       closing: parsed.closing?.trim() || 'With love,',
+      eventDetails: normalizeEventDetails(parsed.eventDetails),
     }
   }
 
@@ -1077,8 +1130,8 @@ const buildSharePreviewCopy = (record) => {
   const sender = record.signature || record.details.senderName || 'Someone special'
   const occasion = record.details.occasion || 'greeting'
   const title = recipientFirstName
-    ? `${recipientFirstName}, ${sender} sent you a ${occasion} card`
-    : `${sender} sent you a ${occasion} card`
+    ? `${recipientFirstName}, ${sender} sent you ${describeOccasionForMessage(occasion)}`
+    : `${sender} sent you ${describeOccasionForMessage(occasion)}`
   const description = recipientFirstName
     ? `${recipientFirstName}, open your personalized card from ${sender}.`
     : `Open your personalized card from ${sender}.`
@@ -1544,7 +1597,7 @@ const buildDeliveryCopy = (record, shareUrl, coverUrl) => {
   const thumbnailAlt = `${occasion} card cover from ${sender}`
 
   return {
-    subject: `${sender} sent you a ${occasion} card`,
+    subject: `${sender} sent you ${describeOccasionForMessage(occasion)}`,
     text: `${openLine} ${shareUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">
@@ -2368,18 +2421,23 @@ If a likeness brief is provided, you may use it to know who the card is about, b
     input: prompt,
   })
 
-  const copy = await fitCopyToLength(openai, env, details, parseCopyResponse(copyResponse))
+  const { eventDetails, ...parsedCopy } = parseCopyResponse(copyResponse)
+  const copy = await fitCopyToLength(openai, env, details, parsedCopy)
 
   return {
     ...copy,
-    message: stripAppearanceFromMessage(copy.message),
+    message: withEventDetails(
+      stripAppearanceFromMessage(copy.message),
+      isInvitationOccasion(details) ? eventDetails : '',
+    ),
   }
 }
 
 const generateCopyVariants = async (openai, env, details, likenessBrief = '') => {
   const messageKeyDetails = extractMessageKeyDetails(getOriginalKeyDetails(details))
+  const isInvitation = isInvitationOccasion(details)
   const prompt = `
-Write three inside-message versions for a personalized greeting card: short, medium, and long.
+Write three inside-message versions for a personalized ${isInvitation ? 'invitation card' : 'greeting card'}: short, medium, and long.
 
 Recipient: ${details.recipientName || details.recipientType}
 Recipient type or relationship: ${details.recipientType}
@@ -2399,9 +2457,9 @@ Return strict JSON only, with this shape:
   "short": "Body copy only, 5-20 words. No salutation, closing, sender name, or signature.",
   "medium": "Body copy only, 20-40 words. No salutation, closing, sender name, or signature.",
   "long": "Body copy only, 40-70 words. No salutation, closing, sender name, or signature.",
-  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship."
+  "closing": "A short closing phrase appropriate to the occasion, tone, and relationship."${isInvitation ? invitationCopyShape : ''}
 }
-
+${isInvitation ? `${invitationCopyGuidance}- The same eventDetails are shown under every version, so keep dates, times, places, and RSVP out of all three bodies.\n` : ''}
 Rules:
 - All three versions must share the same emotional idea and personal details, just at different lengths.
 - Strictly obey each word-count range for the body only.
@@ -2420,10 +2478,13 @@ Rules:
   const closing = String(parsed.closing || 'With love,').trim() || 'With love,'
   const variants = {}
 
+  const eventDetails = isInvitation ? normalizeEventDetails(parsed.eventDetails) : ''
+
   for (const spec of copyLengthSpecs) {
     const raw = String(parsed[spec.id] || '').trim()
     const cleaned = stripAppearanceFromMessage(raw)
-    variants[spec.id] = trimToWordLimit(cleaned || raw, spec.max)
+    const body = trimToWordLimit(cleaned || raw, spec.max)
+    variants[spec.id] = body ? withEventDetails(body, eventDetails) : ''
   }
 
   // Fall back to a single generateCopy pass if the multi-length JSON was incomplete.
@@ -5454,6 +5515,18 @@ const interviewRecipientNameLooksAmbiguous = (name) => {
 
 const inferInterviewOccasionFromText = (text) => {
   const value = String(text || '').toLowerCase()
+  if (/\bsave[\s-]+the[\s-]+date\b/.test(value)) {
+    return 'Save the date'
+  }
+  if (/\binvit(?:e|es|ation|ations)\b/.test(value)) {
+    if (/\bbaby\s+shower\b/.test(value)) return 'Baby shower invitation'
+    if (/\bbridal\s+shower\b/.test(value)) return 'Bridal shower invitation'
+    if (/\bwedding\b/.test(value)) return 'Wedding invitation'
+    if (/\bbirthday\b|\bb\-?day\b/.test(value)) return 'Birthday party invitation'
+    if (/\bgraduation\b/.test(value)) return 'Graduation party invitation'
+    if (/\bretirement\b/.test(value)) return 'Retirement party invitation'
+    return 'Party invitation'
+  }
   if (/\bthank[\s-]?you\b|\bthanks\b/.test(value)) {
     return 'Thank You'
   }
@@ -5555,6 +5628,9 @@ const normalizeInterviewOccasionLabel = (occasion) => {
   const raw = String(occasion || '').trim()
   if (!raw) {
     return ''
+  }
+  if (invitationOccasionPattern.test(raw)) {
+    return raw
   }
   const inferred = inferInterviewOccasionFromText(raw)
   return inferred || raw

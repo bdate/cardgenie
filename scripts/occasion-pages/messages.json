@@ -754,5 +754,59 @@
       "medium": "Your patience while teaching me to drive meant the world. You guided me through those early lessons without ever raising your voice, and I’m grateful for your support.",
       "long": "On this Father’s Day, I want to thank you for being such a patient teacher. From our days in the empty parking lot to the endless support you provided without raising your voice, you showed me the importance of calmness and encouragement. I truly appreciate everything you've done."
     }
+  },
+  "invitations/graduation-party-invite-poster": {
+    "message": "Maya is graduating from Lincoln High! Celebrate with us for an afternoon of tacos, lawn games, and festivities in our backyard. We would love to see you there!\n\nWhen: Saturday, June 5 at 4 PM until late\nWhere: Our backyard, 220 Elm Street\nRSVP: Text Rosa by May 28",
+    "closing": "Hope you can make it!",
+    "variants": {
+      "short": "Join us to celebrate Maya’s graduation! Food, fun, and games await!\n\nWhen: Saturday, June 5 at 4 PM until late\nWhere: Our backyard, 220 Elm Street\nRSVP: Text Rosa by May 28",
+      "medium": "Maya is graduating from Lincoln High! Celebrate with us for an afternoon of tacos, lawn games, and festivities in our backyard. We would love to see you there!\n\nWhen: Saturday, June 5 at 4 PM until late\nWhere: Our backyard, 220 Elm Street\nRSVP: Text Rosa by May 28",
+      "long": "The Ortiz family invites you to celebrate Maya’s graduation from Lincoln High! Join us for a taco bar, exciting lawn games, and cheerful company as we commemorate this special day. Your presence would mean the world to us!\n\nWhen: Saturday, June 5 at 4 PM until late\nWhere: Our backyard, 220 Elm Street\nRSVP: Text Rosa by May 28"
+    }
+  },
+  "invitations/holiday-party-invite-collage": {
+    "message": "You’re invited to our annual holiday open house and cookie swap. Celebrate the season with delicious treats and good company.\n\nWhen: Saturday, December 12, 6 to 9 PM\nWhere: 9 Birch Court\nRSVP: Reply to Jen by December 5\nBring a dozen cookies to swap",
+    "closing": "Hope to see you there,",
+    "variants": {
+      "short": "Join us for our annual holiday open house and cookie swap.\n\nWhen: Saturday, December 12, 6 to 9 PM\nWhere: 9 Birch Court\nRSVP: Reply to Jen by December 5\nBring a dozen cookies to swap",
+      "medium": "You’re invited to our annual holiday open house and cookie swap. Celebrate the season with delicious treats and good company.\n\nWhen: Saturday, December 12, 6 to 9 PM\nWhere: 9 Birch Court\nRSVP: Reply to Jen by December 5\nBring a dozen cookies to swap",
+      "long": "Celebrate the joy of the season at our annual holiday open house and cookie swap. Delight in sweet treats and festive cheer while connecting with neighbors in a warm and inviting atmosphere.\n\nWhen: Saturday, December 12, 6 to 9 PM\nWhere: 9 Birch Court\nRSVP: Reply to Jen by December 5\nBring a dozen cookies to swap"
+    }
+  },
+  "invitations/baby-shower-invite-watercolor": {
+    "message": "Celebrate the joy of new beginnings at Priya's baby shower! Join us in honoring her and welcoming her baby girl with warmth and love.\n\nWhen: Sunday, April 19 at 11 AM\nWhere: Meera’s garden, 18 Linden Lane\nRSVP: Email Meera by April 10\nBrunch is served\nRegistry at Target",
+    "closing": "Hope to see you there.",
+    "variants": {
+      "short": "Join us for Priya's baby shower as we celebrate her little girl!\n\nWhen: Sunday, April 19 at 11 AM\nWhere: Meera’s garden, 18 Linden Lane\nRSVP: Email Meera by April 10\nBrunch is served\nRegistry at Target",
+      "medium": "Celebrate the joy of new beginnings at Priya's baby shower! Join us in honoring her and welcoming her baby girl with warmth and love.\n\nWhen: Sunday, April 19 at 11 AM\nWhere: Meera’s garden, 18 Linden Lane\nRSVP: Email Meera by April 10\nBrunch is served\nRegistry at Target",
+      "long": "We invite you to a special baby shower for Priya, who is expecting a sweet baby girl! Let’s come together to share in her joy and create beautiful memories as we celebrate this precious new chapter in her life.\n\nWhen: Sunday, April 19 at 11 AM\nWhere: Meera’s garden, 18 Linden Lane\nRSVP: Email Meera by April 10\nBrunch is served\nRegistry at Target"
+    }
+  },
+  "invitations/retirement-party-invite-editorial": {
+    "message": "Let's come together to celebrate Coach Frank Miller's incredible 35-year journey teaching PE and coaching basketball. Your presence would mean a lot as we honor his legacy!\n\nWhen: Friday, June 18 at 5 PM\nWhere: Westview High gym\nRSVP: Email Ms. Lee by June 11",
+    "closing": "Hope to see you there.",
+    "variants": {
+      "short": "Join us to celebrate Coach Frank Miller's 35 years of inspiring students!\n\nWhen: Friday, June 18 at 5 PM\nWhere: Westview High gym\nRSVP: Email Ms. Lee by June 11",
+      "medium": "Let's come together to celebrate Coach Frank Miller's incredible 35-year journey teaching PE and coaching basketball. Your presence would mean a lot as we honor his legacy!\n\nWhen: Friday, June 18 at 5 PM\nWhere: Westview High gym\nRSVP: Email Ms. Lee by June 11",
+      "long": "We invite you to celebrate Coach Frank Miller’s remarkable 35 years of teaching PE and coaching basketball. Join us in expressing our gratitude and sharing memories that have shaped so many lives. Your presence will make this event truly special!\n\nWhen: Friday, June 18 at 5 PM\nWhere: Westview High gym\nRSVP: Email Ms. Lee by June 11"
+    }
+  },
+  "invitations/save-the-date-paper-cut": {
+    "message": "Save the date as we celebrate the wedding of Elena and Marco on June 12, 2027. Your presence would mean the world to us.\n\nWhen: June 12, 2027\nWhere: Napa Valley, California\nFormal invitation to follow",
+    "closing": "Hope to see you there,",
+    "variants": {
+      "short": "Join us in celebrating Elena and Marco’s wedding on June 12, 2027.\n\nWhen: June 12, 2027\nWhere: Napa Valley, California\nFormal invitation to follow",
+      "medium": "Save the date as we celebrate the wedding of Elena and Marco on June 12, 2027. Your presence would mean the world to us.\n\nWhen: June 12, 2027\nWhere: Napa Valley, California\nFormal invitation to follow",
+      "long": "We are thrilled to announce the wedding of Elena and Marco on June 12, 2027. Your presence would be a cherished addition to our celebration. Please save this date for a beautiful day together.\n\nWhen: June 12, 2027\nWhere: Napa Valley, California\nFormal invitation to follow"
+    }
+  },
+  "invitations/kids-birthday-invite-storybook": {
+    "message": "Get ready for a roaring good time! Leo is turning 6, and we invite you to a dino-themed birthday party filled with fun, games, and cake!\n\nWhen: Saturday, March 7 from 2 to 4 PM\nWhere: Maple Park picnic pavilion\nRSVP: Text Dana by March 1\nDino costumes welcome",
+    "closing": "Can't wait to celebrate with you!",
+    "variants": {
+      "short": "Join us for a dino-mite birthday bash as Leo turns 6!\n\nWhen: Saturday, March 7 from 2 to 4 PM\nWhere: Maple Park picnic pavilion\nRSVP: Text Dana by March 1\nDino costumes welcome",
+      "medium": "Get ready for a roaring good time! Leo is turning 6, and we invite you to a dino-themed birthday party filled with fun, games, and cake!\n\nWhen: Saturday, March 7 from 2 to 4 PM\nWhere: Maple Park picnic pavilion\nRSVP: Text Dana by March 1\nDino costumes welcome",
+      "long": "Roar with excitement as we celebrate Leo’s 6th birthday! Join us for a dino-themed party at Maple Park. We can’t wait to have you bring your dino costumes and enjoy a day of fun and laughter!\n\nWhen: Saturday, March 7 from 2 to 4 PM\nWhere: Maple Park picnic pavilion\nRSVP: Text Dana by March 1\nDino costumes welcome"
+    }
   }
 }

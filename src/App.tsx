@@ -971,6 +971,56 @@ const commonOccasions = [
   'Baptism',
 ]
 
+// Keep in sync with the invitation types on the /invitations/ page (scripts/occasion-pages/occasions.mjs).
+const invitationOccasions = [
+  'Invitation',
+  'Party invitation',
+  'Birthday party invitation',
+  'Kids’ birthday party invitation',
+  'Milestone birthday invitation',
+  'Surprise party invitation',
+  'Save the date',
+  'Wedding invitation',
+  'Engagement party invitation',
+  'Bridal shower invitation',
+  'Bachelorette party invitation',
+  'Rehearsal dinner invitation',
+  'Anniversary party invitation',
+  'Baby shower invitation',
+  'Gender reveal invitation',
+  'Baptism invitation',
+  'First communion invitation',
+  'Bar mitzvah invitation',
+  'Bat mitzvah invitation',
+  'Quinceañera invitation',
+  'Graduation party invitation',
+  'Retirement party invitation',
+  'Housewarming invitation',
+  'Celebration of life invitation',
+  'Dinner party invitation',
+  'Cocktail party invitation',
+  'BBQ invitation',
+  'Brunch invitation',
+  'Game night invitation',
+  'Holiday party invitation',
+  'Halloween party invitation',
+  'New Year’s Eve party invitation',
+  'Business event invitation',
+  'Office party invitation',
+]
+commonOccasions.push(...invitationOccasions)
+
+const invitationOccasionPattern = /\binvit(?:e|es|ation|ations)\b|\bsave[\s-]+the[\s-]+date\b/i
+
+const invitationDetailsTemplate = [
+  'Celebrating: ',
+  'Hosted by: ',
+  'Date and time: ',
+  'Place and address: ',
+  'RSVP to (and by when): ',
+  'Other details (theme, dress code, what to bring): ',
+].join('\n')
+
 const ordinalSuffix = (n: number) => {
   const tens = n % 100
   if (tens >= 11 && tens <= 13) return 'th'
@@ -3543,7 +3593,8 @@ function App() {
   const envelopeAddress = `To ${envelopeLabel}`
   const envelopeAddressSize =
     envelopeAddress.length > 34 ? 'is-long' : envelopeAddress.length > 22 ? 'is-medium' : ''
-  const recipientHeadline = `You received a card from ${senderLabel}`
+  const isInvitationCard = invitationOccasionPattern.test(details.occasion)
+  const recipientHeadline = `You received ${isInvitationCard ? 'an invitation' : 'a card'} from ${senderLabel}`
   const recipientHeadlineSize =
     recipientHeadline.length > 42 ? 'is-long' : recipientHeadline.length > 32 ? 'is-medium' : ''
   const stampSrc = `${import.meta.env.BASE_URL}stamp.webp`
@@ -6457,8 +6508,16 @@ function App() {
     setActiveOccasionIndex(-1)
   }, [details.occasion])
 
+  const applyInvitationDefaults = (occasion: string) => {
+    if (!invitationOccasionPattern.test(occasion)) return
+    setDetails((current) =>
+      current.keyDetails.trim() ? current : { ...current, keyDetails: invitationDetailsTemplate },
+    )
+  }
+
   const pickOccasion = (label: string) => {
     updateDetails('occasion', label)
+    applyInvitationDefaults(label)
     setShowOccasionSuggestions(false)
   }
 
@@ -6471,6 +6530,7 @@ function App() {
     const nextQuery = params.toString()
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
     updateDetails('occasion', occasionParam)
+    applyInvitationDefaults(occasionParam)
   }, [])
 
   const recipientSuggestions = useMemo(() => {
@@ -10240,6 +10300,14 @@ function App() {
       return
     }
 
+    const unfilledPlaceholder = cardMessage.match(/\[Add [^\]]+\]/)
+    if (unfilledPlaceholder) {
+      setDeliveryNotice(
+        `Your invitation still says “${unfilledPlaceholder[0]}”. Tap Revise card and fill it in inside the message before sending.`,
+      )
+      return
+    }
+
     const rawEntries = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
 
     if (!rawEntries.length) {
@@ -10545,7 +10613,7 @@ function App() {
         ) : null}
         {isRecipientView && (
           <h1 className={`recipient-headline ${recipientHeadlineSize}`.trim()}>
-            You received a card from {senderLabel}
+            {recipientHeadline}
           </h1>
         )}
         {!isRecipientView && (
@@ -13221,7 +13289,9 @@ function App() {
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
               placeholder={
-                'Add memories, interests, stories, or scene ideas for the card.\n\nTo put people on the cover, describe how they look (tall, green eyes, blonde hair, etc.). Looks shape the artwork only \u2014 they won\u2019t appear in the inside message.'
+                isInvitationCard
+                  ? 'What you\u2019re celebrating, who\u2019s hosting, the date and time, the place, and how guests should RSVP. Genie puts these details inside the invitation.\n\nTo put people on the cover, describe how they look. Looks shape the artwork only.'
+                  : 'Add memories, interests, stories, or scene ideas for the card.\n\nTo put people on the cover, describe how they look (tall, green eyes, blonde hair, etc.). Looks shape the artwork only \u2014 they won\u2019t appear in the inside message.'
               }
             />
           </label>
