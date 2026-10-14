@@ -2346,16 +2346,25 @@ const normalizeEmailAddress = (email = '') => {
   return formatted
 }
 
-const sendTextDelivery = async ({ env, to, copy }) => {
+// A Messaging Service holds the branded RCS sender plus the SMS number Twilio falls back to.
+const twilioSenderFields = (env) => {
+  const messagingServiceSid = String(env.TWILIO_MESSAGING_SERVICE_SID || '').trim()
+  if (messagingServiceSid) {
+    return { MessagingServiceSid: messagingServiceSid }
+  }
   if (!env.TWILIO_FROM_NUMBER) {
     throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
   }
+  return { From: env.TWILIO_FROM_NUMBER }
+}
 
+const sendTextDelivery = async ({ env, to, copy }) => {
+  const sender = twilioSenderFields(env)
   const twilioAuth = getTwilioAuthCredentials(env)
   const normalizedTo = normalizePhoneNumber(to)
 
   const form = new URLSearchParams({
-    From: env.TWILIO_FROM_NUMBER,
+    ...sender,
     To: normalizedTo,
     Body: copy.text,
   })
@@ -3110,13 +3119,10 @@ const hashSecret = async (value) => {
 }
 
 const sendAccountSms = async ({ env, to, body }) => {
-  if (!env.TWILIO_FROM_NUMBER) {
-    throw new Error('Text delivery is not configured. Add TWILIO_FROM_NUMBER.')
-  }
-
+  const sender = twilioSenderFields(env)
   const twilioAuth = getTwilioAuthCredentials(env)
   const form = new URLSearchParams({
-    From: env.TWILIO_FROM_NUMBER,
+    ...sender,
     To: to,
     Body: body,
   })
