@@ -7073,6 +7073,11 @@ function App() {
     return balance
   }
 
+  const rememberChargedCredits = (serverBalance: unknown, localCharge: number) => {
+    const balance = parseCreditBalance(serverBalance)
+    return balance !== null ? rememberCredits(balance) : rememberCredits(credits - localCharge)
+  }
+
   const syncAccountCredits = async (payload: { balance?: number; add?: number; reason: string }) => {
     if (!accountSession?.token) {
       return
@@ -9122,6 +9127,7 @@ function App() {
       })
       const data = await getApiJson(response, 'Unable to place the print order.')
       if (!response.ok) {
+        if (data.code === 'credits') rememberChargedCredits(data.creditBalance, 0)
         throw new Error(data.error || 'Unable to place the print order.')
       }
 
@@ -9129,9 +9135,8 @@ function App() {
         typeof data.creditCost === 'number' && Number.isFinite(data.creditCost)
           ? data.creditCost
           : printCardCreditCost
-      const nextCredits = rememberCredits(credits - chargedCredits)
+      rememberChargedCredits(data.creditBalance, chargedCredits)
       setCreditNotice(`${chargedCredits} credits used to order a printed card.`)
-      void syncAccountCredits({ balance: nextCredits, reason: 'print_card_order' })
       const orderCode =
         typeof data.orderCode === 'string' && data.orderCode.trim() ? data.orderCode.trim() : ''
       saveAccountSession({
@@ -9789,6 +9794,7 @@ function App() {
       const data = await getApiJson(response, 'Unable to refine the cover image.')
 
       if (!response.ok) {
+        if (data.code === 'credits') rememberChargedCredits(data.creditBalance, 0)
         throw new Error(data.error || 'Unable to refine the cover image.')
       }
 
@@ -9824,9 +9830,8 @@ function App() {
       setImageRefinement('')
       setStep('front')
       setEditorHasChanges(true)
-      const nextCredits = rememberCredits(credits - coverRevisionCost)
+      rememberChargedCredits(data.creditBalance, coverRevisionCost)
       setCreditNotice(`${coverRevisionCost} credit used to ${coverRefinementMode === 'revise' ? 'revise' : 'create'} the cover.`)
-      void syncAccountCredits({ balance: nextCredits, reason: 'cover_revise' })
       scrollToCardPreview()
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the cover image.'))
@@ -9874,6 +9879,7 @@ function App() {
       const data = await getApiJson(response, 'Unable to refine the inside message.')
 
       if (!response.ok) {
+        if (data.code === 'credits') rememberChargedCredits(data.creditBalance, 0)
         throw new Error(data.error || 'Unable to refine the inside message.')
       }
 
@@ -9902,9 +9908,8 @@ function App() {
       setShowPolishDialog(false)
       setStep('inside')
       setEditorHasChanges(true)
-      const nextCredits = rememberCredits(credits - aiCopyCost)
+      rememberChargedCredits(data.creditBalance, aiCopyCost)
       setCreditNotice(`${aiCopyCost} credit used for the AI rewrite. Editing the message yourself is free.`)
-      void syncAccountCredits({ balance: nextCredits, reason: 'ai_copy' })
       scrollToCardPreview()
     } catch (caughtError) {
       setError(getFriendlyErrorMessage(caughtError, 'Unable to refine the inside message.'))
@@ -10814,6 +10819,7 @@ function App() {
             message: result.error || data.error || 'Unable to deliver the card.',
           })
         }
+        if (data.code === 'credits') rememberChargedCredits(data.creditBalance, 0)
         throw new Error(data.error || 'Unable to deliver the card.')
       }
 
@@ -10826,7 +10832,10 @@ function App() {
         typeof data.deliveredCount === 'number'
           ? data.deliveredCount
           : sentResults.length || validatedDestinations.length
-      const chargedCredits = getSendCreditCost(deliveredCount)
+      const chargedCredits =
+        typeof data.creditCost === 'number' && Number.isFinite(data.creditCost)
+          ? data.creditCost
+          : getSendCreditCost(deliveredCount)
 
       for (const result of sentResults) {
         addDeliveryLog({
@@ -10891,13 +10900,12 @@ function App() {
             : `✓ Card sent by ${deliveryMethod === 'email' ? 'email' : 'text'}`,
         )
       }
-      const nextCredits = rememberCredits(credits - chargedCredits)
+      rememberChargedCredits(data.creditBalance, chargedCredits)
       setCreditNotice(
         chargedCredits === 1
           ? '1 credit used to send this card.'
           : `${chargedCredits} credits used to send this card.`,
       )
-      void syncAccountCredits({ balance: nextCredits, reason: 'card_send' })
       if (senderCopyValue) {
         setShowSenderCopyField(false)
         saveAccountSession({

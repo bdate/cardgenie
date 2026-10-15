@@ -2004,6 +2004,8 @@ const handleAdminDeploySummary = async (request, env) => {
 
 const PRINT_ORDER_SUPPORT_EMAIL = 'support@card-genie.com'
 const PRINT_CARD_CREDIT_COST = 10
+const COVER_REVISION_CREDIT_COST = 1
+const AI_COPY_CREDIT_COST = 1
 const PRINT_ORDER_PREVIEWS_PREFIX = 'print-order-previews:'
 const PRINT_ORDER_PREVIEWS_TTL_SECONDS = 400 * 24 * 60 * 60
 
@@ -3378,6 +3380,33 @@ const handleVerifyAccountOtp = async (request, env) => {
   }
 }
 
+const readSessionCreditBalance = async (env, session) => {
+  const account = await ensureAccountUser(env, { userId: session.userId, phoneE164: session.phoneE164 })
+  return Number(account?.creditBalance) || 0
+}
+
+const notEnoughCreditsResponse = (request, env, { cost, balance, action }) =>
+  jsonResponse(
+    request,
+    env,
+    {
+      error: `You need ${cost} ${cost === 1 ? 'credit' : 'credits'} to ${action}. You currently have ${balance}. Buy more credits to keep going.`,
+      code: 'credits',
+      creditBalance: balance,
+    },
+    402,
+  )
+
+const spendSessionCredits = (env, session, cost, reason) =>
+  applyCreditChange(env, {
+    userId: session.userId,
+    phoneE164: session.phoneE164,
+    delta: -Math.max(0, Math.floor(cost)),
+    reason,
+    kind: 'adjustment',
+  })
+
+// Balances only change through server-side charges, purchases, refunds and admin grants.
 const handleAdjustAccountCredits = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -3389,7 +3418,10 @@ const handleAdjustAccountCredits = async (request, env) => {
   const addAmount = Number(add)
   const isPurchaseGrant = Number.isFinite(addAmount) && addAmount > 0
   const isDevSet = reasonKey === 'dev_set' || reasonKey === 'demo_purchase'
-  if ((isPurchaseGrant || isDevSet) && !isAdminPhone(session.phoneE164)) {
+  if (!isPurchaseGrant && !isDevSet) {
+    return jsonResponse(request, env, { ok: true, creditBalance: await readSessionCreditBalance(env, session) })
+  }
+  if (!isAdminPhone(session.phoneE164)) {
     return jsonResponse(request, env, { error: 'Use Buy more credits to purchase a pack.' }, 403)
   }
 
@@ -4665,6 +4697,12 @@ const handleDeliverCard = async (request, env) => {
     )
   }
 
+  const plannedCost = getSendCreditCost(new Set(destinationList.map((entry) => String(entry).trim().toLowerCase())).size)
+  const startingBalance = await readSessionCreditBalance(env, session)
+  if (startingBalance < plannedCost) {
+    return notEnoughCreditsResponse(request, env, { cost: plannedCost, balance: startingBalance, action: 'send this card' })
+  }
+
   const { results, senderCopyDeliveredTo, shareUrl } = await runCardDelivery(request, env, {
     session,
     record,
@@ -4676,6 +4714,8 @@ const handleDeliverCard = async (request, env) => {
 
   const sent = results.filter((entry) => entry.status === 'sent')
   const failed = results.filter((entry) => entry.status === 'failed')
+  const creditCost = sent.length ? getSendCreditCost(sent.length) : 0
+  const creditBalance = creditCost ? await spendSessionCredits(env, session, creditCost, 'card_send') : startingBalance
 
   if (!sent.length) {
     return jsonResponse(
@@ -4720,6 +4760,8 @@ const handleDeliverCard = async (request, env) => {
     results,
     senderCopyDeliveredTo,
     message,
+    creditCost,
+    creditBalance,
   })
 }
 
@@ -5172,6 +5214,14 @@ const handleOrderPrintCard = async (request, env) => {
       ? parseDataUrlImage(insideThumbImage, 'inside thumbnail')
       : { type: inside.type || 'image/png', content: inside.content }
     const shareUrl = getShareUrl(request, env, record.id)
+    const startingBalance = await readSessionCreditBalance(env, session)
+    if (startingBalance < PRINT_CARD_CREDIT_COST) {
+      return notEnoughCreditsResponse(request, env, {
+        cost: PRINT_CARD_CREDIT_COST,
+        balance: startingBalance,
+        action: 'mail a printed card',
+      })
+    }
     const savedOrder = await createPrintOrder(env, {
       userId: session.userId,
       cardId: record.id,
@@ -5180,6 +5230,7 @@ const handleOrderPrintCard = async (request, env) => {
       shopperEmail,
       creditCost: PRINT_CARD_CREDIT_COST,
     })
+    const creditBalance = await spendSessionCredits(env, session, PRINT_CARD_CREDIT_COST, 'print_card_order')
     await saveAccountEmail(env, { userId: session.userId, email: shopperEmail })
     if (!isDefaultPrintMailFrom(mailFrom)) {
       await saveAccountMailingAddress(env, { userId: session.userId, mailingAddress: mailFrom })
@@ -5293,6 +5344,7 @@ const handleOrderPrintCard = async (request, env) => {
       orderCode,
       orderNumber: savedOrder.orderNumber,
       creditCost: PRINT_CARD_CREDIT_COST,
+      creditBalance,
       shopperEmail,
       mailedTo: PRINT_ORDER_SUPPORT_EMAIL,
       supportEmailError: supportEmailError || undefined,
@@ -5449,6 +5501,14 @@ const handleRefineImage = async (request, env) => {
     return jsonResponse(request, env, { error: 'Tell us what to change about the cover image, or update the card details above.' }, 400)
   }
 
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (session) {
+    const balance = await readSessionCreditBalance(env, session)
+    if (balance < COVER_REVISION_CREDIT_COST) {
+      return notEnoughCreditsResponse(request, env, { cost: COVER_REVISION_CREDIT_COST, balance, action: 'change the cover' })
+    }
+  }
+
   try {
     const openai = getOpenAI(env)
     const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
@@ -5467,6 +5527,9 @@ const handleRefineImage = async (request, env) => {
           )
 
     const revisionSource = imageMode === 'new' ? 'new' : 'revise'
+    const creditBalance = session
+      ? await spendSessionCredits(env, session, COVER_REVISION_CREDIT_COST, 'cover_revise')
+      : undefined
     let responseCardId = typeof cardId === 'string' ? cardId.trim() : ''
     let revisionId = ''
 
@@ -5513,6 +5576,7 @@ const handleRefineImage = async (request, env) => {
         imageUrl,
         revisionId: revisionId || undefined,
         revisionCardId: snapshotCardId,
+        creditBalance,
       })
     }
 
@@ -5520,6 +5584,7 @@ const handleRefineImage = async (request, env) => {
       imageUrl,
       cardId: responseCardId,
       revisionId: revisionId || undefined,
+      creditBalance,
     })
   } catch (error) {
     console.error(error)
@@ -5557,6 +5622,14 @@ const handleRefineCopy = async (request, env) => {
     return jsonResponse(request, env, { error: 'Tell us what to change about the inside message.' }, 400)
   }
 
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (session) {
+    const balance = await readSessionCreditBalance(env, session)
+    if (balance < AI_COPY_CREDIT_COST) {
+      return notEnoughCreditsResponse(request, env, { cost: AI_COPY_CREDIT_COST, balance, action: 'rewrite the message' })
+    }
+  }
+
   try {
     const openai = getOpenAI(env)
     const likenessBrief = await describeReferenceImages(openai, env, referenceImages)
@@ -5571,6 +5644,9 @@ const handleRefineCopy = async (request, env) => {
       referenceImages,
       likenessBrief,
     )
+    if (session) {
+      copy.creditBalance = await spendSessionCredits(env, session, AI_COPY_CREDIT_COST, 'ai_copy')
+    }
 
     await recordCardHistory(env, {
       kind: 'refine-copy',
