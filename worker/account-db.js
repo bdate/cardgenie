@@ -477,6 +477,7 @@ export const getAccountHistory = async (env, userId, phoneE164, { includeHidden 
     user = await getUserById(env.ACCOUNT_DB, userId)
   }
 
+  await ensureDeliveryOpenColumns(env.ACCOUNT_DB)
   const [events, cards, deliveries] = await Promise.all([
     env.ACCOUNT_DB.prepare(
       `SELECT created_at, kind, reason, credits_delta, balance_after, note
@@ -497,7 +498,8 @@ export const getAccountHistory = async (env, userId, phoneE164, { includeHidden 
       .bind(userId)
       .all(),
     env.ACCOUNT_DB.prepare(
-      `SELECT id, card_id, created_at, method, destination, is_sender_copy, status
+      `SELECT id, card_id, created_at, method, destination, is_sender_copy, status,
+              open_token, first_opened_at, last_opened_at, open_count
        FROM deliveries
        WHERE user_id = ?
        ORDER BY created_at DESC
@@ -572,6 +574,10 @@ export const getAccountHistory = async (env, userId, phoneE164, { includeHidden 
       destination: row.destination,
       isSenderCopy: Boolean(row.is_sender_copy),
       status: row.status,
+      openTracked: Boolean(row.open_token || row.first_opened_at),
+      firstOpenedAt: row.first_opened_at || null,
+      lastOpenedAt: row.last_opened_at || null,
+      openCount: Number(row.open_count) || 0,
     })),
     thankYous: (thankYous.results || []).map((row) => ({
       id: row.card_id,
@@ -727,30 +733,129 @@ const ensureCard = async (env, { userId, record, now }) => {
   return true
 }
 
-export const recordSuccessfulDelivery = async (env, { userId, phoneE164, record, method, destination, senderCopyEmail }) => {
+let deliveryOpenColumnsReady = false
+
+export const ensureDeliveryOpenColumns = async (db) => {
+  if (!db || deliveryOpenColumnsReady) {
+    return
+  }
+  for (const sql of [
+    `ALTER TABLE deliveries ADD COLUMN open_token TEXT`,
+    `ALTER TABLE deliveries ADD COLUMN first_opened_at TEXT`,
+    `ALTER TABLE deliveries ADD COLUMN last_opened_at TEXT`,
+    `ALTER TABLE deliveries ADD COLUMN open_count INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE cards ADD COLUMN first_opened_at TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_deliveries_open_token ON deliveries (open_token)`,
+  ]) {
+    try {
+      await db.prepare(sql).run()
+    } catch {
+      // Column or index already exists.
+    }
+  }
+  deliveryOpenColumnsReady = true
+}
+
+const openTokenAlphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+export const createDeliveryOpenToken = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(10))
+  return Array.from(bytes, (byte) => openTokenAlphabet[byte % openTokenAlphabet.length]).join('')
+}
+
+/**
+ * Records that a recipient opened their card. Opens by the sending account are ignored by the caller.
+ * Links without a token (sent before open tracking) count for the card's only delivery when there is one.
+ */
+export const recordDeliveryOpen = async (env, { cardId, token }) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return { recorded: false, reason: 'unavailable' }
+  }
+  await ensureDeliveryOpenColumns(env.ACCOUNT_DB)
+  const db = env.ACCOUNT_DB
+  const card = await db.prepare('SELECT id, user_id FROM cards WHERE id = ?').bind(cardId).first()
+  if (!card) {
+    return { recorded: false, reason: 'unknown_card' }
+  }
+
+  let deliveryId = ''
+  const cleanToken = String(token || '').trim().slice(0, 40)
+  if (cleanToken) {
+    const row = await db
+      .prepare('SELECT id, is_sender_copy FROM deliveries WHERE open_token = ? AND card_id = ? LIMIT 1')
+      .bind(cleanToken, cardId)
+      .first()
+    if (row?.is_sender_copy) {
+      return { recorded: false, reason: 'sender_copy', ownerUserId: card.user_id }
+    }
+    deliveryId = row?.id || ''
+  }
+  if (!deliveryId && !cleanToken) {
+    const rows = await db
+      .prepare(`SELECT id FROM deliveries WHERE card_id = ? AND is_sender_copy = 0 AND status = 'sent' LIMIT 2`)
+      .bind(cardId)
+      .all()
+    const list = rows.results || []
+    if (list.length === 1) {
+      deliveryId = list[0].id
+    }
+  }
+
+  const now = isoNow()
+  const statements = [
+    db.prepare('UPDATE cards SET first_opened_at = COALESCE(first_opened_at, ?) WHERE id = ?').bind(now, cardId),
+  ]
+  if (deliveryId) {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE deliveries
+           SET first_opened_at = COALESCE(first_opened_at, ?), last_opened_at = ?, open_count = COALESCE(open_count, 0) + 1
+           WHERE id = ?`,
+        )
+        .bind(now, now, deliveryId),
+    )
+  }
+  await db.batch(statements)
+  return { recorded: true, deliveryId, ownerUserId: card.user_id }
+}
+
+export const getCardOwnerId = async (env, cardId) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return ''
+  }
+  const row = await env.ACCOUNT_DB.prepare('SELECT user_id FROM cards WHERE id = ?').bind(cardId).first()
+  return row?.user_id || ''
+}
+
+export const recordSuccessfulDelivery = async (
+  env,
+  { userId, phoneE164, record, method, destination, senderCopyEmail, openToken, senderCopyOpenToken },
+) => {
   if (!env.ACCOUNT_DB || !userId || !record?.id) {
     return
   }
 
   await ensureAccountUser(env, { userId, phoneE164 })
+  await ensureDeliveryOpenColumns(env.ACCOUNT_DB)
   const now = isoNow()
   const createdCard = await ensureCard(env, { userId, record, now })
   const copyEmail = senderCopyEmail ? String(senderCopyEmail).trim() : ''
   const statements = [
     env.ACCOUNT_DB.prepare(
       `INSERT INTO deliveries (
-        id, user_id, card_id, created_at, method, destination, is_sender_copy, status
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, 'sent')`,
-    ).bind(crypto.randomUUID(), userId, record.id, now, method, destination),
+        id, user_id, card_id, created_at, method, destination, is_sender_copy, status, open_token
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, 'sent', ?)`,
+    ).bind(crypto.randomUUID(), userId, record.id, now, method, destination, openToken || null),
   ]
 
   if (copyEmail) {
     statements.push(
       env.ACCOUNT_DB.prepare(
         `INSERT INTO deliveries (
-          id, user_id, card_id, created_at, method, destination, is_sender_copy, status
-        ) VALUES (?, ?, ?, ?, 'email', ?, 1, 'sent')`,
-      ).bind(crypto.randomUUID(), userId, record.id, now, copyEmail),
+          id, user_id, card_id, created_at, method, destination, is_sender_copy, status, open_token
+        ) VALUES (?, ?, ?, ?, 'email', ?, 1, 'sent', ?)`,
+      ).bind(crypto.randomUUID(), userId, record.id, now, copyEmail, senderCopyOpenToken || null),
     )
   }
 

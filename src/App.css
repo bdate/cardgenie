@@ -6069,6 +6069,24 @@ select.is-placeholder option {
   grid-column: 1 / -1;
 }
 
+.account-row-opens {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.account-row-opens .is-opened {
+  color: var(--gcu-dark-teal);
+  font-weight: 700;
+}
+
+.account-row-opens .is-unopened {
+  color: var(--gcu-grey);
+}
+
 .account-row-open {
   font-size: 0.86rem;
 }
@@ -6077,8 +6095,13 @@ select.is-placeholder option {
   grid-template-areas:
     'thumb title status'
     'thumb detail detail'
+    'thumb opens opens'
     'thumb date date'
     'thumb actions actions';
+}
+
+.account-list.is-expanded .account-row.has-cover-thumb .account-row-opens {
+  grid-area: opens;
 }
 
 .account-list.is-expanded .account-row.has-cover-thumb .account-row-actions {

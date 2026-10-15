@@ -3046,6 +3046,7 @@ function RecipientDateInput({ label, value, onChange }: { label: string; value: 
 function App() {
   const sharedCardId = useMemo(() => getSharedCardId(), [])
   const isRecipientView = Boolean(sharedCardId)
+  const recipientOpenRecordedRef = useRef(false)
   const initialFormDraft = useMemo(() => (isRecipientView ? null : readFormDraft()), [isRecipientView])
   const [details, setDetails] = useState<CardDetails>(() => initialFormDraft?.details || initialDetails)
   const [card, setCard] = useState<GeneratedCard | null>(null)
@@ -3132,6 +3133,9 @@ function App() {
       isSenderCopy: boolean
       status: string
       coverThumbUrl?: string
+      openTracked?: boolean
+      firstOpenedAt?: string | null
+      openCount?: number
     }>
     thankYous?: Array<{
       id: string
@@ -3455,6 +3459,7 @@ function App() {
       message?: string
       error?: string
       hasImage?: boolean
+      opens?: Array<{ destination: string; firstOpenedAt: string | null; tracked: boolean }>
     }>
   >([])
   const [cardHistoryKind, setCardHistoryKind] = useState<'' | 'generate' | 'refine-image' | 'refine-copy' | 'save'>('')
@@ -7033,6 +7038,17 @@ function App() {
     })
   }
 
+  const formatOpenedAt = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`
+  }
+
   const formatAccountDay = (value?: string) => {
     if (!value) {
       return ''
@@ -7137,6 +7153,17 @@ function App() {
         String(right.createdAt).localeCompare(String(left.createdAt)),
       )[0]
       const destinations = [...new Set(cardDeliveries.map((delivery) => delivery.destination).filter(Boolean))]
+      const trackedDeliveries = cardDeliveries.filter(
+        (delivery) => delivery.status === 'sent' && (delivery.openTracked || delivery.firstOpenedAt),
+      )
+      const opens = trackedDeliveries
+        .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))
+        .map((delivery) => ({
+          id: delivery.id,
+          destination: trackedDeliveries.length > 1 ? delivery.destination : '',
+          opened: Boolean(delivery.firstOpenedAt),
+          label: delivery.firstOpenedAt ? `Opened ${formatOpenedAt(delivery.firstOpenedAt)}` : 'Not opened yet',
+        }))
       const summaryCard = groupCards[0]
       const summarySource = groupCardIds.map((cardId) => summaries[cardId]).find(Boolean)
       const recipientName = summaryCard?.recipientName || summarySource?.recipientName || ''
@@ -7170,6 +7197,7 @@ function App() {
         cardIds: realCardIds,
         openCardId: canOpen ? openCardId : '',
         timeline,
+        opens,
         status:
           latestDelivery?.status ||
           (cardPrints.length
@@ -7197,6 +7225,7 @@ function App() {
       cardIds: thankYou.cardId ? [thankYou.cardId] : [],
       openCardId: '',
       timeline: [] as Array<{ at: string; label: string }>,
+      opens: [] as Array<{ id: string; destination: string; opened: boolean; label: string }>,
       coverThumbUrl: '',
     }))
 
@@ -7244,6 +7273,19 @@ function App() {
       }
     })
   }
+
+  const renderDeliveryOpens = (opens: Array<{ id: string; destination: string; opened: boolean; label: string }>) =>
+    opens.length > 0 ? (
+      <span className="account-row-opens">
+        {opens.map((open) => (
+          <span key={open.id} className={open.opened ? 'is-opened' : 'is-unopened'}>
+            {open.destination ? `${open.destination}: ` : ''}
+            {open.opened ? '✓ ' : ''}
+            {open.label}
+          </span>
+        ))}
+      </span>
+    ) : null
 
   const cardActivityItems = useMemo(() => buildCardActivityItems(accountHistory), [accountHistory])
   const printOrderItems = useMemo(() => buildPrintOrderItems(accountHistory), [accountHistory])
@@ -8263,7 +8305,25 @@ function App() {
     window.setTimeout(openEnvelope, 350)
   }
 
+  const recordRecipientOpen = () => {
+    if (!isRecipientView || !sharedCardId || recipientOpenRecordedRef.current) {
+      return
+    }
+    recipientOpenRecordedRef.current = true
+    const openToken = new URLSearchParams(window.location.search).get('r') || ''
+    void fetch(apiUrl(`/api/cards/${encodeURIComponent(sharedCardId)}/opened`), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accountSession?.token ? { Authorization: `Bearer ${accountSession.token}` } : {}),
+      },
+      body: JSON.stringify({ r: openToken }),
+      keepalive: true,
+    }).catch(() => {})
+  }
+
   const flipEnvelope = () => {
+    recordRecipientOpen()
     setStep('envelopeFlip')
     window.setTimeout(playEnvelopeBack, 1200)
   }
@@ -11534,6 +11594,7 @@ function App() {
                             {expandCardActivity && item.timeline.length > 0 ? item.summary : item.detail}
                           </span>
                           <span className="account-row-status">{item.status}</span>
+                          {renderDeliveryOpens(item.opens)}
                           {expandCardActivity && item.timeline.length > 0 ? (
                             <span className="account-row-date account-row-timeline">
                               {item.timeline.map((entry, index) => (
@@ -12466,6 +12527,16 @@ function App() {
                     ['Photos uploaded', entry.photoCount ? String(entry.photoCount) : 'None'],
                     ['Phone', entry.phone],
                     ['Card ID', entry.cardId],
+                    [
+                      'Opened',
+                      (entry.opens || [])
+                        .filter((open) => open.tracked || open.firstOpenedAt)
+                        .map(
+                          (open) =>
+                            `${open.destination}: ${open.firstOpenedAt ? `Opened ${formatOpenedAt(open.firstOpenedAt)}` : 'Not opened yet'}`,
+                        )
+                        .join(' · '),
+                    ],
                   ]
                   return (
                     <div className="admin-review-card admin-history-card" key={entry.id}>
@@ -12719,6 +12790,7 @@ function App() {
                           {item.timeline.length > 0 ? item.summary : item.detail}
                         </span>
                         <span className="account-row-status">{item.status}</span>
+                        {renderDeliveryOpens(item.opens)}
                         {item.timeline.length > 0 ? (
                           <span className="account-row-date account-row-timeline">
                             {item.timeline.map((entry, index) => (

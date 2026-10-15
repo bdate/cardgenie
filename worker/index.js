@@ -21,6 +21,10 @@ import {
   userCanAccessCard,
   recordStripeCreditPurchase,
   recordSuccessfulDelivery,
+  recordDeliveryOpen,
+  createDeliveryOpenToken,
+  getCardOwnerId,
+  ensureDeliveryOpenColumns,
   recordThankYou,
   createPrintOrder,
   getPrintOrder,
@@ -1155,6 +1159,8 @@ const parseDataImage = (imageUrl) => {
 const buildSharePreviewHtml = (record, request, env) => {
   const { title, description } = buildSharePreviewCopy(record)
   const appUrl = `${getPublicAppUrl(request, env)}/?card=${encodeURIComponent(record.id)}`
+  const openToken = String(new URL(request.url).searchParams.get('r') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 40)
+  const openUrl = openToken ? `${appUrl}&r=${openToken}` : appUrl
   const imageUrl = `${getShareBaseUrl(request, env)}/c/${encodeURIComponent(record.id)}/cover`
   const safeTitle = escapeHtml(title)
   const safeDescription = escapeHtml(description)
@@ -1186,9 +1192,9 @@ const buildSharePreviewHtml = (record, request, env) => {
   <body>
     <main>
       <p>${safeDescription}</p>
-      <a href="${escapeHtml(appUrl)}">Open your card</a>
+      <a href="${escapeHtml(openUrl)}">Open your card</a>
     </main>
-    <script>location.replace(${JSON.stringify(appUrl)})</script>
+    <script>location.replace(${JSON.stringify(openUrl)})</script>
   </body>
 </html>`
 }
@@ -2989,6 +2995,27 @@ const handleSendThankYou = async (request, env, cardId) => {
   }
 }
 
+const handleCardOpened = async (request, env, cardId) => {
+  try {
+    const body = (await readJson(request)) || {}
+    const session = await getAccountSession(env, readAccountToken(request))
+    if (session && isAdminPhone(session.phoneE164)) {
+      return jsonResponse(request, env, { ok: true, recorded: false })
+    }
+    if (session) {
+      const owner = await getCardOwnerId(env, cardId)
+      if (owner && owner === session.userId) {
+        return jsonResponse(request, env, { ok: true, recorded: false })
+      }
+    }
+    const result = await recordDeliveryOpen(env, { cardId, token: body.r })
+    return jsonResponse(request, env, { ok: true, recorded: Boolean(result?.recorded) })
+  } catch (error) {
+    console.error('card open record failed', error)
+    return jsonResponse(request, env, { ok: true, recorded: false })
+  }
+}
+
 const handleSharePreview = async (request, env, cardId) => {
   const record = await getCardRecord(env, cardId)
 
@@ -4580,7 +4607,7 @@ const handleDeliverCard = async (request, env) => {
     senderCopyEmail: rawSenderCopyEmail,
     saveRecipientPhotos,
   } = (await readJson(request)) || {}
-  let pendingRecipientPhotos = Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : []
+  const pendingRecipientPhotos = Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : []
   const record = await getCardRecord(env, cardId)
   const destinationList = collectDeliveryDestinations({ destination, destinations })
   const senderCopyEmail = rawSenderCopyEmail?.trim()
@@ -4620,9 +4647,72 @@ const handleDeliverCard = async (request, env) => {
     )
   }
 
+  const { results, senderCopyDeliveredTo, shareUrl } = await runCardDelivery(request, env, {
+    session,
+    record,
+    method,
+    destinationList,
+    senderCopyEmail,
+    recipientPhotos: pendingRecipientPhotos,
+  })
+
+  const sent = results.filter((entry) => entry.status === 'sent')
+  const failed = results.filter((entry) => entry.status === 'failed')
+
+  if (!sent.length) {
+    return jsonResponse(
+      request,
+      env,
+      {
+        error: failed[0]?.error || (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.'),
+        results,
+        deliveredCount: 0,
+        failedCount: failed.length,
+      },
+      failed.every((entry) =>
+        /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(entry.error || ''),
+      )
+        ? 400
+        : 500,
+    )
+  }
+
+  const message = (() => {
+    if (failed.length) {
+      return sent.length === 1
+        ? `Card sent to 1 recipient. ${failed.length} could not be reached.`
+        : `Card sent to ${sent.length} recipients. ${failed.length} could not be reached.`
+    }
+
+    if (senderCopyDeliveredTo) {
+      return sent.length === 1
+        ? 'Card has been sent. A copy was emailed to you.'
+        : `Card sent to ${sent.length} recipients. A copy was emailed to you.`
+    }
+
+    return sent.length === 1 ? 'Card has been sent.' : `Card sent to ${sent.length} recipients.`
+  })()
+
+  return jsonResponse(request, env, {
+    ok: true,
+    shareUrl,
+    deliveredTo: sent[0].destination,
+    deliveredCount: sent.length,
+    failedCount: failed.length,
+    results,
+    senderCopyDeliveredTo,
+    message,
+  })
+}
+
+const withOpenToken = (shareUrl, token) => (token ? `${shareUrl}?r=${encodeURIComponent(token)}` : shareUrl)
+
+/** Sends one card to each recipient (and the sender's copy once), recording deliveries. Shared by send-now and scheduled sends. */
+const runCardDelivery = async (request, env, { session, record, method, destinationList, senderCopyEmail, recipientPhotos }) => {
+  const cardId = record.id
+  let pendingRecipientPhotos = Array.isArray(recipientPhotos) ? recipientPhotos : []
   const shareUrl = getShareUrl(request, env, record.id)
   const coverUrl = getEmailCoverUrl(request, env, record.id)
-  const copy = buildDeliveryCopy(record, shareUrl, coverUrl)
   const results = []
   const seen = new Set()
   let senderCopyDeliveredTo = null
@@ -4646,18 +4736,28 @@ const handleDeliverCard = async (request, env) => {
     seen.add(normalizedDestination)
 
     try {
+      const openToken = createDeliveryOpenToken()
+      const copy = buildDeliveryCopy(record, withOpenToken(shareUrl, openToken), coverUrl)
       const deliveredTo =
         method === 'email'
           ? await sendEmailDelivery({ env, to: normalizedDestination, copy })
           : await sendTextDelivery({ env, to: normalizedDestination, copy })
 
       let copyForRecord = ''
+      let senderCopyOpenToken = ''
 
       if (senderCopyPending && senderCopyEmail) {
         try {
           const printUrl = `${getPublicAppUrl(request, env)}/?resume=${encodeURIComponent(record.id)}&print=1`
           const reviewed = await hasLeftReview(env, { userId: session.userId, phone: session.phoneE164, email: senderCopyEmail })
-          const senderCopy = buildSenderCopyDeliveryCopy(record, shareUrl, coverUrl, printUrl, !reviewed)
+          senderCopyOpenToken = createDeliveryOpenToken()
+          const senderCopy = buildSenderCopyDeliveryCopy(
+            record,
+            withOpenToken(shareUrl, senderCopyOpenToken),
+            coverUrl,
+            printUrl,
+            !reviewed,
+          )
           senderCopyDeliveredTo = await sendEmailDelivery({
             env,
             to: normalizeEmailAddress(senderCopyEmail),
@@ -4678,6 +4778,8 @@ const handleDeliverCard = async (request, env) => {
           method,
           destination: deliveredTo,
           senderCopyEmail: copyForRecord,
+          openToken,
+          senderCopyOpenToken,
         })
       } catch (accountError) {
         console.error(accountError)
@@ -4727,53 +4829,7 @@ const handleDeliverCard = async (request, env) => {
     }
   }
 
-  const sent = results.filter((entry) => entry.status === 'sent')
-  const failed = results.filter((entry) => entry.status === 'failed')
-
-  if (!sent.length) {
-    return jsonResponse(
-      request,
-      env,
-      {
-        error: failed[0]?.error || (method === 'email' ? 'Unable to deliver the card by email.' : 'Unable to deliver the card by text.'),
-        results,
-        deliveredCount: 0,
-        failedCount: failed.length,
-      },
-      failed.every((entry) =>
-        /email|cellphone|phone|@|period|\.com|digits|incomplete|spaces/i.test(entry.error || ''),
-      )
-        ? 400
-        : 500,
-    )
-  }
-
-  const message = (() => {
-    if (failed.length) {
-      return sent.length === 1
-        ? `Card sent to 1 recipient. ${failed.length} could not be reached.`
-        : `Card sent to ${sent.length} recipients. ${failed.length} could not be reached.`
-    }
-
-    if (senderCopyDeliveredTo) {
-      return sent.length === 1
-        ? 'Card has been sent. A copy was emailed to you.'
-        : `Card sent to ${sent.length} recipients. A copy was emailed to you.`
-    }
-
-    return sent.length === 1 ? 'Card has been sent.' : `Card sent to ${sent.length} recipients.`
-  })()
-
-  return jsonResponse(request, env, {
-    ok: true,
-    shareUrl,
-    deliveredTo: sent[0].destination,
-    deliveredCount: sent.length,
-    failedCount: failed.length,
-    results,
-    senderCopyDeliveredTo,
-    message,
-  })
+  return { results, senderCopyDeliveredTo, shareUrl }
 }
 
 const handleOrderPrintCard = async (request, env) => {
@@ -7413,6 +7469,36 @@ const handleAdminCardHistory = async (request, env) => {
     entries.push(...batch.filter(Boolean))
   }
 
+  const sentCardIds = [...new Set(entries.map((entry) => entry.cardId).filter(Boolean))]
+  if (env.ACCOUNT_DB && sentCardIds.length) {
+    try {
+      await ensureDeliveryOpenColumns(env.ACCOUNT_DB)
+      const opensByCard = new Map()
+      for (let index = 0; index < sentCardIds.length; index += 50) {
+        const ids = sentCardIds.slice(index, index + 50)
+        const rows = await env.ACCOUNT_DB.prepare(
+          `SELECT card_id, destination, open_token, first_opened_at FROM deliveries
+           WHERE is_sender_copy = 0 AND status = 'sent' AND card_id IN (${ids.map(() => '?').join(',')})
+           ORDER BY created_at`,
+        )
+          .bind(...ids)
+          .all()
+        for (const row of rows.results || []) {
+          const list = opensByCard.get(row.card_id) || []
+          list.push({ destination: row.destination, firstOpenedAt: row.first_opened_at || null, tracked: Boolean(row.open_token) })
+          opensByCard.set(row.card_id, list)
+        }
+      }
+      for (const entry of entries) {
+        if (entry.cardId && opensByCard.has(entry.cardId)) {
+          entry.opens = opensByCard.get(entry.cardId)
+        }
+      }
+    } catch (error) {
+      console.error('card history opens lookup failed', error)
+    }
+  }
+
   return jsonResponse(request, env, { ok: true, retentionDays: 7, count: entries.length, entries })
 }
 
@@ -7529,6 +7615,11 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/cards') {
     return handleSaveCard(request, env)
+  }
+
+  const openedMatch = url.pathname.match(/^\/api\/cards\/([^/]+)\/opened$/)
+  if (request.method === 'POST' && openedMatch) {
+    return handleCardOpened(request, env, decodeURIComponent(openedMatch[1]))
   }
 
   const thankYouMatch = url.pathname.match(/^\/api\/cards\/([^/]+)\/thank-you$/)
