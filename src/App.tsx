@@ -601,6 +601,65 @@ const getSendCreditCost = (recipientCount: number) => {
 
   return Math.max(sendCreditCostSingle, sendCreditCostPerRecipient * count)
 }
+const scheduleMinLeadMs = 15 * 60 * 1000
+const scheduleMaxLeadMs = 365 * 24 * 60 * 60 * 1000
+const padTwo = (value: number) => String(value).padStart(2, '0')
+const toDateInputValue = (date: Date) => `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`
+const toTimeInputValue = (date: Date) => `${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`
+const defaultScheduleDate = () => {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  date.setHours(9, 0, 0, 0)
+  return date
+}
+const parseLocalSchedule = (dateValue: string, timeValue: string) => {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  const [hours, minutes] = timeValue.split(':').map(Number)
+  if (![year, month, day, hours, minutes].every(Number.isFinite)) {
+    return null
+  }
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+const scheduleTimeProblem = (date: Date | null) => {
+  if (!date) {
+    return 'Choose a date and time to send the card.'
+  }
+  const lead = date.getTime() - Date.now()
+  if (lead < scheduleMinLeadMs) {
+    return 'Choose a time at least 15 minutes from now.'
+  }
+  if (lead > scheduleMaxLeadMs) {
+    return 'Choose a date within the next year.'
+  }
+  return ''
+}
+const formatScheduledAt = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const day = date.toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}),
+  })
+  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return `${day} at ${time}`
+}
+const localTimeZoneLabel = () => {
+  try {
+    return (
+      new Intl.DateTimeFormat([], { timeZoneName: 'short' })
+        .formatToParts(new Date())
+        .find((part) => part.type === 'timeZoneName')?.value || ''
+    )
+  } catch {
+    return ''
+  }
+}
+
 const adminPhoneNumbers = new Set(['+19259637453', '+19254511586'])
 const creditPacks = [
   { id: '10', credits: 10, price: 5, priceId: 'price_1UFlLJ1GfvmAXQBhxxvROUc7' },
@@ -3164,8 +3223,24 @@ function App() {
     }>
     cardSummaries?: Record<string, { recipientName?: string; occasion?: string; groupKey?: string }>
     recipients?: SavedRecipient[]
+    scheduledSends?: Array<{
+      id: string
+      cardId: string
+      method: string
+      destinations: string[]
+      sendAt: string
+      status: string
+      creditsCharged: number
+      recipientName: string
+      occasion: string
+    }>
   } | null>(null)
   type AccountHistoryData = NonNullable<typeof accountHistory>
+  const [editingScheduledId, setEditingScheduledId] = useState('')
+  const [editScheduleDate, setEditScheduleDate] = useState('')
+  const [editScheduleTime, setEditScheduleTime] = useState('')
+  const [scheduledActionId, setScheduledActionId] = useState('')
+  const [scheduledNotice, setScheduledNotice] = useState('')
   const [adminShoppers, setAdminShoppers] = useState<
     Array<{
       id: string
@@ -3367,6 +3442,9 @@ function App() {
     () => Boolean(initialFormDraft?.showSenderCopyField),
   )
   const [senderCopyEmail, setSenderCopyEmail] = useState(() => initialFormDraft?.senderCopyEmail || '')
+  const [sendTiming, setSendTiming] = useState<'now' | 'later'>('now')
+  const [scheduleDate, setScheduleDate] = useState(() => toDateInputValue(defaultScheduleDate()))
+  const [scheduleTime, setScheduleTime] = useState(() => toTimeInputValue(defaultScheduleDate()))
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(
     () => Boolean(initialFormDraft?.smsConsentConfirmed),
   )
@@ -6163,6 +6241,7 @@ function App() {
     setDeliveryDestinations([''])
     setShowSenderCopyField(false)
     setSenderCopyEmail('')
+    setSendTiming('now')
     setSmsConsentConfirmed(false)
     setPrintOrderStep('closed')
     setPrintShipTo(emptyMailingAddress())
@@ -7500,6 +7579,83 @@ function App() {
   const openSignIn = () => {
     void openAccountPage()
     focusFieldAfterRender('.account-page .account-gate input')
+  }
+
+  const cancelScheduledCard = async (scheduled: { id: string; creditsCharged: number }) => {
+    if (!accountSession?.token || scheduledActionId) {
+      return
+    }
+    const credits = scheduled.creditsCharged
+    if (
+      !window.confirm(
+        `Cancel this scheduled card? ${credits} credit${credits === 1 ? '' : 's'} will be returned to your account.`,
+      )
+    ) {
+      return
+    }
+    setScheduledActionId(scheduled.id)
+    setScheduledNotice('')
+    try {
+      const response = await fetch(apiUrl(`/api/scheduled-sends/${encodeURIComponent(scheduled.id)}/cancel`), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}` },
+      })
+      const data = await getApiJson(response, 'Unable to cancel that card.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to cancel that card.')
+      }
+      const serverBalance = parseCreditBalance(data.creditBalance)
+      if (serverBalance !== null) {
+        rememberCredits(serverBalance)
+      }
+      await loadAccountHistory(accountSession.token)
+      setScheduledNotice(data.message || 'Canceled. Your credits were returned.')
+    } catch (caughtError) {
+      setScheduledNotice(caughtError instanceof Error ? caughtError.message : 'Unable to cancel that card.')
+    } finally {
+      setScheduledActionId('')
+    }
+  }
+
+  const startEditingScheduledTime = (scheduled: { id: string; sendAt: string }) => {
+    const current = new Date(scheduled.sendAt)
+    setEditingScheduledId(scheduled.id)
+    setEditScheduleDate(toDateInputValue(current))
+    setEditScheduleTime(toTimeInputValue(current))
+    setScheduledNotice('')
+    focusFieldAfterRender('.scheduled-edit-fields input[type="date"]')
+  }
+
+  const saveScheduledTime = async (id: string) => {
+    if (!accountSession?.token || scheduledActionId) {
+      return
+    }
+    const sendAt = parseLocalSchedule(editScheduleDate, editScheduleTime)
+    const problem = scheduleTimeProblem(sendAt)
+    if (problem || !sendAt) {
+      setScheduledNotice(problem)
+      return
+    }
+    setScheduledActionId(id)
+    setScheduledNotice('')
+    try {
+      const response = await fetch(apiUrl(`/api/scheduled-sends/${encodeURIComponent(id)}/reschedule`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountSession.token}` },
+        body: JSON.stringify({ sendAt: sendAt.toISOString() }),
+      })
+      const data = await getApiJson(response, 'Unable to change the time.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to change the time.')
+      }
+      await loadAccountHistory(accountSession.token)
+      setEditingScheduledId('')
+      setScheduledNotice(`Now scheduled for ${formatScheduledAt(String(data.scheduledSend?.sendAt || sendAt.toISOString()))}.`)
+    } catch (caughtError) {
+      setScheduledNotice(caughtError instanceof Error ? caughtError.message : 'Unable to change the time.')
+    } finally {
+      setScheduledActionId('')
+    }
   }
 
   const signOutAccount = async () => {
@@ -10432,6 +10588,70 @@ function App() {
     setDeliveryDestinations([''])
   }
 
+  const scheduleCardDelivery = async ({
+    destinations,
+    senderCopyValue,
+    sendCost,
+    token,
+  }: {
+    destinations: string[]
+    senderCopyValue: string
+    sendCost: number
+    token: string
+  }) => {
+    const sendAt = parseLocalSchedule(scheduleDate, scheduleTime)
+    const problem = scheduleTimeProblem(sendAt)
+    if (problem || !sendAt) {
+      setDeliveryNotice(problem)
+      return
+    }
+
+    setIsDelivering(true)
+    showActionFeedback('Scheduling your card…')
+    try {
+      const shared = await saveCurrentCard()
+      const response = await fetch(apiUrl('/api/scheduled-sends'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          cardId: shared.id,
+          method: deliveryMethod,
+          destinations,
+          recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
+          senderCopyEmail: senderCopyValue || undefined,
+          sendAt: sendAt.toISOString(),
+          saveRecipientPhotos: recipientPhotosToSave(),
+        }),
+      })
+      const data = await getApiJson(response, 'Unable to schedule the card.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to schedule the card.')
+      }
+      const when = formatScheduledAt(String(data.scheduledSend?.sendAt || sendAt.toISOString()))
+      const notice = `Scheduled for ${when}. You can change or cancel it in My account.`
+      setDeliveryNotice(notice)
+      setLastSentNotice(`Scheduled for ${when}.`)
+      setHasSentCurrentCard(true)
+      resetDeliveryDestinations()
+      setSendTiming('now')
+      flashSentButton('deliver', `✓ Scheduled for ${when}`)
+      const serverBalance = parseCreditBalance(data.creditBalance)
+      if (serverBalance !== null) {
+        rememberCredits(serverBalance)
+      }
+      setCreditNotice(`${sendCost} credits used to schedule this card.`)
+      if (senderCopyValue) {
+        setShowSenderCopyField(false)
+      }
+      void loadSavedRecipients()
+    } catch (caughtError) {
+      setDeliveryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to schedule the card.')
+    } finally {
+      setIsDelivering(false)
+      clearActionFeedback()
+    }
+  }
+
   const deliverCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -10537,6 +10757,16 @@ function App() {
         }. You currently have ${credits}. Buy more credits to keep going.`,
         'send',
       )
+      return
+    }
+
+    if (sendTiming === 'later') {
+      await scheduleCardDelivery({
+        destinations: validatedDestinations.map((entry) => entry.value),
+        senderCopyValue,
+        sendCost,
+        token: accountSession.token,
+      })
       return
     }
 
@@ -11527,6 +11757,117 @@ function App() {
                   </>
                 )}
               </div>
+              {(accountHistory.scheduledSends?.length || scheduledNotice) ? (
+                <div className="account-block scheduled-block">
+                  <h3>Scheduled cards</h3>
+                  {scheduledNotice && (
+                    <p className="scheduled-notice" role="status">
+                      {scheduledNotice}
+                    </p>
+                  )}
+                  <div className="account-list">
+                    {(accountHistory.scheduledSends || []).map((scheduled) => {
+                      const methodLabel = scheduled.method === 'text' ? 'Text' : 'Email'
+                      const cardLabel = scheduled.recipientName
+                        ? `${scheduled.occasion ? `${scheduled.occasion} card` : 'Card'} for ${scheduled.recipientName}`
+                        : scheduled.occasion
+                          ? `${scheduled.occasion} card`
+                          : 'Card'
+                      const isEditing = editingScheduledId === scheduled.id
+                      const isBusy = scheduledActionId === scheduled.id
+                      return (
+                        <div className={`account-row scheduled-row is-${scheduled.status}`} key={scheduled.id}>
+                          <span className="account-row-title">
+                            {scheduled.status === 'failed'
+                              ? `Couldn’t send ${methodLabel.toLowerCase()}`
+                              : scheduled.status === 'sending'
+                                ? `Sending ${methodLabel.toLowerCase()} now`
+                                : `Scheduled ${methodLabel}`}
+                          </span>
+                          <span className="account-row-detail">
+                            {cardLabel} — {scheduled.destinations.join(', ')}
+                          </span>
+                          <span className="account-row-status">
+                            {scheduled.status === 'failed' ? 'refunded' : scheduled.status}
+                          </span>
+                          <span className="account-row-date scheduled-when">
+                            {scheduled.status === 'failed'
+                              ? `We couldn’t deliver it. ${scheduled.creditsCharged} credit${scheduled.creditsCharged === 1 ? '' : 's'} returned.`
+                              : `Scheduled for ${formatScheduledAt(scheduled.sendAt)}`}
+                          </span>
+                          {scheduled.status === 'scheduled' && !isEditing && (
+                            <span className="account-row-actions scheduled-actions">
+                              <button
+                                className="text-action-link"
+                                type="button"
+                                disabled={Boolean(scheduledActionId)}
+                                onClick={() => startEditingScheduledTime(scheduled)}
+                              >
+                                Change time
+                              </button>
+                              <button
+                                className="text-action-link"
+                                type="button"
+                                disabled={Boolean(scheduledActionId)}
+                                aria-busy={isBusy}
+                                onClick={() => void cancelScheduledCard(scheduled)}
+                              >
+                                {isBusy ? 'Canceling…' : `Cancel (refund ${scheduled.creditsCharged} credits)`}
+                              </button>
+                            </span>
+                          )}
+                          {scheduled.status === 'scheduled' && isEditing && (
+                            <form
+                              className="scheduled-edit-fields"
+                              onSubmit={(event) => {
+                                event.preventDefault()
+                                void saveScheduledTime(scheduled.id)
+                              }}
+                            >
+                              <label>
+                                Date
+                                <input
+                                  type="date"
+                                  value={editScheduleDate}
+                                  min={toDateInputValue(new Date())}
+                                  max={toDateInputValue(new Date(Date.now() + scheduleMaxLeadMs))}
+                                  onChange={(event) => setEditScheduleDate(event.target.value)}
+                                  required
+                                />
+                              </label>
+                              <label>
+                                Time
+                                <input
+                                  type="time"
+                                  value={editScheduleTime}
+                                  step={300}
+                                  onChange={(event) => setEditScheduleTime(event.target.value)}
+                                  required
+                                />
+                              </label>
+                              <span className="scheduled-edit-buttons">
+                                <button className="secondary-button" type="submit" disabled={isBusy} aria-busy={isBusy}>
+                                  {isBusy ? 'Saving…' : 'Save time'}
+                                </button>
+                                <button
+                                  className="text-action-link"
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingScheduledId('')
+                                    setScheduledNotice('')
+                                  }}
+                                >
+                                  Keep current time
+                                </button>
+                              </span>
+                            </form>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <div className="account-block">
                 <div className="account-block-heading">
                   <h3>Cards and sends</h3>
@@ -14475,6 +14816,81 @@ function App() {
                     </span>
                   </label>
                 )}
+                <div className="send-timing">
+                  <div className="mode-toggle choice-radios send-timing-toggle" role="radiogroup" aria-label="When to send">
+                    <button
+                      className={sendTiming === 'now' ? 'is-selected' : ''}
+                      type="button"
+                      role="radio"
+                      aria-checked={sendTiming === 'now'}
+                      onClick={() => {
+                        setSendTiming('now')
+                        setDeliveryNotice('')
+                      }}
+                    >
+                      Send now
+                    </button>
+                    <button
+                      className={sendTiming === 'later' ? 'is-selected' : ''}
+                      type="button"
+                      role="radio"
+                      aria-checked={sendTiming === 'later'}
+                      onClick={() => {
+                        if (sendTiming !== 'later' && scheduleTimeProblem(parseLocalSchedule(scheduleDate, scheduleTime))) {
+                          const next = defaultScheduleDate()
+                          setScheduleDate(toDateInputValue(next))
+                          setScheduleTime(toTimeInputValue(next))
+                        }
+                        setSendTiming('later')
+                        setDeliveryNotice('')
+                      }}
+                    >
+                      Send later
+                    </button>
+                  </div>
+                  {sendTiming === 'later' && (
+                    <div className="send-later-fields">
+                      <label>
+                        Date
+                        <input
+                          type="date"
+                          value={scheduleDate}
+                          min={toDateInputValue(new Date())}
+                          max={toDateInputValue(new Date(Date.now() + scheduleMaxLeadMs))}
+                          onChange={(event) => {
+                            setScheduleDate(event.target.value)
+                            setDeliveryNotice('')
+                          }}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Time
+                        <input
+                          type="time"
+                          value={scheduleTime}
+                          step={300}
+                          onChange={(event) => {
+                            setScheduleTime(event.target.value)
+                            setDeliveryNotice('')
+                          }}
+                          required
+                        />
+                      </label>
+                      <p className="field-help send-later-help">
+                        {(() => {
+                          const when = parseLocalSchedule(scheduleDate, scheduleTime)
+                          const problem = scheduleTimeProblem(when)
+                          if (problem || !when) {
+                            return problem
+                          }
+                          const zone = localTimeZoneLabel()
+                          return `We’ll send it ${formatScheduledAt(when.toISOString())}${zone ? ` (${zone})` : ''}. Credits are used now and returned if you cancel.`
+                        })()}
+                      </p>
+                    </div>
+                  )}
+                </div>
                 {accountSession ? (
                   <p className="account-confirmed">
                     ✓ Phone confirmed: {formatPhoneNumberDisplay(accountSession.phoneE164).replace(/^\+1 /, '')}
@@ -14571,14 +14987,18 @@ function App() {
                     {sentButtonLabel?.key === 'deliver'
                       ? sentButtonLabel.label
                       : isDelivering
-                      ? plannedRecipientCount > 1
+                      ? sendTiming === 'later'
+                        ? 'Scheduling your card...'
+                        : plannedRecipientCount > 1
                         ? 'Sending your cards...'
                         : 'Sending your card...'
                       : hasSentCurrentCard && lastSentNotice
                       ? (
                         <>
                           <span>
-                            {plannedRecipientCount > 1
+                            {sendTiming === 'later'
+                              ? 'Schedule another'
+                              : plannedRecipientCount > 1
                               ? `Send another to ${plannedRecipientCount}`
                               : `Send another by ${deliveryMethod === 'email' ? 'email' : 'text'}`}
                           </span>
@@ -14587,9 +15007,13 @@ function App() {
                           </span>
                         </>
                       )
-                      : plannedRecipientCount > 1
-                        ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
-                        : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
+                      : sendTiming === 'later'
+                        ? plannedRecipientCount > 1
+                          ? `Schedule for ${plannedRecipientCount} · ${currentSendCreditCost} credits`
+                          : `Schedule ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`
+                        : plannedRecipientCount > 1
+                          ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
+                          : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
                   </button>
                   {renderCreditsLeft()}
                 </div>

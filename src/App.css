@@ -2854,6 +2854,40 @@ textarea:focus {
   min-width: 0;
 }
 
+.send-timing {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.send-timing-toggle {
+  max-width: min(360px, 100%);
+  min-width: 0;
+}
+
+.send-later-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 12px;
+  max-width: 420px;
+}
+
+.send-later-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.send-later-fields input {
+  width: 100%;
+  min-width: 0;
+}
+
+.send-later-help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .delivery-recipient-field {
   position: relative;
   display: grid;
@@ -5741,7 +5775,8 @@ select.is-placeholder option {
     max-width: 100%;
   }
 
-  .delivery-methods.mode-toggle {
+  .delivery-methods.mode-toggle,
+  .send-timing-toggle.mode-toggle {
     width: 100%;
     max-width: 100%;
   }
@@ -6394,4 +6429,56 @@ select.is-placeholder option {
 
 .occasion-suggestions button {
   min-height: 42px;
+}
+
+.scheduled-notice {
+  margin: 0 0 8px;
+  color: var(--gcu-dark-teal);
+  font-weight: 700;
+}
+
+.scheduled-row .scheduled-when {
+  color: var(--gcu-ink);
+  font-weight: 700;
+  white-space: normal;
+}
+
+.scheduled-row.is-failed .scheduled-when {
+  color: var(--gcu-grey);
+  font-weight: 500;
+}
+
+.scheduled-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.scheduled-edit-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 12px;
+  max-width: 420px;
+}
+
+.scheduled-edit-fields label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--gcu-grey);
+  font-size: 0.84rem;
+}
+
+.scheduled-edit-fields input {
+  width: 100%;
+  min-width: 0;
+}
+
+.scheduled-edit-buttons {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
 }

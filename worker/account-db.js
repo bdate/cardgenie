@@ -453,6 +453,8 @@ const creditReasonLabel = (reason) => {
     cover_revise: 'Cover change',
     ai_copy: 'AI text change',
     card_send: 'Card sent',
+    card_send_scheduled: 'Card scheduled',
+    card_send_scheduled_refund: 'Scheduled card refund',
     dev_set: 'Balance adjusted',
   }
   return labels[reason] || reason || 'Credit change'
@@ -540,6 +542,13 @@ export const getAccountHistory = async (env, userId, phoneE164, { includeHidden 
     printOrders = { results: [] }
   }
 
+  let scheduledSends = []
+  try {
+    scheduledSends = await listScheduledSends(env, userId)
+  } catch (error) {
+    console.error('scheduled sends lookup failed', error)
+  }
+
   const hiddenCardIds = includeHidden ? new Set() : await getHiddenCardIds(env.ACCOUNT_DB, userId)
   const visible = (cardId) => !cardId || !hiddenCardIds.has(cardId)
   cards.results = (cards.results || []).filter((row) => visible(row.id))
@@ -590,6 +599,7 @@ export const getAccountHistory = async (env, userId, phoneE164, { includeHidden 
       recipientName: row.recipient_name || '',
     })),
     printOrders: (printOrders.results || []).map(mapPrintOrderRow),
+    scheduledSends: scheduledSends.map(({ userId: _owner, phoneE164: _phone, ...scheduled }) => scheduled),
   }
 }
 
@@ -2038,3 +2048,272 @@ export const hideAccountCards = async (env, { userId, phoneE164, cardIds }) => {
   )
   return cardIds.length
 }
+
+let scheduledSendsTableReady = false
+
+export const ensureScheduledSendsTable = async (db) => {
+  if (!db || scheduledSendsTableReady) {
+    return
+  }
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS scheduled_sends (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        phone_e164 TEXT,
+        card_id TEXT NOT NULL,
+        method TEXT NOT NULL,
+        destinations_json TEXT NOT NULL,
+        sender_copy_email TEXT,
+        send_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        credits_charged INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        claimed_at TEXT,
+        sent_at TEXT,
+        results_json TEXT,
+        recipient_name TEXT,
+        occasion TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    )
+    .run()
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_scheduled_sends_due ON scheduled_sends (status, send_at)').run()
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_scheduled_sends_user ON scheduled_sends (user_id, send_at)').run()
+  scheduledSendsTableReady = true
+}
+
+const changedRows = (result) => Number(result?.meta?.changes ?? result?.changes ?? 0)
+
+const parseJsonList = (raw) => {
+  try {
+    const parsed = JSON.parse(raw || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export const mapScheduledSend = (row) => ({
+  id: row.id,
+  userId: row.user_id,
+  phoneE164: row.phone_e164 || '',
+  cardId: row.card_id,
+  method: row.method,
+  destinations: parseJsonList(row.destinations_json),
+  senderCopyEmail: row.sender_copy_email || '',
+  sendAt: row.send_at,
+  status: row.status,
+  creditsCharged: Number(row.credits_charged) || 0,
+  attempts: Number(row.attempts) || 0,
+  lastError: row.last_error || '',
+  sentAt: row.sent_at || null,
+  results: parseJsonList(row.results_json),
+  recipientName: row.recipient_name || '',
+  occasion: row.occasion || '',
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+/** Charges the send cost now and stores the send. Returns { scheduledSend, creditBalance } or { error }. */
+export const createScheduledSend = async (
+  env,
+  { userId, phoneE164, cardId, method, destinations, senderCopyEmail, sendAt, creditCost, recipientName, occasion },
+) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return { error: 'Account storage is not configured.' }
+  }
+  const db = env.ACCOUNT_DB
+  await ensureScheduledSendsTable(db)
+  await ensureAccountUser(env, { userId, phoneE164 })
+  const user = await getUserById(db, userId)
+  const balance = Number(user?.credit_balance) || 0
+  if (balance < creditCost) {
+    return { error: `You need ${creditCost} credits to schedule this card. You currently have ${balance}.`, code: 'credits' }
+  }
+
+  const creditBalance = await applyCreditChange(env, {
+    userId,
+    phoneE164,
+    delta: -creditCost,
+    reason: 'card_send_scheduled',
+    kind: 'adjustment',
+  })
+  const id = crypto.randomUUID()
+  const now = isoNow()
+  try {
+    await db
+      .prepare(
+        `INSERT INTO scheduled_sends (
+          id, user_id, phone_e164, card_id, method, destinations_json, sender_copy_email, send_at, status,
+          credits_charged, recipient_name, occasion, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        userId,
+        phoneE164 || null,
+        cardId,
+        method,
+        JSON.stringify(destinations),
+        senderCopyEmail || null,
+        sendAt,
+        creditCost,
+        recipientName || '',
+        occasion || '',
+        now,
+        now,
+      )
+      .run()
+  } catch (error) {
+    await applyCreditChange(env, { userId, phoneE164, delta: creditCost, reason: 'card_send_scheduled_refund', kind: 'adjustment' })
+    throw error
+  }
+  const row = await db.prepare('SELECT * FROM scheduled_sends WHERE id = ?').bind(id).first()
+  return { scheduledSend: mapScheduledSend(row), creditBalance }
+}
+
+export const listScheduledSends = async (env, userId) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return []
+  }
+  await ensureScheduledSendsTable(env.ACCOUNT_DB)
+  const recentFailedSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const rows = await env.ACCOUNT_DB.prepare(
+    `SELECT * FROM scheduled_sends
+     WHERE user_id = ? AND (status IN ('scheduled', 'sending') OR (status = 'failed' AND updated_at >= ?))
+     ORDER BY send_at
+     LIMIT 50`,
+  )
+    .bind(userId, recentFailedSince)
+    .all()
+  return (rows.results || []).map(mapScheduledSend)
+}
+
+export const getScheduledSend = async (env, id) => {
+  if (!env.ACCOUNT_DB || !id) {
+    return null
+  }
+  await ensureScheduledSendsTable(env.ACCOUNT_DB)
+  const row = await env.ACCOUNT_DB.prepare('SELECT * FROM scheduled_sends WHERE id = ?').bind(id).first()
+  return row ? mapScheduledSend(row) : null
+}
+
+/** Cancels a send that hasn't started and refunds its credits. Only one caller can win the status change. */
+export const cancelScheduledSend = async (env, { userId, phoneE164, id }) => {
+  if (!env.ACCOUNT_DB || !userId || !id) {
+    return { canceled: false }
+  }
+  await ensureScheduledSendsTable(env.ACCOUNT_DB)
+  const row = await env.ACCOUNT_DB.prepare('SELECT * FROM scheduled_sends WHERE id = ? AND user_id = ?').bind(id, userId).first()
+  if (!row) {
+    return { canceled: false, reason: 'not_found' }
+  }
+  const result = await env.ACCOUNT_DB.prepare(
+    `UPDATE scheduled_sends SET status = 'canceled', updated_at = ? WHERE id = ? AND user_id = ? AND status = 'scheduled'`,
+  )
+    .bind(isoNow(), id, userId)
+    .run()
+  if (changedRows(result) !== 1) {
+    return { canceled: false, reason: row.status === 'scheduled' ? 'busy' : row.status }
+  }
+  const credits = Number(row.credits_charged) || 0
+  const creditBalance =
+    credits > 0
+      ? await applyCreditChange(env, { userId, phoneE164, delta: credits, reason: 'card_send_scheduled_refund', kind: 'adjustment' })
+      : null
+  return { canceled: true, refunded: credits, creditBalance }
+}
+
+export const rescheduleScheduledSend = async (env, { userId, id, sendAt }) => {
+  if (!env.ACCOUNT_DB || !userId || !id) {
+    return null
+  }
+  await ensureScheduledSendsTable(env.ACCOUNT_DB)
+  const result = await env.ACCOUNT_DB.prepare(
+    `UPDATE scheduled_sends SET send_at = ?, attempts = 0, last_error = NULL, updated_at = ?
+     WHERE id = ? AND user_id = ? AND status = 'scheduled'`,
+  )
+    .bind(sendAt, isoNow(), id, userId)
+    .run()
+  return changedRows(result) === 1 ? getScheduledSend(env, id) : null
+}
+
+/** Atomically moves due sends from 'scheduled' to 'sending'; a send is only returned to the caller that claimed it. */
+export const claimDueScheduledSends = async (env, { now = isoNow(), limit = 20, staleBefore } = {}) => {
+  if (!env.ACCOUNT_DB) {
+    return []
+  }
+  const db = env.ACCOUNT_DB
+  await ensureScheduledSendsTable(db)
+  if (staleBefore) {
+    // A worker that died mid-send leaves the row in 'sending'. If any recipient was recorded, treat it as sent;
+    // otherwise put it back so the next run retries it.
+    const stale = await db
+      .prepare(`SELECT * FROM scheduled_sends WHERE status = 'sending' AND claimed_at < ? LIMIT 20`)
+      .bind(staleBefore)
+      .all()
+    for (const row of stale.results || []) {
+      const delivered = await db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM deliveries
+           WHERE card_id = ? AND user_id = ? AND is_sender_copy = 0 AND status = 'sent' AND created_at >= ?`,
+        )
+        .bind(row.card_id, row.user_id, row.claimed_at)
+        .first()
+      await db
+        .prepare(
+          `UPDATE scheduled_sends SET status = ?, updated_at = ?, sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
+           WHERE id = ? AND status = 'sending'`,
+        )
+        .bind(Number(delivered?.n) > 0 ? 'sent' : 'scheduled', now, Number(delivered?.n) > 0 ? 'sent' : '', now, row.id)
+        .run()
+    }
+  }
+  const due = await db
+    .prepare(`SELECT id FROM scheduled_sends WHERE status = 'scheduled' AND send_at <= ? ORDER BY send_at LIMIT ?`)
+    .bind(now, limit)
+    .all()
+  const claimed = []
+  for (const { id } of due.results || []) {
+    const result = await db
+      .prepare(
+        `UPDATE scheduled_sends SET status = 'sending', claimed_at = ?, attempts = attempts + 1, updated_at = ?
+         WHERE id = ? AND status = 'scheduled' AND send_at <= ?`,
+      )
+      .bind(now, now, id, now)
+      .run()
+    if (changedRows(result) === 1) {
+      claimed.push(await getScheduledSend(env, id))
+    }
+  }
+  return claimed.filter(Boolean)
+}
+
+export const finishScheduledSend = async (env, { id, status, results, error, retryAt, refund }) => {
+  if (!env.ACCOUNT_DB || !id) {
+    return null
+  }
+  const now = isoNow()
+  await env.ACCOUNT_DB.prepare(
+    `UPDATE scheduled_sends
+     SET status = ?, updated_at = ?, last_error = ?, results_json = COALESCE(?, results_json),
+         send_at = COALESCE(?, send_at), sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
+     WHERE id = ? AND status = 'sending'`,
+  )
+    .bind(status, now, error ? String(error).slice(0, 300) : null, results ? JSON.stringify(results) : null, retryAt || null, status, now, id)
+    .run()
+  if (refund?.credits > 0 && refund.userId) {
+    return applyCreditChange(env, {
+      userId: refund.userId,
+      phoneE164: refund.phoneE164,
+      delta: refund.credits,
+      reason: 'card_send_scheduled_refund',
+      kind: 'adjustment',
+    })
+  }
+  return null
+}
+

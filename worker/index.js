@@ -25,6 +25,12 @@ import {
   createDeliveryOpenToken,
   getCardOwnerId,
   ensureDeliveryOpenColumns,
+  createScheduledSend,
+  listScheduledSends,
+  cancelScheduledSend,
+  rescheduleScheduledSend,
+  claimDueScheduledSends,
+  finishScheduledSend,
   recordThankYou,
   createPrintOrder,
   getPrintOrder,
@@ -1254,13 +1260,22 @@ const buildCardEditorState = (payload) => {
   }
 }
 
+const CARD_RECORD_TTL_SECONDS = 60 * 60 * 24 * 30
+
+/** Cards with a scheduled send stay stored until 30 days after the send time. */
+const cardRecordTtlSeconds = (record) => {
+  const keepUntil = Date.parse(record?.keepUntil || '')
+  const extra = Number.isFinite(keepUntil) ? Math.ceil((keepUntil - Date.now()) / 1000) : 0
+  return CARD_RECORD_TTL_SECONDS + Math.max(0, extra)
+}
+
 const saveCardRecord = async (
   env,
   record,
   { coverThumbDataUrl, revisionSource = 'save', refinement = '', replaceThumb = false } = {},
 ) => {
   if (env.CARD_STORE) {
-    await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+    await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: cardRecordTtlSeconds(record) })
   } else {
     fallbackCardStore.set(record.id, record)
   }
@@ -2731,6 +2746,9 @@ const handleSaveCard = async (request, env) => {
     if (existing?.createdAt) {
       record.createdAt = existing.createdAt
       record.updatedAt = new Date().toISOString()
+    }
+    if (existing?.keepUntil) {
+      record.keepUntil = existing.keepUntil
     }
     // The client re-encodes the cover on every save, so it tells us whether the cover is still the animated one.
     if (existing && payload?.keepCoverVideo === true) {
@@ -4832,6 +4850,286 @@ const runCardDelivery = async (request, env, { session, record, method, destinat
   return { results, senderCopyDeliveredTo, shareUrl }
 }
 
+const SCHEDULED_SEND_CRON = '*/5 * * * *'
+const SCHEDULED_SEND_MIN_LEAD_MS = 14 * 60 * 1000
+const SCHEDULED_SEND_MAX_LEAD_MS = 366 * 24 * 60 * 60 * 1000
+const SCHEDULED_SEND_MAX_ATTEMPTS = 3
+
+const getSendCreditCost = (recipientCount) => {
+  const count = Math.max(1, Math.floor(Number(recipientCount) || 1))
+  return count === 1 ? 3 : Math.max(3, 2 * count)
+}
+
+const parseScheduledSendAt = (raw) => {
+  const at = Date.parse(String(raw || ''))
+  if (!Number.isFinite(at)) {
+    return { error: 'Choose a date and time to send the card.' }
+  }
+  const lead = at - Date.now()
+  if (lead < SCHEDULED_SEND_MIN_LEAD_MS) {
+    return { error: 'Choose a time at least 15 minutes from now.' }
+  }
+  if (lead > SCHEDULED_SEND_MAX_LEAD_MS) {
+    return { error: 'Choose a date within the next year.' }
+  }
+  return { sendAt: new Date(at).toISOString() }
+}
+
+const keepCardRecordUntil = async (env, record, sendAt) => {
+  const current = Date.parse(record.keepUntil || '')
+  if (Number.isFinite(current) && current >= Date.parse(sendAt)) {
+    return
+  }
+  record.keepUntil = sendAt
+  await putCardRecordRaw(env, record)
+}
+
+const handleCreateScheduledSend = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Confirm your mobile number before sending. We’ll text you a one-time code.' }, 401)
+  }
+  try {
+    const body = (await readJson(request)) || {}
+    const { cardId, method, recipientConsentConfirmed, saveRecipientPhotos } = body
+    const record = await getCardRecord(env, cardId)
+    if (!record) {
+      return jsonResponse(request, env, { error: 'Save the card before scheduling it.' }, 404)
+    }
+    if (!['email', 'text'].includes(method)) {
+      return jsonResponse(request, env, { error: 'Choose email or text delivery.' }, 400)
+    }
+    const rawList = collectDeliveryDestinations(body)
+    if (!rawList.length) {
+      return jsonResponse(
+        request,
+        env,
+        { error: method === 'email' ? 'Enter the recipient email address.' : 'Enter the recipient cellphone number.' },
+        400,
+      )
+    }
+    if (rawList.length > MAX_DELIVERY_RECIPIENTS) {
+      return jsonResponse(request, env, { error: `You can send to up to ${MAX_DELIVERY_RECIPIENTS} recipients at a time.` }, 400)
+    }
+    if (method === 'text' && recipientConsentConfirmed !== true) {
+      return jsonResponse(request, env, { error: 'Check the box to send this card by text.' }, 400)
+    }
+    const destinations = []
+    for (const raw of rawList) {
+      try {
+        const normalized = method === 'email' ? normalizeEmailAddress(raw) : normalizePhoneNumber(raw)
+        if (!destinations.includes(normalized)) {
+          destinations.push(normalized)
+        }
+      } catch (error) {
+        return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Invalid recipient.' }, 400)
+      }
+    }
+    let senderCopyEmail = ''
+    if (String(body.senderCopyEmail || '').trim()) {
+      try {
+        senderCopyEmail = normalizeEmailAddress(String(body.senderCopyEmail))
+      } catch (error) {
+        return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Check your email address.' }, 400)
+      }
+    }
+    const when = parseScheduledSendAt(body.sendAt)
+    if (when.error) {
+      return jsonResponse(request, env, { error: when.error }, 400)
+    }
+
+    const details = recipientDetailsFor(record)
+    const created = await createScheduledSend(env, {
+      userId: session.userId,
+      phoneE164: session.phoneE164,
+      cardId: record.id,
+      method,
+      destinations,
+      senderCopyEmail,
+      sendAt: when.sendAt,
+      creditCost: getSendCreditCost(destinations.length),
+      recipientName: details.recipientName || '',
+      occasion: details.occasion || '',
+    })
+    if (created.error) {
+      return jsonResponse(request, env, { error: created.error, code: created.code }, created.code === 'credits' ? 402 : 400)
+    }
+    await keepCardRecordUntil(env, record, when.sendAt)
+    try {
+      await upsertRecipientFromCard(env, {
+        userId: session.userId,
+        details,
+        cardId: record.id,
+        email: method === 'email' ? destinations[0] : '',
+        phoneE164: method === 'text' ? destinations[0] : '',
+        photos: Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : [],
+        sent: false,
+      })
+    } catch (recipientError) {
+      console.error('recipient save failed', recipientError)
+    }
+    return jsonResponse(request, env, {
+      ok: true,
+      scheduledSend: created.scheduledSend,
+      creditBalance: created.creditBalance,
+    })
+  } catch (error) {
+    console.error('schedule send failed', error)
+    return jsonResponse(request, env, { error: 'Unable to schedule the card right now.' }, 500)
+  }
+}
+
+const handleCancelScheduledSend = async (request, env, id) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Sign in to manage scheduled cards.' }, 401)
+  }
+  const result = await cancelScheduledSend(env, { userId: session.userId, phoneE164: session.phoneE164, id })
+  if (!result.canceled) {
+    const message =
+      result.reason === 'sending' || result.reason === 'busy'
+        ? 'This card is being sent right now and can’t be canceled.'
+        : result.reason === 'sent'
+          ? 'This card was already sent.'
+          : 'That scheduled card could not be found.'
+    return jsonResponse(request, env, { error: message }, 409)
+  }
+  return jsonResponse(request, env, {
+    ok: true,
+    refunded: result.refunded,
+    creditBalance: result.creditBalance,
+    message: `Canceled. ${result.refunded} credit${result.refunded === 1 ? '' : 's'} returned to your account.`,
+  })
+}
+
+const handleRescheduleScheduledSend = async (request, env, id) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Sign in to manage scheduled cards.' }, 401)
+  }
+  const body = (await readJson(request)) || {}
+  const when = parseScheduledSendAt(body.sendAt)
+  if (when.error) {
+    return jsonResponse(request, env, { error: when.error }, 400)
+  }
+  const updated = await rescheduleScheduledSend(env, { userId: session.userId, id, sendAt: when.sendAt })
+  if (!updated) {
+    return jsonResponse(request, env, { error: 'This card can’t be changed now. It may already be sending.' }, 409)
+  }
+  const record = await getCardRecord(env, updated.cardId)
+  if (record) {
+    await keepCardRecordUntil(env, record, when.sendAt)
+  }
+  return jsonResponse(request, env, { ok: true, scheduledSend: updated })
+}
+
+const describeScheduledRecipients = (scheduled) =>
+  scheduled.destinations.length === 1 ? scheduled.destinations[0] : `${scheduled.destinations.length} recipients`
+
+const notifySenderScheduledSendFailed = async (env, scheduled, refunded) => {
+  try {
+    const user = await getAccountForSession(env, scheduled.userId)
+    const to = user?.email || scheduled.senderCopyEmail
+    if (!to) {
+      return
+    }
+    const appUrl = String(env.PUBLIC_APP_URL || 'https://www.card-genie.com').replace(/\/$/, '')
+    const cardLabel = `${scheduled.occasion ? `${scheduled.occasion} card` : 'card'}${scheduled.recipientName ? ` for ${scheduled.recipientName}` : ''}`
+    const refundLine = refunded > 0 ? `We returned ${refunded} credit${refunded === 1 ? '' : 's'} to your account.` : ''
+    const text = [
+      `We're sorry. Your scheduled ${cardLabel} to ${describeScheduledRecipients(scheduled)} couldn't be delivered after several tries.`,
+      refundLine,
+      `You can open it from My account and try sending it again: ${appUrl}/?account=1`,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    await sendEmailDelivery({
+      env,
+      to: normalizeEmailAddress(to),
+      copy: {
+        subject: 'Your scheduled Card Genie card could not be sent',
+        text,
+        html: `<div style="font-family: Arial, sans-serif; color: #302632; line-height: 1.5;">${text
+          .split('\n\n')
+          .map((line) => `<p>${escapeHtml(line)}</p>`)
+          .join('')}</div>`,
+      },
+    })
+  } catch (error) {
+    console.error('scheduled send failure email failed', error)
+  }
+}
+
+/** Sends every due scheduled card through the same path as "Send now". Safe to run concurrently. */
+const processDueScheduledSends = async (env) => {
+  const now = new Date()
+  const claimed = await claimDueScheduledSends(env, {
+    now: now.toISOString(),
+    staleBefore: new Date(now.getTime() - 30 * 60 * 1000).toISOString(),
+  })
+  const appRequest = new Request(String(env.PUBLIC_APP_URL || 'https://www.card-genie.com'))
+  const processed = []
+  for (const scheduled of claimed) {
+    const owner = { userId: scheduled.userId, phoneE164: scheduled.phoneE164 }
+    let sentCount = 0
+    let results = []
+    let errorMessage = ''
+    try {
+      const record = await getCardRecord(env, scheduled.cardId)
+      if (!record) {
+        throw new Error('The card is no longer available.')
+      }
+      const delivery = await runCardDelivery(appRequest, env, {
+        session: owner,
+        record,
+        method: scheduled.method,
+        destinationList: scheduled.destinations,
+        senderCopyEmail: scheduled.senderCopyEmail,
+        recipientPhotos: [],
+      })
+      results = delivery.results
+      sentCount = results.filter((entry) => entry.status === 'sent').length
+      if (sentCount) {
+        await putCardRecordRaw(env, record)
+      } else {
+        errorMessage = results.find((entry) => entry.error)?.error || 'Unable to deliver the card.'
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Unable to deliver the card.'
+    }
+
+    if (sentCount > 0) {
+      const refundCredits = Math.max(0, scheduled.creditsCharged - getSendCreditCost(sentCount))
+      await finishScheduledSend(env, {
+        id: scheduled.id,
+        status: 'sent',
+        results,
+        refund: { credits: refundCredits, userId: owner.userId, phoneE164: owner.phoneE164 },
+      })
+      processed.push({ id: scheduled.id, status: 'sent', sent: sentCount, refunded: refundCredits })
+      continue
+    }
+
+    if (scheduled.attempts < SCHEDULED_SEND_MAX_ATTEMPTS) {
+      const retryAt = new Date(Date.now() + scheduled.attempts * 10 * 60 * 1000).toISOString()
+      await finishScheduledSend(env, { id: scheduled.id, status: 'scheduled', results, error: errorMessage, retryAt })
+      processed.push({ id: scheduled.id, status: 'retry', retryAt, error: errorMessage })
+      continue
+    }
+
+    await finishScheduledSend(env, {
+      id: scheduled.id,
+      status: 'failed',
+      results,
+      error: errorMessage,
+      refund: { credits: scheduled.creditsCharged, userId: owner.userId, phoneE164: owner.phoneE164 },
+    })
+    await notifySenderScheduledSendFailed(env, scheduled, scheduled.creditsCharged)
+    processed.push({ id: scheduled.id, status: 'failed', refunded: scheduled.creditsCharged, error: errorMessage })
+  }
+  return processed
+}
+
 const handleOrderPrintCard = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -6771,7 +7069,7 @@ const COVER_ANIMATION_PROMPT = [
 ].join(' ')
 
 const putCardRecordRaw = (env, record) =>
-  env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+  env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: cardRecordTtlSeconds(record) })
 
 const coverAnimationResponse = (request, env, record, extra = {}) =>
   jsonResponse(request, env, {
@@ -6942,7 +7240,7 @@ const handleAdminCardCoverVideo = async (request, env) => {
     : { ...source, updatedAt: new Date().toISOString() }
   record.coverVideoKey = `covers/${record.id}/cover.mp4`
   await env.CARD_ASSETS.put(record.coverVideoKey, bytes, { httpMetadata: { contentType: 'video/mp4' } })
-  await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 })
+  await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: cardRecordTtlSeconds(record) })
 
   return jsonResponse(request, env, {
     ok: true,
@@ -7842,6 +8140,27 @@ const handleRequest = async (request, env, ctx) => {
     return handleDeliverCard(request, env)
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/scheduled-sends') {
+    return handleCreateScheduledSend(request, env)
+  }
+
+  const scheduledSendMatch = url.pathname.match(/^\/api\/scheduled-sends\/([^/]+)\/(cancel|reschedule)$/)
+  if (request.method === 'POST' && scheduledSendMatch) {
+    const scheduledId = decodeURIComponent(scheduledSendMatch[1])
+    return scheduledSendMatch[2] === 'cancel'
+      ? handleCancelScheduledSend(request, env, scheduledId)
+      : handleRescheduleScheduledSend(request, env, scheduledId)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/scheduled-sends/run') {
+    const denied = await requireDeployOrAdminSecret(request, env)
+    if (denied) {
+      return denied
+    }
+    const processed = await processDueScheduledSends(env)
+    return jsonResponse(request, env, { ok: true, processed })
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/order-print-card') {
     return handleOrderPrintCard(request, env)
   }
@@ -7981,7 +8300,11 @@ export default {
   async queue(batch, env) {
     await handleGenerateQueue(batch, env)
   },
-  async scheduled(_event, env, ctx) {
+  async scheduled(event, env, ctx) {
+    if (event?.cron === SCHEDULED_SEND_CRON) {
+      ctx.waitUntil(processDueScheduledSends(env).catch((error) => console.error('scheduled sends failed', error)))
+      return
+    }
     ctx.waitUntil(sendScheduledShipmentEmails(env))
     ctx.waitUntil(sendReviewFollowUpEmails(env).catch((error) => console.error('review follow-ups failed', error)))
   },
