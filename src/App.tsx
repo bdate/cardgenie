@@ -3695,6 +3695,47 @@ function App() {
   const [contactStatus, setContactStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
   const [contactError, setContactError] = useState('')
 
+  // Focus is applied in a layout effect so it still counts as part of the user's tap on iPhone
+  // (which is what lets Safari raise the keyboard). Only call this from a user action.
+  const pendingFieldFocusRef = useRef<{ find: () => HTMLElement | null | undefined; until: number } | null>(null)
+  const focusFieldAfterRender = (target: string | (() => HTMLElement | null | undefined)) => {
+    const find =
+      typeof target === 'string' ? () => document.querySelector<HTMLElement>(target) : target
+    pendingFieldFocusRef.current = { find, until: Date.now() + 1500 }
+    window.setTimeout(applyPendingFieldFocus, 80)
+  }
+  const applyPendingFieldFocus = () => {
+    const pending = pendingFieldFocusRef.current
+    if (!pending) {
+      return
+    }
+    if (Date.now() > pending.until) {
+      pendingFieldFocusRef.current = null
+      return
+    }
+    const element = pending.find()
+    if (!element || element.hasAttribute('disabled') || element.getClientRects().length === 0) {
+      return
+    }
+    pendingFieldFocusRef.current = null
+    if (document.activeElement !== element) {
+      element.focus({ preventScroll: true })
+    }
+    const rect = element.getBoundingClientRect()
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+  useLayoutEffect(applyPendingFieldFocus)
+  const firstEmptyField = (scope: string) => () => {
+    const fields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        `${scope} input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]), ${scope} textarea`,
+      ),
+    ).filter((field) => !field.disabled && field.getClientRects().length > 0)
+    return fields.find((field) => !field.value.trim()) || fields[0]
+  }
+
   const openContact = (topic = '') => {
     setContactForm((current) => ({
       ...current,
@@ -3825,7 +3866,7 @@ function App() {
     void openReviews()
     if (wantsForm) {
       setReviewsPanelSource(linkSource)
-      openFeedbackForm(linkSource)
+      openFeedbackForm(linkSource, false)
     }
   }, [])
 
@@ -7414,6 +7455,11 @@ function App() {
     }
   }
 
+  const openSignIn = () => {
+    void openAccountPage()
+    focusFieldAfterRender('.account-page .account-gate input')
+  }
+
   const signOutAccount = async () => {
     const token = accountSession?.token
     if (token) {
@@ -7913,7 +7959,7 @@ function App() {
       setCreditNotice('Confirm your mobile number to buy credits.')
       setDeliveryNotice('')
       setRefinementNotice('')
-      void openAccountPage()
+      openSignIn()
       return
     }
 
@@ -8280,6 +8326,9 @@ function App() {
     setEditorHasChanges(false)
     setRefinementNotice('')
     setEditorTab(step === 'inside' ? 'inside' : 'front')
+    if (step !== 'inside') {
+      focusFieldAfterRender('.refinement-card textarea')
+    }
   }
 
   const updateCardMessage = (message: string) => {
@@ -8603,6 +8652,7 @@ function App() {
     }
     setPrintOrderStep('ship-to')
     setPrintOrderNotice('')
+    focusFieldAfterRender(firstEmptyField('.print-order-panel'))
     window.setTimeout(() => {
       document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
@@ -9272,12 +9322,15 @@ function App() {
     setFeedbackNotice('')
   }
 
-  const openFeedbackForm = (source: FeedbackSource) => {
+  const openFeedbackForm = (source: FeedbackSource, focusComment = true) => {
     setFeedbackDismissed(false)
     setFeedbackSubmitted(false)
     setFeedbackSource(source)
     setShowFeedbackForm(true)
     setFeedbackNotice('')
+    if (focusComment) {
+      focusFieldAfterRender('.feedback-form textarea')
+    }
   }
 
   const submitFeedback = async () => {
@@ -10118,6 +10171,12 @@ function App() {
       return
     }
 
+    const activeField = document.activeElement
+    if (!(activeField instanceof HTMLInputElement)) {
+      document
+        .querySelector<HTMLInputElement>('.account-gate input[type="tel"]')
+        ?.focus({ preventScroll: true })
+    }
     setIsSendingAccountCode(true)
     showActionFeedback('Sending sign-in code…')
     setDeliveryNotice('')
@@ -10138,6 +10197,7 @@ function App() {
       setAccountPhone(sentTo)
       const resent = Boolean(accountCodeSentTo)
       setAccountCodeSentTo(sentTo)
+      focusFieldAfterRender('.account-gate input[autocomplete="one-time-code"]')
       const notice = data.message || 'We texted you a 6-digit code.'
       if (showAccountPage) {
         setAccountHistoryError(resent ? 'We texted you a new code.' : '')
@@ -10662,7 +10722,7 @@ function App() {
                       className="text-action-link credit-details-toggle"
                       type="button"
                       disabled={isLoadingAccountHistory}
-                      onClick={() => void openAccountPage()}
+                      onClick={openSignIn}
                     >
                       sign in here.
                     </button>
@@ -10877,6 +10937,7 @@ function App() {
                         setAccountCodeSentTo('')
                         setAccountCode('')
                         setAccountHistoryError('')
+                        focusFieldAfterRender('.account-gate input[type="tel"]')
                       }}
                     >
                       Use a different number
@@ -10952,6 +11013,9 @@ function App() {
                       type="button"
                       aria-expanded={showAdminGrantCredits}
                       onClick={() => {
+                        if (!showAdminGrantCredits) {
+                          focusFieldAfterRender('.admin-grant-row input[type="tel"]')
+                        }
                         setShowAdminGrantCredits((current) => !current)
                         setAdminGrantNotice('')
                       }}
@@ -11071,6 +11135,7 @@ function App() {
                         onClick={() => {
                           setIsEditingAccountMailing(true)
                           setAccountProfileNotice('')
+                          focusFieldAfterRender('.account-profile-form .print-address-fields input')
                         }}
                       >
                         Edit
@@ -11192,6 +11257,7 @@ function App() {
                                       setRecipientDraft(null)
                                     } else {
                                       void startEditingRecipient(recipient)
+                                      focusFieldAfterRender('.recipient-edit-form input')
                                     }
                                   }}
                                 >
@@ -13929,7 +13995,12 @@ function App() {
                                 name="thank-you-preset"
                                 value={preset.id}
                                 checked={selectedThankYouPreset === preset.id}
-                                onChange={() => setSelectedThankYouPreset(preset.id)}
+                                onChange={() => {
+                                  setSelectedThankYouPreset(preset.id)
+                                  if (preset.allowsCustom) {
+                                    focusFieldAfterRender('.thank-you-custom textarea')
+                                  }
+                                }}
                               />
                               <span>{preset.label}</span>
                             </label>
@@ -14052,6 +14123,7 @@ function App() {
                       setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
                       setDeliveryNotice('')
+                      focusFieldAfterRender('.delivery-recipient-field input')
                     }}
                   >
                     Email
@@ -14068,6 +14140,7 @@ function App() {
                       setSenderCopyEmail('')
                       setSmsConsentConfirmed(false)
                       setDeliveryNotice('')
+                      focusFieldAfterRender('.delivery-recipient-field input')
                     }}
                   >
                     Cellphone
@@ -14229,7 +14302,16 @@ function App() {
                     )
                   })}
                   {deliveryDestinations.length < maxDeliveryRecipients && (
-                    <button className="text-action-link delivery-add-recipient" type="button" onClick={addDeliveryDestination}>
+                    <button
+                      className="text-action-link delivery-add-recipient"
+                      type="button"
+                      onClick={() => {
+                        addDeliveryDestination()
+                        focusFieldAfterRender(() =>
+                          Array.from(document.querySelectorAll<HTMLInputElement>('.delivery-recipient-field input')).pop(),
+                        )
+                      }}
+                    >
                       Add another recipient
                     </button>
                   )}
@@ -14243,6 +14325,9 @@ function App() {
                       setShowSenderCopyField(checked)
                       if (checked) {
                         setSenderCopyEmail((current) => current || accountSession?.copyEmail || '')
+                        if (!accountSession?.copyEmail) {
+                          focusFieldAfterRender('input[aria-label="Your email for a copy"]')
+                        }
                       } else {
                         setSenderCopyEmail('')
                       }
@@ -14334,6 +14419,8 @@ function App() {
                           if (!checked) {
                             setAccountPhone('')
                             setAccountCode('')
+                          } else {
+                            focusFieldAfterRender('.delivery-panel .account-gate input[type="tel"]')
                           }
                           setDeliveryNotice('')
                         }}
@@ -14866,7 +14953,10 @@ function App() {
                               type="button"
                               role="radio"
                               aria-checked={coverRefinementMode === 'revise'}
-                              onClick={() => setCoverRefinementMode('revise')}
+                              onClick={() => {
+                                setCoverRefinementMode('revise')
+                                focusFieldAfterRender('.refinement-card textarea')
+                              }}
                             >
                               Revise current concept
                             </button>
@@ -14875,7 +14965,10 @@ function App() {
                               type="button"
                               role="radio"
                               aria-checked={coverRefinementMode === 'new'}
-                              onClick={() => setCoverRefinementMode('new')}
+                              onClick={() => {
+                                setCoverRefinementMode('new')
+                                focusFieldAfterRender('.refinement-card textarea')
+                              }}
                             >
                               Whole new concept
                             </button>
@@ -14965,7 +15058,12 @@ function App() {
                           <button
                             className="ai-copy-link"
                             type="button"
-                            onClick={() => setShowPolishDialog((current) => !current)}
+                            onClick={() => {
+                              if (!showPolishDialog) {
+                                focusFieldAfterRender('.ai-copy-panel textarea')
+                              }
+                              setShowPolishDialog((current) => !current)
+                            }}
                           >
                             {showPolishDialog
                               ? 'Hide AI rewrite'
@@ -15024,11 +15122,17 @@ function App() {
       <footer className="site-footer">
         <div className="footer-primary">
           {!isRecipientView && (
-            <button type="button" onClick={() => void openAccountPage()}>
+            <button type="button" onClick={openSignIn}>
               {accountButtonLabel}
             </button>
           )}
-          <button type="button" onClick={() => openContact()}>
+          <button
+            type="button"
+            onClick={() => {
+              openContact()
+              focusFieldAfterRender(firstEmptyField('.contact-form'))
+            }}
+          >
             Contact us
           </button>
           <button type="button" onClick={() => void openReviews()}>
