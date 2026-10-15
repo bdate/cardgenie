@@ -6141,6 +6141,26 @@ function App() {
 
   const clearCreateCardInputs = startNewCard
 
+  const startFreshLampGenie = () => {
+    if (isRecipientView) {
+      return
+    }
+    if (showCardInterviewRef.current && interviewVoiceLoopRef.current) {
+      turnOffLampGenieMic()
+      return
+    }
+    if (
+      card &&
+      !hasSentCurrentCard &&
+      !hasPrintedCurrentCard &&
+      !window.confirm('Start over? This card hasn’t been sent or printed yet. Starting a new card clears it.')
+    ) {
+      return
+    }
+    resetToNewCard()
+    openCardInterview('chat')
+  }
+
   const sendCardInterview = async () => {
     if (isInterviewingRef.current || interviewSpeakingRef.current) {
       return
@@ -10577,7 +10597,7 @@ function App() {
             <button
               className={`brand-mark-button${startingInterviewMode === 'chat' ? ' is-starting' : ''}`}
               type="button"
-              onClick={() => openCardInterview('chat')}
+              onClick={startFreshLampGenie}
               aria-label="Chat with Genie about your card"
               title="Chat with Genie"
               aria-busy={startingInterviewMode === 'chat'}
