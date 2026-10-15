@@ -11935,7 +11935,6 @@ function App() {
                             {expandCardActivity && item.timeline.length > 0 ? item.summary : item.detail}
                           </span>
                           <span className="account-row-status">{item.status}</span>
-                          {renderDeliveryOpens(item.opens)}
                           {expandCardActivity && item.timeline.length > 0 ? (
                             <span className="account-row-date account-row-timeline">
                               {item.timeline.map((entry, index) => (
@@ -11949,6 +11948,7 @@ function App() {
                               {expandCardActivity ? formatAccountDate(item.createdAt) : formatAccountDay(item.createdAt)}
                             </span>
                           )}
+                          {renderDeliveryOpens(item.opens)}
                           {item.openCardId && (
                             <span className="account-row-actions">
                               <button
@@ -13131,7 +13131,6 @@ function App() {
                           {item.timeline.length > 0 ? item.summary : item.detail}
                         </span>
                         <span className="account-row-status">{item.status}</span>
-                        {renderDeliveryOpens(item.opens)}
                         {item.timeline.length > 0 ? (
                           <span className="account-row-date account-row-timeline">
                             {item.timeline.map((entry, index) => (
@@ -13143,6 +13142,7 @@ function App() {
                         ) : (
                           <span className="account-row-date">{formatAccountDate(item.createdAt)}</span>
                         )}
+                        {renderDeliveryOpens(item.opens)}
                       </div>
                     ))}
                   </div>
