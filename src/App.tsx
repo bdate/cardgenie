@@ -418,6 +418,7 @@ const coverRevisionCost = 1
 const coverAnimationCreditCost = 3
 const aiCopyCost = 1
 const printCardCreditCost = 10
+const printCardPriceUsd = 5
 const usStateOptions = [
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
@@ -9092,11 +9093,11 @@ function App() {
 
     if (credits < printCardCreditCost) {
       promptNeedCredits(
-        `You need ${printCardCreditCost} credits to mail a printed card. You currently have ${credits}. Buy more credits to keep going.`,
+        `A printed card is $${printCardPriceUsd} and uses ${printCardCreditCost} credits. You currently have ${credits}. Buy more credits to keep going.`,
         'send',
       )
       setPrintOrderNotice(
-        `You need ${printCardCreditCost} credits to mail a printed card. You currently have ${credits}.`,
+        `A printed card is $${printCardPriceUsd} and uses ${printCardCreditCost} credits. You currently have ${credits}.`,
       )
       return
     }
@@ -9136,7 +9137,9 @@ function App() {
           ? data.creditCost
           : printCardCreditCost
       rememberChargedCredits(data.creditBalance, chargedCredits)
-      setCreditNotice(`${chargedCredits} credits used to order a printed card.`)
+      setCreditNotice(
+        `Printed card ordered for $${printCardPriceUsd} (${chargedCredits} credits used from your balance).`,
+      )
       const orderCode =
         typeof data.orderCode === 'string' && data.orderCode.trim() ? data.orderCode.trim() : ''
       saveAccountSession({
@@ -11118,7 +11121,10 @@ function App() {
                   <li>Sign in with your mobile number to get 2 more and keep credits across devices.</li>
                   <li>Sending a card uses 3 credits (2 more for each extra recipient).</li>
                   <li>Cover changes and AI text changes use 1 credit each.</li>
-                  <li>Mailing a printed card uses {printCardCreditCost} credits.</li>
+                  <li>
+                    Mailing a printed card is ${printCardPriceUsd} and uses {printCardCreditCost} credits from your
+                    balance.
+                  </li>
                 </ul>
               </div>
             )}
@@ -15141,13 +15147,14 @@ function App() {
                           </span>
                         ) : (
                           <button className="text-action-link" type="button" onClick={openPrintOrder}>
-                            Mail a printed card ({printCardCreditCost} credits)
+                            Mail a printed card · ${printCardPriceUsd}
                           </button>
                         )}
                         {renderCreditsLeft()}
                       </div>
                       <p>
-                        Your card will be mailed out the next business day via USPS regular mail, from Northern
+                        Just ${printCardPriceUsd}, shipping included. Uses {printCardCreditCost} credits from your
+                        balance. Your card will be mailed out the next business day via USPS regular mail, from Northern
                         California. Once mailed, it&apos;ll take 3 to 7 business days for delivery.
                       </p>
                     </div>
@@ -15321,7 +15328,7 @@ function App() {
                           >
                             {isOrderingPrint
                               ? 'Sending print order…'
-                              : `Mail printed card · ${printCardCreditCost} credits`}
+                              : `Mail printed card · $${printCardPriceUsd}`}
                           </button>
                           {renderCreditsLeft()}
                         </div>
