@@ -643,7 +643,7 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
 const maxReferenceImages = 3
 const aiChoosesStyleLabel = 'AI chooses the best style for this card'
 // Photo-realistic faces set an exact-likeness expectation; an illustration is more forgiving.
-const aiChoosesPeoplePhotoStyle = 'Premium editorial illustration'
+const aiChoosesPeoplePhotoStyle = 'Watercolor greeting card illustration'
 const aiChoosesIllustratedStyles = [
   'Watercolor greeting card illustration',
   'Whimsical storybook illustration',
@@ -2617,8 +2617,8 @@ const generateImage = async (
   const referenceFiles = hasPhotos ? await referenceImagesToFiles(referenceImages) : []
 
   // Always feed people photos into the image step so faces stay the real people, not strangers.
-  // Style (editorial, watercolor, etc.) is controlled in the prompt — including the AI-chooses
-  // default of Premium editorial illustration when photos are attached.
+  // Style is controlled in the prompt — including the AI-chooses default of Watercolor
+  // greeting card illustration when photos are attached.
   if (referenceFiles.length > 0) {
     return editImageWithFiles(openai, env, prompt, referenceFiles)
   }
