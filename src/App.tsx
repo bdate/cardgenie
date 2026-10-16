@@ -11012,7 +11012,7 @@ function App() {
               showAccountPage ? null : (
               <div className="credit-wallet is-guest">
                 <div>
-                  <span className="guest-wallet-kicker">Try creating a card in seconds!</span>
+                  <span className="guest-wallet-kicker">Try creating a card in seconds</span>
                   <strong>Your first card is free!</strong>
                   <small>
                     Returning member,{' '}
@@ -14529,7 +14529,7 @@ function App() {
               {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send this card</span>
-                  <p>Send by email or cellphone after you approve the card.</p>
+                  <p>Send by email or text after you approve the card.</p>
                 </div>
                 <div className="mode-toggle delivery-methods choice-radios" role="radiogroup" aria-label="Delivery method">
                   <button
@@ -14564,7 +14564,7 @@ function App() {
                       focusFieldAfterRender('.delivery-recipient-field input')
                     }}
                   >
-                    Cellphone
+                    Text
                   </button>
                 </div>
                 <div className="delivery-recipients">
@@ -14585,10 +14585,10 @@ function App() {
                           {deliveryDestinations.length === 1
                             ? deliveryMethod === 'email'
                               ? 'Recipient email'
-                              : 'Recipient cellphone'
+                              : 'Recipient phone number'
                             : deliveryMethod === 'email'
                               ? `Recipient email ${index + 1}`
-                              : `Recipient cellphone ${index + 1}`}
+                              : `Recipient phone number ${index + 1}`}
                         </span>
                         {deliveryDestinations.length > 1 && (
                           <button
@@ -14686,7 +14686,7 @@ function App() {
                           id={destinationListId}
                           className="recipient-suggestions"
                           role="listbox"
-                          aria-label={deliveryMethod === 'email' ? 'Previous recipient emails' : 'Previous recipient cellphones'}
+                          aria-label={deliveryMethod === 'email' ? 'Previous recipient emails' : 'Previous recipient phone numbers'}
                         >
                           {destinationSuggestions.map((suggestion, suggestionIndex) => (
                             <li

@@ -1962,7 +1962,7 @@ function showSendForm() {
     form.method = m;
     after.querySelectorAll("[data-method]").forEach((b) => { const on = b.dataset.method === m; b.classList.toggle("is-selected", on); b.setAttribute("aria-checked", on); });
     const dest = $("#sendDest");
-    $("[data-dest-label]").textContent = m === "email" ? "Their email" : "Their cellphone";
+    $("[data-dest-label]").textContent = m === "email" ? "Their email" : "Their phone number";
     Object.assign(dest, m === "email"
       ? { type: "email", inputMode: "email", placeholder: "jamie@example.com", autocomplete: "off" }
       : { type: "tel", inputMode: "tel", placeholder: "(925) 555-1234", autocomplete: "off" });
