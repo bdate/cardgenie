@@ -332,12 +332,14 @@ const stripAppearanceFromMessage = (message = '') => {
   return cleanedParagraphs.join('\n\n').trim()
 }
 
+const isPhotorealisticImageStyle = (imageStyle = '') => /photoreal/i.test(String(imageStyle || ''))
+
 const buildStyleResemblanceDirection = (imageStyle = '') => {
   if (/comic/i.test(imageStyle)) {
     return 'The people must be clearly recognizable as the people in the photos, drawn as comic-book characters: bold ink, color holds, and comic anatomy. Keep faces, hair, glasses, and facial hair identifiable. This is a stylized likeness, never a photograph.'
   }
 
-  if (/photoreal/i.test(imageStyle)) {
+  if (isPhotorealisticImageStyle(imageStyle)) {
     return 'The people must be clearly recognizable as the people in the photos in a natural greeting-card photograph. Keep faces, ages, hair, glasses, and facial hair. Do not paste the original photographs onto the card.'
   }
 
@@ -348,15 +350,19 @@ const buildStyleResemblanceDirection = (imageStyle = '') => {
   return 'The people must be clearly recognizable as the people in the photos, drawn as original greeting-card characters in the selected art style.'
 }
 
-const buildAttachedPhotoGuidance = (hasReferenceImages) => {
+const buildAttachedPhotoGuidance = (hasReferenceImages, imageStyle = '') => {
   if (!hasReferenceImages) {
     return ''
   }
 
+  const styleLine = isPhotorealisticImageStyle(imageStyle)
+    ? 'Create an original greeting-card photograph scene in a natural photorealistic style. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.'
+    : `Create original illustrated greeting-card artwork in "${imageStyle || 'the selected illustrated style'}". This must look hand-illustrated or painted in that medium — not a photograph, not photo-real skin texture, and not a lightly filtered photo. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.`
+
   return `
-The attached photos are likeness references of the actual people and animals for this card.
+The shopper provided photos only as likeness references of the actual people and animals for this card.
 The people on the cover must clearly resemble them: faces, ages, hair, glasses, facial hair, clothing, and how many people are in the photo.
-Create original greeting-card artwork in the selected visual style. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.
+${styleLine}
 `
 }
 
@@ -2604,13 +2610,20 @@ const generateImage = async (
     referenceImages.length > 0 && isAiChoosesImageStyle(cardDetails.imageStyle)
       ? { ...cardDetails, imageStyle: aiChoosesPeoplePhotoStyle }
       : cardDetails
-  const photoGuidance = buildAttachedPhotoGuidance(referenceImages.length > 0)
+  const hasPhotos = referenceImages.length > 0
+  const photoGuidance = buildAttachedPhotoGuidance(hasPhotos, details.imageStyle)
   const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
-  const prompt = `${buildImagePrompt(details, refinement, imageMode, referenceImages.length > 0)}${photoGuidance}${likenessSection}`
-  const referenceFiles = referenceImages.length > 0 ? await referenceImagesToFiles(referenceImages) : []
+  const prompt = `${buildImagePrompt(details, refinement, imageMode, hasPhotos)}${photoGuidance}${likenessSection}`
 
-  if (referenceFiles.length > 0) {
-    return editImageWithFiles(openai, env, prompt, referenceFiles)
+  // Feeding real photos into images.edit strongly biases toward a photograph, even when the
+  // prompt asks for illustration. Only edit from photos when the shopper asked for photorealistic.
+  // For illustrated styles (including the people-photo AI-chooses default), generate from the
+  // likeness brief instead so the medium stays watercolor / editorial / storybook / etc.
+  if (hasPhotos && isPhotorealisticImageStyle(details.imageStyle)) {
+    const referenceFiles = await referenceImagesToFiles(referenceImages)
+    if (referenceFiles.length > 0) {
+      return editImageWithFiles(openai, env, prompt, referenceFiles)
+    }
   }
 
   const imageResponse = await openai.images.generate({
@@ -2670,13 +2683,17 @@ const editImageWithFiles = async (openai, env, prompt, imageFiles) => {
 const editImage = async (
   openai,
   env,
-  details,
+  cardDetails,
   refinement,
   currentImageUrl,
   referenceImages = [],
   likenessBrief = '',
   cardId = '',
 ) => {
+  const details =
+    referenceImages.length > 0 && isAiChoosesImageStyle(cardDetails?.imageStyle)
+      ? { ...cardDetails, imageStyle: aiChoosesPeoplePhotoStyle }
+      : cardDetails
   let sourceUrl = typeof currentImageUrl === 'string' ? currentImageUrl.trim() : ''
 
   if ((!sourceUrl || sourceUrl.length < 64) && cardId) {
@@ -2690,7 +2707,9 @@ const editImage = async (
 
   const currentImage = await imageUrlToFile(sourceUrl)
   const referenceFiles = await referenceImagesToFiles(referenceImages)
-  const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details.imageStyle)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}
+  // Same rule as generateImage: photo inputs pull the edit API toward photorealism.
+  const attachPhotoRefs = referenceFiles.length > 0 && isPhotorealisticImageStyle(details?.imageStyle)
+  const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details?.imageStyle)}${buildLikenessBriefSection(likenessBrief, details?.imageStyle)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
 
   try {
@@ -2698,17 +2717,17 @@ If additional reference photos are attached after the current cover, use them on
       openai,
       env,
       prompt,
-      referenceFiles.length > 0 ? [currentImage, ...referenceFiles] : [currentImage],
+      attachPhotoRefs ? [currentImage, ...referenceFiles] : [currentImage],
     )
   } catch (error) {
-    if (!isSafetyRejection(error) || referenceFiles.length === 0) {
+    if (!isSafetyRejection(error) || !attachPhotoRefs) {
       throw error
     }
 
     return editImageWithFiles(
       openai,
       env,
-      `${buildImageEditPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief, details.imageStyle)}`,
+      `${buildImageEditPrompt(details, refinement)}${buildLikenessBriefSection(likenessBrief, details?.imageStyle)}`,
       [currentImage],
     )
   }
