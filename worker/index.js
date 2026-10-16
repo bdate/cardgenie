@@ -357,11 +357,11 @@ const buildAttachedPhotoGuidance = (hasReferenceImages, imageStyle = '') => {
 
   const styleLine = isPhotorealisticImageStyle(imageStyle)
     ? 'Create an original greeting-card photograph scene in a natural photorealistic style. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.'
-    : `Create original illustrated greeting-card artwork in "${imageStyle || 'the selected illustrated style'}". This must look hand-illustrated or painted in that medium — not a photograph, not photo-real skin texture, and not a lightly filtered photo. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.`
+    : `Restyle those same people into original greeting-card artwork in "${imageStyle || 'the selected illustrated style'}". Keep every face clearly the same person from the photos — same count of people, same ages, hair, glasses, and facial hair. The medium must be unmistakable (${imageStyle || 'illustration'}: brushwork, paint, or drawn line — not a photograph, not photo-real skin texture, and not a lightly filtered photo). Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.`
 
   return `
-The shopper provided photos only as likeness references of the actual people and animals for this card.
-The people on the cover must clearly resemble them: faces, ages, hair, glasses, facial hair, clothing, and how many people are in the photo.
+The attached photos are required likeness references of the actual people and animals for this card — not strangers and not invented faces.
+The people on the cover must clearly be those same people: faces, ages, hair, glasses, facial hair, clothing, and how many people are in the photo.
 ${styleLine}
 `
 }
@@ -2614,16 +2614,13 @@ const generateImage = async (
   const photoGuidance = buildAttachedPhotoGuidance(hasPhotos, details.imageStyle)
   const likenessSection = buildLikenessBriefSection(likenessBrief, details.imageStyle)
   const prompt = `${buildImagePrompt(details, refinement, imageMode, hasPhotos)}${photoGuidance}${likenessSection}`
+  const referenceFiles = hasPhotos ? await referenceImagesToFiles(referenceImages) : []
 
-  // Feeding real photos into images.edit strongly biases toward a photograph, even when the
-  // prompt asks for illustration. Only edit from photos when the shopper asked for photorealistic.
-  // For illustrated styles (including the people-photo AI-chooses default), generate from the
-  // likeness brief instead so the medium stays watercolor / editorial / storybook / etc.
-  if (hasPhotos && isPhotorealisticImageStyle(details.imageStyle)) {
-    const referenceFiles = await referenceImagesToFiles(referenceImages)
-    if (referenceFiles.length > 0) {
-      return editImageWithFiles(openai, env, prompt, referenceFiles)
-    }
+  // Always feed people photos into the image step so faces stay the real people, not strangers.
+  // Style (editorial, watercolor, etc.) is controlled in the prompt — including the AI-chooses
+  // default of Premium editorial illustration when photos are attached.
+  if (referenceFiles.length > 0) {
+    return editImageWithFiles(openai, env, prompt, referenceFiles)
   }
 
   const imageResponse = await openai.images.generate({
@@ -2707,8 +2704,6 @@ const editImage = async (
 
   const currentImage = await imageUrlToFile(sourceUrl)
   const referenceFiles = await referenceImagesToFiles(referenceImages)
-  // Same rule as generateImage: photo inputs pull the edit API toward photorealism.
-  const attachPhotoRefs = referenceFiles.length > 0 && isPhotorealisticImageStyle(details?.imageStyle)
   const prompt = `${buildImageEditPrompt(details, refinement)}${buildReferenceImageGuidance(referenceFiles.length > 0, details?.imageStyle)}${buildLikenessBriefSection(likenessBrief, details?.imageStyle)}
 If additional reference photos are attached after the current cover, use them only for likeness and personal context. Edit the current cover image, not the reference photos.`
 
@@ -2717,10 +2712,10 @@ If additional reference photos are attached after the current cover, use them on
       openai,
       env,
       prompt,
-      attachPhotoRefs ? [currentImage, ...referenceFiles] : [currentImage],
+      referenceFiles.length > 0 ? [currentImage, ...referenceFiles] : [currentImage],
     )
   } catch (error) {
-    if (!isSafetyRejection(error) || !attachPhotoRefs) {
+    if (!isSafetyRejection(error) || referenceFiles.length === 0) {
       throw error
     }
 
