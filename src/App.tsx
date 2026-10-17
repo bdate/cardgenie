@@ -11197,6 +11197,7 @@ function App() {
                     className="secondary-button"
                     type="button"
                     disabled={isSavingPreferredNamePrompt || !preferredNamePromptDraft.trim()}
+                    aria-busy={isSavingPreferredNamePrompt}
                     onClick={() => void savePreferredNameFromPrompt()}
                   >
                     {isSavingPreferredNamePrompt ? 'Saving…' : 'Save'}
@@ -11276,6 +11277,7 @@ function App() {
                       className="text-action-link"
                       type="button"
                       disabled={isSendingAccountCode}
+                      aria-busy={isSendingAccountCode}
                       onClick={() => void requestAccountCode()}
                     >
                       {isSendingAccountCode ? 'Sending…' : 'Resend code'}
@@ -11420,6 +11422,7 @@ function App() {
                             className="secondary-button"
                             type="submit"
                             disabled={isGrantingCredits || !adminGrantPhone.trim()}
+                            aria-busy={isGrantingCredits}
                           >
                             {isGrantingCredits ? 'Granting…' : 'Grant'}
                           </button>
@@ -11515,6 +11518,7 @@ function App() {
                       className="secondary-button"
                       type="submit"
                       disabled={isSavingAccountProfile}
+                      aria-busy={isSavingAccountProfile}
                     >
                       {isSavingAccountProfile ? 'Saving…' : 'Save details'}
                     </button>
@@ -11788,6 +11792,7 @@ function App() {
                                       className={recipientDraftChanged ? 'primary-button' : 'secondary-button'}
                                       type="submit"
                                       disabled={isSavingRecipient}
+                                      aria-busy={isSavingRecipient}
                                     >
                                       {isSavingRecipient ? 'Saving…' : 'Save'}
                                     </button>
@@ -12016,6 +12021,7 @@ function App() {
                                 className="text-action-link account-row-open"
                                 type="button"
                                 disabled={Boolean(openingAccountCardId)}
+                                aria-busy={openingAccountCardId === item.openCardId}
                                 onKeyDown={(event) => event.stopPropagation()}
                                 onClick={(event) => {
                                   event.stopPropagation()
@@ -12226,6 +12232,7 @@ function App() {
                 className="text-action-link"
                 type="button"
                 disabled={isLoadingAdminMetrics || isLoadingAdminCosts || !accountSession?.token}
+                aria-busy={isLoadingAdminMetrics || isLoadingAdminCosts}
                 onClick={() => {
                   if (accountSession?.token) {
                     void loadAdminMetrics(accountSession.token)
@@ -12239,6 +12246,7 @@ function App() {
                 className="text-action-link"
                 type="button"
                 disabled={isBackfillingThumbs || !accountSession?.token}
+                aria-busy={isBackfillingThumbs}
                 onClick={() => void runCoverThumbBackfill()}
               >
                 {isBackfillingThumbs ? 'Backfilling thumbs…' : 'Backfill cover thumbs'}
@@ -12731,6 +12739,7 @@ function App() {
                 className="text-action-link"
                 type="button"
                 disabled={isLoadingPendingReviews || !accountSession?.token}
+                aria-busy={isLoadingPendingReviews}
                 onClick={() => accountSession?.token && void loadAdminReviews(accountSession.token)}
               >
                 {isLoadingPendingReviews ? 'Refreshing...' : 'Refresh'}
@@ -12792,6 +12801,7 @@ function App() {
                           className="primary-button"
                           type="button"
                           disabled={updatingReviewId === review.id}
+                          aria-busy={updatingReviewId === review.id}
                           onClick={() => void updatePendingReview(review.id, 'approved')}
                         >
                           {updatingReviewId === review.id ? 'Saving...' : 'Approve'}
@@ -12838,6 +12848,7 @@ function App() {
                 className="text-action-link"
                 type="button"
                 disabled={isLoadingCardHistory || !accountSession?.token}
+                aria-busy={isLoadingCardHistory}
                 onClick={() => accountSession?.token && void loadCardHistory(accountSession.token)}
               >
                 {isLoadingCardHistory ? 'Refreshing...' : 'Refresh'}
@@ -13028,6 +13039,7 @@ function App() {
                   className="text-action-link"
                   type="button"
                   disabled={isLoadingAdminShoppers || !accountSession?.token}
+                  aria-busy={isLoadingAdminShoppers}
                   onClick={() => accountSession?.token && void loadAdminShoppers(accountSession.token)}
                 >
                   {isLoadingAdminShoppers ? 'Refreshing...' : 'Refresh'}
@@ -13293,6 +13305,7 @@ function App() {
                                     className="text-action-link"
                                     type="button"
                                     disabled={!canSend || isBusy}
+                                    aria-busy={isBusy}
                                     onClick={() => void sendShipmentEmail(order, 'now')}
                                   >
                                     {isBusy ? 'Working…' : 'Send now'}
@@ -13311,6 +13324,7 @@ function App() {
                                   className="text-action-link"
                                   type="button"
                                   disabled={!canSend || isBusy}
+                                  aria-busy={isBusy}
                                   title={
                                     canSend
                                       ? order.shipmentEmailSentAt
@@ -15071,6 +15085,7 @@ function App() {
                             className="secondary-button"
                             type="button"
                             disabled={isSendingAccountCode}
+                            aria-busy={isSendingAccountCode}
                             onClick={() => void requestAccountCode()}
                           >
                             {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
@@ -15079,6 +15094,7 @@ function App() {
                             className="secondary-button"
                             type="button"
                             disabled={isVerifyingAccountCode || !accountCode.trim()}
+                            aria-busy={isVerifyingAccountCode}
                             onClick={() => void verifyAccountCode()}
                           >
                             {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
@@ -15151,6 +15167,7 @@ function App() {
                       className="text-action-link"
                       type="button"
                       disabled={isPreparingAdminPrintFiles}
+                      aria-busy={isPreparingAdminPrintFiles}
                       onClick={() => void prepareAdminPrintFiles()}
                     >
                       {isPreparingAdminPrintFiles

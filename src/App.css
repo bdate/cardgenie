@@ -1099,8 +1099,8 @@ textarea:focus {
   animation: secondaryBusyFlash 900ms ease-in-out infinite;
 }
 
-.primary-button[aria-busy="true"]:not(.cost-button)::before,
-.secondary-button[aria-busy="true"]:not(.cost-button)::before {
+.primary-button[aria-busy="true"]::before,
+.secondary-button[aria-busy="true"]::before {
   content: '';
   flex: none;
   width: 16px;
@@ -1113,9 +1113,13 @@ textarea:focus {
   animation: actionFeedbackSpin 700ms linear infinite;
 }
 
-.secondary-button[aria-busy="true"]:not(.cost-button)::before {
-  border-color: rgba(63, 155, 145, 0.28);
-  border-top-color: var(--gcu-dark-teal);
+.secondary-button[aria-busy="true"]::before {
+  border-color: rgba(245, 158, 51, 0.3);
+  border-top-color: var(--gcu-orange);
+}
+
+.cost-button[aria-busy="true"] {
+  flex-direction: row;
 }
 
 .primary-button.is-sent,
@@ -1217,6 +1221,25 @@ textarea:focus {
   cursor: wait;
   text-decoration: none;
   animation: kickerFlash 900ms ease-in-out infinite;
+}
+
+.text-action-link[aria-busy='true']:not(.cover-video-save-button) {
+  display: inline-flex;
+  align-items: center;
+  animation: none;
+}
+
+.text-action-link[aria-busy='true']:not(.cover-video-save-button)::before {
+  content: '';
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-right: 7px;
+  box-sizing: border-box;
+  border: 2px solid rgba(245, 158, 51, 0.3);
+  border-top-color: var(--gcu-orange);
+  border-radius: 50%;
+  animation: actionFeedbackSpin 700ms linear infinite;
 }
 
 .button-points {
