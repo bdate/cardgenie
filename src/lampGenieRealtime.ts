@@ -29,6 +29,7 @@ export type LampGenieSessionTurn = {
 export type LampGenieRealtimeHandlers = {
   onNotice?: (message: string) => void
   onListening?: (listening: boolean) => void
+  onMicLive?: (live: boolean) => void
   onSpeaking?: (speaking: boolean) => void
   /** True from the moment the shopper stops talking until Genie’s voice starts. */
   onThinking?: (thinking: boolean) => void
@@ -278,6 +279,7 @@ export const connectLampGenieRealtime = async (options: {
     if (!localStream) {
       return
     }
+    handlers.onMicLive?.(enabled)
     for (const track of localStream.getAudioTracks()) {
       track.enabled = enabled
     }
@@ -816,7 +818,7 @@ export const connectLampGenieRealtime = async (options: {
   dataChannel.addEventListener('open', () => {
     connected = true
     handlers.onConnected?.()
-    handlers.onNotice?.('Listening… talk naturally — Genie will reply by voice.')
+    handlers.onNotice?.('Genie is about to say hello…')
     // Mute before the greeting so Genie's voice can't re-enter the mic.
     setMicEnabled(false)
     setThinking(true)

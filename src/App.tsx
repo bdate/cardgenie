@@ -171,6 +171,23 @@ const interviewChatGreeting =
   'Hi! Tell me about the card you want — who it’s for, who it’s from, the occasion, and any details or memories to include.'
 
 type InterviewMode = 'quick' | 'chat'
+type LampGeniePhase = 'preparing' | 'speaking' | 'get-ready' | 'your-turn' | 'listening' | 'thinking'
+const lampGeniePhaseCopy: Record<LampGeniePhase, { title: string; hint: string }> = {
+  preparing: { title: 'Genie is getting ready…', hint: 'Please wait. Genie will say hello first.' },
+  speaking: { title: 'Genie is talking…', hint: 'Listen. Your turn is next.' },
+  'get-ready': { title: 'Get ready…', hint: 'Your turn in a moment.' },
+  'your-turn': { title: 'Your turn — talk now', hint: 'Pause when you’re done and Genie will reply.' },
+  listening: { title: 'Listening…', hint: 'Pause when you’re done.' },
+  thinking: { title: 'Genie is thinking…', hint: 'Hang tight.' },
+}
+// Status lines the Lamp Genie banner already shows; errors and other notices still appear below.
+const routineLampGenieNotices = new Set([
+  'Connecting secure voice…',
+  'Allow the microphone once — Genie will keep listening for this chat.',
+  'Genie is about to say hello…',
+  'Your turn — talk when you’re ready. Genie will wait.',
+  'Got it — Genie is thinking…',
+])
 
 const greetingForInterviewMode = (mode: InterviewMode) =>
   mode === 'chat' ? interviewChatGreeting : interviewQuickGreeting
@@ -3316,6 +3333,7 @@ function App() {
   const [interviewVoiceLoop, setInterviewVoiceLoop] = useState(false)
   const [isInterviewSpeaking, setIsInterviewSpeaking] = useState(false)
   const [isInterviewThinking, setIsInterviewThinking] = useState(false)
+  const [isLampMicLive, setIsLampMicLive] = useState(false)
   const [interviewMessages, setInterviewMessages] = useState<InterviewMessage[]>([
     { role: 'assistant', content: interviewQuickGreeting },
   ])
@@ -3998,6 +4016,20 @@ function App() {
     return `${amount < 0 ? '−' : ''}$${Math.abs(amount).toFixed(2)}`
   }
   const showProofPanel = isRecipientView || isGenerating || isLoadingSharedCard || Boolean(card)
+  const lampGeniePhase: LampGeniePhase | null =
+    interviewMode !== 'chat' || !showCardInterview || !interviewVoiceLoop || interviewComplete
+      ? null
+      : isInterviewSpeaking
+        ? 'speaking'
+        : interviewMessages.length === 0
+          ? 'preparing'
+          : isInterviewThinking
+            ? 'thinking'
+            : isLampMicLive
+              ? isInterviewListening
+                ? 'listening'
+                : 'your-turn'
+              : 'get-ready'
   const showSendActions = step === 'front' || step === 'inside'
   const showReviseButton = showSendActions
   const coverDetailChanges = card?.coverDetails
@@ -5824,6 +5856,7 @@ function App() {
     setIsInterviewSpeaking(false)
     setIsInterviewListening(false)
     setIsInterviewThinking(false)
+    setIsLampMicLive(false)
   }
 
   const startLampGenieRealtimeSession = () => {
@@ -5877,6 +5910,12 @@ function App() {
                 return
               }
               setIsInterviewListening(listening)
+            },
+            onMicLive: (live) => {
+              if (lampGenieRealtimeGenerationRef.current !== generation) {
+                return
+              }
+              setIsLampMicLive(live)
             },
             onSpeaking: (speaking) => {
               if (lampGenieRealtimeGenerationRef.current !== generation) {
@@ -5972,7 +6011,7 @@ function App() {
               if (lampGenieRealtimeGenerationRef.current !== generation) {
                 return
               }
-              setInterviewNotice('Listening… talk naturally — Genie will reply by voice.')
+              setInterviewNotice('Genie is about to say hello…')
             },
             onDisconnected: () => {
               if (lampGenieRealtimeGenerationRef.current !== generation) {
@@ -5981,6 +6020,7 @@ function App() {
               interviewVoiceLoopRef.current = false
               setInterviewVoiceLoop(false)
               setIsInterviewListening(false)
+              setIsLampMicLive(false)
               interviewSpeakingRef.current = false
               setIsInterviewSpeaking(false)
               setIsInterviewThinking(false)
@@ -13354,6 +13394,36 @@ function App() {
               >
                 ×
               </button>
+              {lampGeniePhase && (
+                <div className={`lamp-genie-status is-${lampGeniePhase}`} role="status" aria-live="polite">
+                  <span className="lamp-genie-status-art" aria-hidden="true">
+                    {lampGeniePhase === 'preparing' && <img src={loaderWishImageUrl} alt="" />}
+                    {lampGeniePhase === 'speaking' && (
+                      <span className="lamp-genie-wave">
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    )}
+                    {lampGeniePhase === 'thinking' && <span className="genie-thinking-spinner" />}
+                    {(lampGeniePhase === 'get-ready' ||
+                      lampGeniePhase === 'your-turn' ||
+                      lampGeniePhase === 'listening') && (
+                      <span className="lamp-genie-mic">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="3" width="6" height="11" rx="3" />
+                          <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                  <span className="lamp-genie-status-text">
+                    <strong>{lampGeniePhaseCopy[lampGeniePhase].title}</strong>
+                    <span>{lampGeniePhaseCopy[lampGeniePhase].hint}</span>
+                  </span>
+                </div>
+              )}
               <div className="card-interview-thread" aria-live="polite" ref={interviewThreadRef}>
                 {interviewMessages.map((entry, index) => (
                   <div
@@ -13380,7 +13450,7 @@ function App() {
                     </div>
                   )}
                 {((isInterviewing && !isInterviewSpeaking) ||
-                  (interviewMode === 'chat' && isInterviewThinking)) && (
+                  (interviewMode === 'chat' && isInterviewThinking && !lampGeniePhase)) && (
                     <div className="card-interview-bubble is-assistant is-thinking" role="status">
                       <span className="card-interview-role">
                         {interviewMode === 'chat' ? 'Genie' : 'Ask Genie'}
@@ -13415,7 +13485,11 @@ function App() {
                     }
                   }}
                   placeholder={
-                    isInterviewListening
+                    lampGeniePhase === 'preparing'
+                      ? 'Genie will say hello first…'
+                      : lampGeniePhase === 'your-turn'
+                        ? 'Talk now — or type your reply here.'
+                        : isInterviewListening
                       ? 'Genie is listening. Pause when you finish a thought — or type here.'
                       : isInterviewSpeaking
                         ? 'Genie is speaking…'
@@ -13557,7 +13631,7 @@ function App() {
                   )}
                 </div>
               )}
-              {interviewNotice && (
+              {interviewNotice && !(lampGeniePhase && routineLampGenieNotices.has(interviewNotice)) && (
                 <p
                   className={`card-interview-notice${
                     interviewComplete

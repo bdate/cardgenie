@@ -545,6 +545,143 @@
   background: rgba(63, 155, 145, 0.14);
 }
 
+.lamp-genie-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 34px;
+  border: 1px solid rgba(245, 158, 51, 0.35);
+  border-radius: 16px;
+  padding: 10px 14px;
+  color: var(--gcu-ink);
+  background: var(--gcu-cream);
+  transition: background 220ms ease, color 220ms ease, border-color 220ms ease;
+}
+
+.lamp-genie-status.is-your-turn,
+.lamp-genie-status.is-listening {
+  border-color: var(--gcu-dark-teal);
+  color: #fff;
+  background: var(--gcu-dark-teal);
+}
+
+.lamp-genie-status-art {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+
+.lamp-genie-status-art img {
+  width: 34px;
+  height: 56px;
+  object-fit: contain;
+  animation: wishGlow 1.6s ease-in-out infinite;
+}
+
+.lamp-genie-status-text {
+  display: grid;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.lamp-genie-status-text strong {
+  font-size: 1rem;
+}
+
+.lamp-genie-status-text span {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.lamp-genie-wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+}
+
+.lamp-genie-wave i {
+  width: 5px;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--gcu-dark-teal);
+  animation: lampGenieWave 900ms ease-in-out infinite;
+}
+
+.lamp-genie-wave i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.lamp-genie-wave i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.lamp-genie-wave i:nth-child(4) {
+  animation-delay: 450ms;
+}
+
+.lamp-genie-mic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--gcu-dark-teal);
+  background: rgba(63, 155, 145, 0.14);
+}
+
+.is-your-turn .lamp-genie-mic,
+.is-listening .lamp-genie-mic {
+  color: var(--gcu-dark-teal);
+  background: #fff;
+}
+
+.is-your-turn .lamp-genie-mic::after,
+.is-listening .lamp-genie-mic::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 3px solid var(--gcu-orange);
+  border-radius: 50%;
+  animation: lampGenieMicPulse 1.4s ease-out infinite;
+}
+
+.is-listening .lamp-genie-mic::after {
+  animation-duration: 0.8s;
+}
+
+@keyframes lampGenieWave {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes lampGenieMicPulse {
+  from {
+    opacity: 1;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp-genie-wave i,
+  .lamp-genie-mic::after,
+  .lamp-genie-status-art img {
+    animation: none;
+  }
+}
+
 .card-interview-thread {
   display: grid;
   gap: 10px;
