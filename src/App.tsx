@@ -419,6 +419,13 @@ const coverAnimationCreditCost = 3
 const aiCopyCost = 1
 const printCardCreditCost = 10
 const printCardPriceUsd = 5
+const generationSteps = [
+  { label: 'Writing your message', until: 30 },
+  { label: 'Painting the cover', until: 85 },
+  { label: 'Almost ready', until: Infinity },
+]
+const generationProgressCeiling = 95
+const generationProgressTimeConstantMs = 22000
 const usStateOptions = [
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
@@ -3126,7 +3133,7 @@ function App() {
   const [hasViewedInside, setHasViewedInside] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showCompletionNote, setShowCompletionNote] = useState(false)
-  const [activeGenerationStep, setActiveGenerationStep] = useState(0)
+  const [generationProgress, setGenerationProgress] = useState(0)
   const [imageRefinement, setImageRefinement] = useState('')
   const [coverRefinementMode, setCoverRefinementMode] = useState<CoverRefinementMode>('revise')
   const [copyRefinement, setCopyRefinement] = useState('')
@@ -3702,15 +3709,8 @@ function App() {
   const prefersPhotoSave = useMemo(() => isMobileDevice(), [])
   const printCoverSaveLabel = 'Save print cover'
   const printInsideSaveLabel = 'Save print inside'
-  const generationLines = useMemo(
-    () => [
-      'Designing the card cover.',
-      `Writing a ${details.tone.toLowerCase()} note.`,
-      'Blending art with your story.',
-      'Sealing the digital envelope.',
-    ],
-    [details.tone],
-  )
+  const generationStepIndex = generationSteps.findIndex((entry) => generationProgress < entry.until)
+  const activeGenerationStep = generationStepIndex === -1 ? generationSteps.length - 1 : generationStepIndex
   const filledDeliveryDestinations = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
   const plannedRecipientCount = Math.max(1, filledDeliveryDestinations.length)
   const currentSendCreditCost = getSendCreditCost(plannedRecipientCount)
@@ -4800,15 +4800,19 @@ function App() {
 
   useEffect(() => {
     if (!isGenerating) {
+      setGenerationProgress(0)
       return
     }
 
+    // The server doesn't report real progress, so ease toward (never reach) 100% over a typical run.
+    const startedAt = Date.now()
     const timer = window.setInterval(() => {
-      setActiveGenerationStep((current) => (current + 1) % generationLines.length)
-    }, 4400)
+      const elapsed = Date.now() - startedAt
+      setGenerationProgress(generationProgressCeiling * (1 - Math.exp(-elapsed / generationProgressTimeConstantMs)))
+    }, 250)
 
     return () => window.clearInterval(timer)
-  }, [generationLines.length, isGenerating])
+  }, [isGenerating])
 
   useEffect(() => {
     if (!isGenerating || !window.matchMedia('(max-width: 980px)').matches) {
@@ -6222,7 +6226,6 @@ function App() {
     setHasViewedInside(false)
     setIsGenerating(false)
     setShowCompletionNote(false)
-    setActiveGenerationStep(0)
     setImageRefinement('')
     setCoverRefinementMode('revise')
     setCopyRefinement('')
@@ -8381,7 +8384,6 @@ function App() {
     setIsGenerating(true)
     showActionFeedback('Creating your card…')
     setShowCompletionNote(false)
-    setActiveGenerationStep(0)
     setShowEditor(false)
     setShowPolishDialog(false)
     setHasAcceptedRevision(false)
@@ -13983,7 +13985,35 @@ function App() {
                 </svg>
               </div>
               <span className="loader-kicker">Creating a little magic</span>
-              <h3 key={generationLines[activeGenerationStep]}>{generationLines[activeGenerationStep]}</h3>
+              <h3 key={activeGenerationStep}>{generationSteps[activeGenerationStep].label}…</h3>
+              <div
+                className="generation-progress"
+                role="progressbar"
+                aria-label="Card progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(generationProgress)}
+              >
+                <div className="generation-progress-fill" style={{ width: `${generationProgress}%` }} />
+              </div>
+              <div className="generation-progress-meta">
+                <span>
+                  Step {activeGenerationStep + 1} of {generationSteps.length}
+                </span>
+                <span>{Math.round(generationProgress)}%</span>
+              </div>
+              <ul className="generation-steps">
+                {generationSteps.map((entry, index) => (
+                  <li
+                    key={entry.label}
+                    className={
+                      index < activeGenerationStep ? 'is-done' : index === activeGenerationStep ? 'is-active' : ''
+                    }
+                  >
+                    {entry.label}
+                  </li>
+                ))}
+              </ul>
               <p className="loader-note">This could take up to a minute. You can leave and come back, the card will be waiting for you.</p>
             </div>
           )}

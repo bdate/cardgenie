@@ -1662,6 +1662,76 @@ textarea:focus {
   box-shadow: 0 0 0 6px rgba(245, 158, 51, 0.16);
 }
 
+.generation-progress {
+  width: min(520px, 100%);
+  height: 12px;
+  margin: 18px 0 6px;
+  border-radius: 999px;
+  background: rgba(143, 208, 201, 0.28);
+  overflow: hidden;
+}
+
+.generation-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gcu-dark-teal), var(--gcu-orange));
+  transition: width 250ms linear;
+}
+
+.generation-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  width: min(520px, 100%);
+  color: var(--gcu-dark-grey);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.creative-loader .generation-steps {
+  margin-top: 14px;
+}
+
+.creative-loader .generation-steps li::before {
+  top: 15px;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 2px solid rgba(63, 155, 145, 0.4);
+  background: none;
+}
+
+.creative-loader .generation-steps li.is-active::before {
+  top: 15px;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 2px solid var(--gcu-orange);
+  border-top-color: transparent;
+  background: none;
+  box-shadow: none;
+  animation: actionFeedbackSpin 900ms linear infinite;
+}
+
+.creative-loader .generation-steps li.is-done {
+  opacity: 1;
+}
+
+.creative-loader .generation-steps li.is-done::before {
+  content: "✓";
+  top: 13px;
+  left: 13px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--gcu-dark-teal);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
 .completion-note {
   margin: 0 0 14px;
   border: 1px solid rgba(245, 158, 51, 0.28);
