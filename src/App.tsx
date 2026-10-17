@@ -13999,6 +13999,8 @@ function App() {
                 {showEditor && <h2>Revise your card</h2>}
               </div>
               {!isGenerating &&
+                !isRefiningImage &&
+                !isRefiningCopy &&
                 card &&
                 showEditor &&
                 editorHasChanges && (
@@ -14374,7 +14376,7 @@ function App() {
                 (step === 'front' || step === 'inside' || step === 'opening' || step === 'cardOpening') && (
                 <p className="cover-watermark-note">
                   <span>A preview watermark is shown on the cover.</span>
-                  <span>It will not appear on the card sent to your recipient.</span>
+                  <span>It will not appear on the card sent.</span>
                 </p>
               )}
               {showSendActions && isRecipientView && (
@@ -14400,7 +14402,7 @@ function App() {
                         <>
                           <span className="recipient-keepsake-kicker">Want this card mailed to you?</span>
                           <h3>Just $5, shipping included.</h3>
-                          <p>We’ll print your card from {senderLabel} on premium cardstock and mail it to you.</p>
+                          <p>We’ll print your card from {senderLabel} on premium cardstock and mail it.</p>
                           {keepsakeResult === 'cancel' && !showKeepsakeForm && (
                             <p className="recipient-keepsake-note" role="status">
                               Checkout canceled. No payment was taken.
@@ -14536,7 +14538,11 @@ function App() {
                       </p>
                     ) : thankYouAvailable ? (
                       <>
-                        <p>Send a short thank-you to {senderLabel}. It’s free, and you can only send one.</p>
+                        <p>
+                          Send a short thank you to {senderLabel}.
+                          <br />
+                          It’s free!
+                        </p>
                         <div className="thank-you-presets" role="radiogroup" aria-label="Thank-you message">
                           {thankYouPresetsState.map((preset) => (
                             <label key={preset.id} className={selectedThankYouPreset === preset.id ? 'is-selected' : ''}>
@@ -14658,7 +14664,6 @@ function App() {
               {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form className="delivery-panel" onSubmit={deliverCard}>
                 <div>
                   <span className="delivery-kicker">Ready to send this card</span>
-                  <p>Send by email or text after you approve the card.</p>
                 </div>
                 <div className="mode-toggle delivery-methods choice-radios" role="radiogroup" aria-label="Delivery method">
                   <button
@@ -15530,7 +15535,7 @@ function App() {
                           {showCoverWatermark ? (
                             <span className="cover-watermark-note editor-watermark-note">
                               <span>A preview watermark is shown on the cover.</span>
-                              <span>It will not appear on the card sent to your recipient.</span>
+                              <span>It will not appear on the card sent.</span>
                             </span>
                           ) : (
                             <span className="zoom-hint">Hover over the cover to enlarge</span>
@@ -15742,7 +15747,7 @@ function App() {
                         </div>
                       )}
                     </div>
-                    {editorHasChanges && (
+                    {editorHasChanges && !isRefiningImage && !isRefiningCopy && (
                       <div className="editor-accept-bar">
                         <button className="primary-button" type="button" onClick={acceptEditorChanges}>
                           Accept changes
