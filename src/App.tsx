@@ -6206,6 +6206,15 @@ function App() {
     setIsInterviewing(false)
     setInterviewMode('quick')
 
+    resetCardAndForm()
+
+    window.setTimeout(() => {
+      document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }
+
+  // Clears the card and form only; leaves the Genie chat and mic alone so the lamp can start one right after.
+  const resetCardAndForm = () => {
     setDetails(initialDetails)
     setSelectedRecipientId('')
     autoFilledRecipientRef.current = null
@@ -6262,10 +6271,6 @@ function App() {
       // Ignore storage failures.
     }
     clearInterviewSession()
-
-    window.setTimeout(() => {
-      document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 60)
   }
 
   const clearCreateCardInputs = startNewCard
@@ -6286,7 +6291,7 @@ function App() {
     ) {
       return
     }
-    resetToNewCard()
+    resetCardAndForm()
     openCardInterview('chat')
   }
 

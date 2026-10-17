@@ -167,6 +167,19 @@ const newSessionId = () => {
   return `lamp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+const describeMicTrack = (track: MediaStreamTrack) => {
+  const settings = track.getSettings?.() || {}
+  return [
+    `state=${track.readyState}`,
+    `enabled=${track.enabled}`,
+    `deviceMuted=${track.muted}`,
+    settings.sampleRate ? `rate=${settings.sampleRate}` : '',
+    settings.echoCancellation !== undefined ? `echo=${settings.echoCancellation}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
 /**
  * Start a Lamp Genie Realtime voice session.
  * Mic permission is requested here once; never again until disconnect().
@@ -365,6 +378,8 @@ export const connectLampGenieRealtime = async (options: {
       unmuteTimer = 0
       if (!interviewComplete && !cleanedUp && !genieSpeaking && !awaitingOutputAudioEnd) {
         setMicEnabled(true)
+        const track = localStream?.getAudioTracks()[0]
+        recordTurn('system', `mic_on ${track ? describeMicTrack(track) : 'no-track'} pc=${pc?.connectionState || 'none'}`)
         handlers.onNotice?.('Your turn — talk when you’re ready. Genie will wait.')
       }
     }, reason === 'audio_ended' ? 1600 : 2000)
@@ -588,18 +603,22 @@ export const connectLampGenieRealtime = async (options: {
         !micIsEnabled() ||
         Date.now() < ignoreUserUntil
       ) {
+        recordTurn('system', 'vad_speech_started_ignored')
         clearPhantomAudio()
         return
       }
+      recordTurn('system', 'vad_speech_started')
       handlers.onListening?.(true)
       userBuffer = ''
       return
     }
     if (type === 'input_audio_buffer.speech_stopped') {
       if (genieSpeaking || awaitingOutputAudioEnd || Date.now() < ignoreUserUntil) {
+        recordTurn('system', 'vad_speech_stopped_ignored')
         clearPhantomAudio()
         return
       }
+      recordTurn('system', 'vad_speech_stopped')
       handlers.onListening?.(false)
       setThinking(true)
       handlers.onNotice?.('Got it — Genie is thinking…')
@@ -749,6 +768,12 @@ export const connectLampGenieRealtime = async (options: {
   } catch {
     handlers.onError?.('Microphone permission is needed to talk to Genie.')
     throw new Error('Microphone permission denied.')
+  }
+  for (const track of localStream.getAudioTracks()) {
+    recordTurn('system', `mic_open ${describeMicTrack(track)}`)
+    track.addEventListener('mute', () => recordTurn('system', 'mic_track_muted_by_device'))
+    track.addEventListener('unmute', () => recordTurn('system', 'mic_track_unmuted_by_device'))
+    track.addEventListener('ended', () => recordTurn('system', 'mic_track_ended'))
   }
 
   const tokenResponse = await fetch(options.apiUrl('/api/realtime/session'), {
