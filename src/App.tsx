@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   connectLampGenieRealtime,
   LAMP_GENIE_COMPLETE_LINE,
@@ -420,6 +421,23 @@ const styleOptions = [
   'Bold graphic poster art',
   'Vintage greeting card illustration',
 ]
+const styleSampleFiles: Record<string, string> = {
+  'Photorealistic warm portrait photography': 'style-photorealistic.jpg',
+  'Premium editorial illustration': 'style-editorial.jpg',
+  'Watercolor greeting card illustration': 'style-watercolor.jpg',
+  'Comic book art': 'style-comic.jpg',
+  'Whimsical storybook illustration': 'style-storybook.jpg',
+  'Animated 3D family-film style': 'style-3d-film.jpg',
+  'Minimal modern flat vector art': 'style-vector.jpg',
+  'Elegant botanical paper-cut style': 'style-papercut.jpg',
+  'Cozy hand-drawn colored pencil': 'style-pencil.jpg',
+  'Retro travel poster style': 'style-poster.jpg',
+  'Claymation-inspired 3D scene': 'style-claymation.jpg',
+  'Luxury foil and paper collage': 'style-collage.jpg',
+  'Soft pastel nursery-book illustration': 'style-nursery.jpg',
+  'Bold graphic poster art': 'style-graphic.jpg',
+  'Vintage greeting card illustration': 'style-vintage.jpg',
+}
 const initialCreditBalance = 2
 const phoneVerifyBonusCredits = 2
 const creditStorageKey = 'cardGenieCredits'
@@ -6728,6 +6746,67 @@ function App() {
     updateDetails('occasion', occasionParam)
     applyInvitationDefaults(occasionParam)
   }, [])
+
+  useEffect(() => {
+    if (isRecipientView) return
+    const params = new URLSearchParams(window.location.search)
+    const styleParam = params.get('style')?.trim().toLowerCase()
+    if (!styleParam) return
+    params.delete('style')
+    const nextQuery = params.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`)
+    const match = styleOptions.find((style) => style.toLowerCase() === styleParam)
+    if (match) {
+      updateDetails('imageStyle', match)
+    }
+  }, [])
+
+  const [showStylePicker, setShowStylePicker] = useState(false)
+  const [styleNotice, setStyleNotice] = useState('')
+  const styleNoticeTimerRef = useRef<number | null>(null)
+
+  const openStylePicker = () => {
+    setShowStylePicker(true)
+    window.history.pushState({ ...(window.history.state || {}), cardGenieStylePicker: true }, '')
+  }
+
+  // Closing goes through history so the phone's back gesture and the × button behave the same.
+  const closeStylePicker = () => {
+    if (window.history.state?.cardGenieStylePicker) {
+      window.history.back()
+    } else {
+      setShowStylePicker(false)
+    }
+  }
+
+  const pickImageStyle = (style: string) => {
+    updateDetails('imageStyle', style)
+    setStyleNotice(
+      style === styleOptions[0] ? 'Genie will choose the best style for this card.' : `Image style set to ${style}.`,
+    )
+    if (styleNoticeTimerRef.current) {
+      window.clearTimeout(styleNoticeTimerRef.current)
+    }
+    styleNoticeTimerRef.current = window.setTimeout(() => setStyleNotice(''), 4000)
+    window.setTimeout(closeStylePicker, 250)
+  }
+
+  useEffect(() => {
+    if (!showStylePicker) return
+    const handlePop = () => setShowStylePicker(false)
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeStylePicker()
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('popstate', handlePop)
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('popstate', handlePop)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [showStylePicker])
 
   const recipientSuggestions = useMemo(() => {
     const query = details.recipientName.trim().toLowerCase()
@@ -13879,7 +13958,17 @@ function App() {
           <div className="style-field">
             <div className="style-field-header">
               <label htmlFor="image-style">Image style</label>
-              <a className="style-lookbook-link" href="/styles/" target="_blank" rel="noreferrer">
+              <a
+                className="style-lookbook-link"
+                href="/styles/"
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+                  event.preventDefault()
+                  openStylePicker()
+                }}
+              >
                 See what's possible
               </a>
             </div>
@@ -13892,6 +13981,58 @@ function App() {
                 <option key={style}>{style}</option>
               ))}
             </select>
+            {styleNotice && (
+              <p className="style-picked-notice" role="status">
+                {styleNotice}
+              </p>
+            )}
+            {showStylePicker && createPortal(
+              <div className="style-picker-backdrop" onClick={closeStylePicker}>
+                <div
+                  className="style-picker"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="style-picker-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="style-picker-header">
+                    <h2 id="style-picker-title">Pick an image style</h2>
+                    <button className="style-picker-close" type="button" aria-label="Close" onClick={closeStylePicker}>
+                      ×
+                    </button>
+                  </div>
+                  <div className="style-picker-grid">
+                    {styleOptions.map((style) => {
+                      const isSelected = details.imageStyle === style
+                      const sample = styleSampleFiles[style]
+                      return (
+                        <button
+                          key={style}
+                          type="button"
+                          className={`style-picker-option${isSelected ? ' is-selected' : ''}${sample ? '' : ' is-ai'}`}
+                          aria-pressed={isSelected}
+                          onClick={() => pickImageStyle(style)}
+                        >
+                          {sample ? (
+                            <img src={`${import.meta.env.BASE_URL}styles/${sample}`} alt="" loading="lazy" />
+                          ) : (
+                            <span className="style-picker-ai-art" aria-hidden="true">
+                              <img src={`${import.meta.env.BASE_URL}logo-mark.png`} alt="" />
+                            </span>
+                          )}
+                          <span className="style-picker-name">
+                            {sample ? style : 'AI chooses'}
+                            {!sample && <small>Genie picks the style that fits your card best.</small>}
+                          </span>
+                          {isSelected && <span className="style-picker-check">✓ Selected</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
           </div>
 
           <label className="key-details-field">
