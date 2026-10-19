@@ -37,12 +37,14 @@ type GeneratedCard = {
 
 const coverDetailFields: Array<[keyof CardDetails, string]> = [
   ['recipientName', 'Recipient'],
-  ['recipientType', 'Relation'],
+  ['recipientType', 'Who they are to you'],
   ['occasion', 'Occasion'],
   ['tone', 'Tone'],
   ['imageStyle', 'Image style'],
-  ['keyDetails', 'Personal details'],
+  ['keyDetails', 'What to say or show'],
 ]
+const relationFieldLabel = 'Who is this person to you?'
+const keyDetailsFieldLabel = 'What should the card say or show?'
 
 type SharedCard = {
   id: string
@@ -1820,8 +1822,8 @@ const getCreateCardValidationMessage = (field: Element | null) => {
     }
   }
 
-  if (labelText === 'Personal details') {
-    return 'Please add a few personal details so we can create the card.'
+  if (labelText === keyDetailsFieldLabel) {
+    return 'Please tell Genie what the card should say or show.'
   }
   if (labelText === 'From') {
     return 'Please add who the card is from.'
@@ -1829,8 +1831,8 @@ const getCreateCardValidationMessage = (field: Element | null) => {
   if (labelText === 'Occasion') {
     return 'Please add an occasion for the card.'
   }
-  if (labelText === 'Relation') {
-    return 'Please add the relation (mom, friend, coworker, etc.).'
+  if (labelText === relationFieldLabel) {
+    return 'Please add who this person is to you (my daughter, my best friend, etc.).'
   }
   if (labelText) {
     return `Please fill in ${labelText}.`
@@ -11636,13 +11638,13 @@ function App() {
                                       />
                                     </label>
                                     <label>
-                                      Relation
+                                      {relationFieldLabel}
                                       <input
                                         value={recipientDraft.relation}
                                         onChange={(event) =>
                                           setRecipientDraft({ ...recipientDraft, relation: event.target.value })
                                         }
-                                        placeholder="mom, friend, coworker"
+                                        placeholder="my daughter, my best friend"
                                       />
                                     </label>
                                   </div>
@@ -13391,7 +13393,10 @@ function App() {
           <div className="panel-heading">
             <div>
               <h2>Tell us about the card</h2>
-              <p>Fill in the fields below, or tap the lamp to chat with Genie.</p>
+              <p>
+                Fill in the fields below, or tap the lamp to chat with Genie. Genie combines your message, ideas, and
+                optional photos into one personal card.
+              </p>
             </div>
           </div>
 
@@ -13851,11 +13856,11 @@ function App() {
             </label>
 
             <label>
-              Relation
+              {relationFieldLabel}
               <input
                 value={details.recipientType}
                 onChange={(event) => updateDetails('recipientType', event.target.value)}
-                placeholder="Example: mom, spouse, friend, coworker"
+                placeholder="Example: my daughter, my best friend"
               />
             </label>
           </div>
@@ -13889,26 +13894,31 @@ function App() {
             </select>
           </div>
 
-          <label>
-            Personal details
+          <label className="key-details-field">
+            {keyDetailsFieldLabel}
+            <span className="field-help">
+              {isInvitationCard
+                ? 'Share the event details. Genie puts them inside the invitation.'
+                : 'Share a message, describe a picture, or both. Genie takes it from there.'}
+            </span>
             <textarea
               required
-              rows={9}
+              rows={7}
               value={details.keyDetails}
               onChange={(event) => updateDetails('keyDetails', event.target.value)}
               placeholder={
                 isInvitationCard
-                  ? 'What you\u2019re celebrating, who\u2019s hosting, the date and time, the place, and how guests should RSVP. Genie puts these details inside the invitation.\n\nTo put people on the cover, describe how they look. Looks shape the artwork only.'
-                  : 'Add memories, interests, stories, or scene ideas for the card.\n\nTo put people on the cover, describe how they look (tall, green eyes, blonde hair, etc.). Looks shape the artwork only \u2014 they won\u2019t appear in the inside message.'
+                  ? 'What you\u2019re celebrating, who\u2019s hosting, the date and time, the place, and how guests should RSVP.'
+                  : 'Example: Wish my daughter a happy birthday, tell her how proud I am, and show her playing pickleball at the beach.'
               }
             />
           </label>
 
           <div className="reference-photos-field">
-            <span className="field-title">Reference photos (optional)</span>
+            <span className="field-title">Add photos of people to include (optional)</span>
             <p className="field-help" id="reference-photos-help">
-              Use a clear, well-lit close-up of each person you want on the card. Group shots can inspire the
-              scene, but faces match more closely from close-up photos.
+              Want someone you know in the artwork? Add a clear close-up of each person, and Genie will draw
+              them into the scene you described. No photo? Describe how they look above.
             </p>
             {referencePhotos.length > 0 && (
               <ul className="reference-photo-list">
