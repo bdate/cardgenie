@@ -11407,7 +11407,7 @@ function App() {
             <div className="panel-heading">
               <div>
                 <h2>My account</h2>
-                <p>Credits, cards, and sends for this phone number.</p>
+                <p>Your cards, credits, and saved details.</p>
                 <p className="account-signed-in">
                   Signed in as {formatPhoneNumberDisplay(accountSession.phoneE164)} ·{' '}
                   <button className="text-action-link" type="button" onClick={() => void signOutAccount()}>
@@ -11618,7 +11618,7 @@ function App() {
               <div className="account-block account-profile-block">
                 <h3>Your details</h3>
                 <p className="field-help">
-                  Used for greetings, order confirmations, and as the return address on printed cards.
+                  Saved so you don’t have to type them each time.
                 </p>
                 <form className="account-profile-form" onSubmit={(event) => void saveAccountProfile(event)}>
                   <label>
@@ -11739,8 +11739,7 @@ function App() {
               <div className="account-block account-recipients-block">
                 <h3>Your recipients</h3>
                 <p className="field-help">
-                  Saved automatically when you send or print a card. Pick one in the “To” field to fill in their
-                  details.
+                  Saved automatically when you send a card. Pick one in the “To” field to fill in their details.
                 </p>
                 {recipientNotice && <div className="field-notice">{recipientNotice}</div>}
                 {savedRecipients.length === 0 ? (
