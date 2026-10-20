@@ -1116,6 +1116,107 @@ commonOccasions.push(...invitationOccasions)
 
 const invitationOccasionPattern = /\binvit(?:e|es|ation|ations)\b|\bsave[\s-]+the[\s-]+date\b/i
 
+const defaultKeyDetailsExample =
+  'Example: Thank our neighbor Linda for watching our dog Biscuit all week. Show Biscuit napping on her porch swing.'
+
+const keyDetailsExamples: { pattern: RegExp; example: string }[] = [
+  {
+    pattern: /\bpet\b.*\b(sympathy|loss|memorial)\b|\b(sympathy|loss)\b.*\bpet\b/i,
+    example:
+      'Example: Tell the Parkers we’re so sorry about Max, the happiest golden retriever on the block. Show him running through a sunny field.',
+  },
+  {
+    pattern: /\bwork\s+anniversary\b|\bpromotion\b|\bnew\s+job\b|\bwelcome\s+to\s+the\s+team\b/i,
+    example:
+      'Example: Congratulate Priya on her new job at the children’s hospital. Show her walking in on day one with a coffee and a big smile.',
+  },
+  {
+    pattern: /\bb(irth)?day\b|\bbday\b|\bturning\s+\d+/i,
+    example:
+      'Example: Happy 70th to my dad. Thank him for teaching me to fish, and show him on his old green boat at sunrise with a coffee in hand.',
+  },
+  {
+    pattern: /\bthank/i,
+    example: defaultKeyDetailsExample,
+  },
+  {
+    pattern: /\banniversary\b/i,
+    example:
+      'Example: Celebrate 25 years with my wife. Mention our first date at the taco truck, and show us dancing in the kitchen.',
+  },
+  {
+    pattern: /\bget\s+well\b|\bfeel\s+better\b|\brecover/i,
+    example:
+      'Example: Tell my coworker Sam we miss him and the office is too quiet. Show his desk plant waiting for him with a “get well soon” sign.',
+  },
+  {
+    pattern: /\bsympathy\b|\bcondolence|\bloss\b|\bmemorial\b|\bpassing\b/i,
+    example:
+      'Example: Let Maria know we’re thinking of her and remember her mom’s lemon cake at every party. Show a quiet garden with lemon trees.',
+  },
+  {
+    pattern: /\bgraduat/i,
+    example:
+      'Example: Congratulate my son on finishing nursing school. Tell him how proud we are, and show him in scrubs tossing his cap.',
+  },
+  {
+    pattern: /\bwedding\b|\bengage/i,
+    example:
+      'Example: Congratulate Jess and Andre, who met in a rock-climbing class. Wish them a lifetime of adventures, and show them on a mountain top at sunset.',
+  },
+  {
+    pattern: /\bbaby\b|\bbirth\b|\bnewborn\b/i,
+    example:
+      'Example: Welcome baby Theo to the Nguyen family. Show a tiny baby in a fox onesie with his big sister peeking in.',
+  },
+  {
+    pattern: /\bretire/i,
+    example:
+      'Example: Congratulate Linda on 32 years of teaching third grade. Thank her for the students she inspired, and show her in a hammock with a stack of books.',
+  },
+  {
+    pattern: /\bmother|\bmom\b|\bmum\b/i,
+    example:
+      'Example: Happy Mother’s Day to my mom. Thank her for the Sunday pancakes and the advice I still use, and show her in her garden with her roses.',
+  },
+  {
+    pattern: /\bfather|\bdad\b/i,
+    example:
+      'Example: Happy Father’s Day to my dad. Thank him for every Saturday at the ballpark, and show him at the grill in his favorite Giants cap.',
+  },
+  {
+    pattern: /\bvalentine|\blove\s+you\b/i,
+    example:
+      'Example: Tell my husband I’d still pick him every time. Show the two of us sharing spaghetti at the little Italian place where we met.',
+  },
+  {
+    pattern: /\bchristmas\b|\bholiday|\bhanukkah\b|\bnew\s+year\b/i,
+    example:
+      'Example: Wish the Johnson family a cozy holiday season from all of us. Show our two kids and the dog in matching sweaters by the tree.',
+  },
+  {
+    pattern: /\bteacher\b|\bnurse\b|\bappreciation\b/i,
+    example:
+      'Example: Thank Ms. Rivera for helping my daughter fall in love with reading this year. Show a classroom reading corner full of books and paper stars.',
+  },
+  {
+    pattern: /\bcongrat/i,
+    example:
+      'Example: Congratulate my best friend Dana on finishing her first marathon. Show her crossing the finish line with her arms in the air.',
+  },
+  {
+    pattern: /\bjust\s+because\b|\bthinking\s+of\s+you\b|\bmiss\s+you\b|\bfriendship\b/i,
+    example:
+      'Example: Tell my sister I miss our late-night talks. Show two mugs of cocoa on a cozy porch under the stars.',
+  },
+]
+
+function keyDetailsExampleFor(occasion: string) {
+  const trimmed = occasion.trim()
+  if (!trimmed) return defaultKeyDetailsExample
+  return keyDetailsExamples.find((entry) => entry.pattern.test(trimmed))?.example ?? defaultKeyDetailsExample
+}
+
 const invitationDetailsTemplate = [
   'Celebrating: ',
   'Hosted by: ',
@@ -13473,8 +13574,8 @@ function App() {
             <div>
               <h2>Tell us about the card</h2>
               <p>
-                Fill in the fields below, or tap the lamp to chat with Genie. Genie combines your message, ideas, and
-                optional photos into one personal card.
+                Fill in the fields below. Genie combines your message, ideas, and optional photos into one personal
+                card.
               </p>
             </div>
           </div>
@@ -14040,7 +14141,7 @@ function App() {
             <span className="field-help">
               {isInvitationCard
                 ? 'Share the event details. Genie puts them inside the invitation.'
-                : 'Share a message, describe a picture, or both. Genie takes it from there.'}
+                : 'Share a message, describe a picture, or both.'}
             </span>
             <textarea
               required
@@ -14050,7 +14151,7 @@ function App() {
               placeholder={
                 isInvitationCard
                   ? 'What you\u2019re celebrating, who\u2019s hosting, the date and time, the place, and how guests should RSVP.'
-                  : 'Example: Wish my daughter a happy birthday, tell her how proud I am, and show her playing pickleball at the beach.'
+                  : keyDetailsExampleFor(details.occasion)
               }
             />
           </label>
