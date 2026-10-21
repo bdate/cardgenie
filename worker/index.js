@@ -350,6 +350,9 @@ const buildStyleResemblanceDirection = (imageStyle = '') => {
   return 'The people must be clearly recognizable as the people in the photos, drawn as original greeting-card characters in the selected art style.'
 }
 
+const duplicatePersonGuidance =
+  'Several photos may show the same person (different angles, outfits, or days). Those extra photos are only there to show what that person looks like. Draw each different person exactly once — never show the same person twice on the cover. The number of people on the cover is the number of different people across all photos, not the number of photos, unless the sender explicitly asks for something else.'
+
 const buildAttachedPhotoGuidance = (hasReferenceImages, imageStyle = '') => {
   if (!hasReferenceImages) {
     return ''
@@ -357,11 +360,12 @@ const buildAttachedPhotoGuidance = (hasReferenceImages, imageStyle = '') => {
 
   const styleLine = isPhotorealisticImageStyle(imageStyle)
     ? 'Create an original greeting-card photograph scene in a natural photorealistic style. Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.'
-    : `Restyle those same people into original greeting-card artwork in "${imageStyle || 'the selected illustrated style'}". Keep every face clearly the same person from the photos — same count of people, same ages, hair, glasses, and facial hair. The medium must be unmistakable (${imageStyle || 'illustration'}: brushwork, paint, or drawn line — not a photograph, not photo-real skin texture, and not a lightly filtered photo). Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.`
+    : `Restyle those same people into original greeting-card artwork in "${imageStyle || 'the selected illustrated style'}". Keep every face clearly the same person from the photos — same number of different people, same ages, hair, glasses, and facial hair. The medium must be unmistakable (${imageStyle || 'illustration'}: brushwork, paint, or drawn line — not a photograph, not photo-real skin texture, and not a lightly filtered photo). Do not paste, collage, Polaroid, frame, or print the original photographs onto the card.`
 
   return `
 The attached photos are required likeness references of the actual people and animals for this card — not strangers and not invented faces.
-The people on the cover must clearly be those same people: faces, ages, hair, glasses, facial hair, clothing, and how many people are in the photo.
+The people on the cover must clearly be those same people: faces, ages, hair, glasses, facial hair, clothing, and how many different people appear across the photos.
+${duplicatePersonGuidance}
 ${styleLine}
 `
 }
@@ -377,6 +381,7 @@ ${buildStyleResemblanceDirection(imageStyle)}
 Match their ages, hair, glasses, clothing, distinctive features, and any pets.
 Relationship words such as daughter, son, kids, mom, or dad must not change their ages if the photos show something different. If the photos show adults, draw adults, not children.
 The people and animals from the photos should appear on the cover unless the user asked for a symbolic scene instead.
+${duplicatePersonGuidance}
 Do not copy the photographs onto the card as printed pictures, Polaroids, frames, phone screens, or collages.
 If children appear, depict them fully and modestly clothed as they would on a family greeting card. Never depict nudity.
 `
@@ -407,8 +412,10 @@ If children are included, they must be fully and modestly clothed.
 
 const referenceImageDescriptionPrompt = `These are private family photos for a wholesome greeting card. Write a concise likeness brief an illustrator can follow to keep a clear resemblance.
 
-Count the people. For each person, include: approximate age band (child, teen, young adult, adult, or older adult), hair color and style, facial hair, glasses, complexion, distinctive features, clothing color, and general build.
-If several people appear together, describe them left to right.
+Several photos may show the same person (different angles, outfits, or days). Work out who is the same person across all photos and describe each different person only once, combining what every photo shows about them. Start with "Different people: N" where N counts different people, not photos or appearances.
+For each different person, include: approximate age band (child, teen, young adult, adult, or older adult), hair color and style, facial hair, glasses, complexion, distinctive features, clothing color, and general build.
+If several different people appear, describe them left to right.
+Apply the same rule to pets: the same animal in several photos is one animal.
 For animals, include species, size, coat color, and distinctive markings.
 Mention setting only if it should inspire the card.
 
