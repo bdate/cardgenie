@@ -422,21 +422,21 @@ const styleOptions = [
   'Vintage greeting card illustration',
 ]
 const styleSampleFiles: Record<string, string> = {
-  'Photorealistic warm portrait photography': 'style-photorealistic.jpg',
-  'Premium editorial illustration': 'style-editorial.jpg',
-  'Watercolor greeting card illustration': 'style-watercolor.jpg',
-  'Comic book art': 'style-comic.jpg',
-  'Whimsical storybook illustration': 'style-storybook.jpg',
-  'Animated 3D family-film style': 'style-3d-film.jpg',
-  'Minimal modern flat vector art': 'style-vector.jpg',
-  'Elegant botanical paper-cut style': 'style-papercut.jpg',
-  'Cozy hand-drawn colored pencil': 'style-pencil.jpg',
-  'Retro travel poster style': 'style-poster.jpg',
-  'Claymation-inspired 3D scene': 'style-claymation.jpg',
-  'Luxury foil and paper collage': 'style-collage.jpg',
-  'Soft pastel nursery-book illustration': 'style-nursery.jpg',
-  'Bold graphic poster art': 'style-graphic.jpg',
-  'Vintage greeting card illustration': 'style-vintage.jpg',
+  'Photorealistic warm portrait photography': 'style-photorealistic.webp',
+  'Premium editorial illustration': 'style-editorial.webp',
+  'Watercolor greeting card illustration': 'style-watercolor.webp',
+  'Comic book art': 'style-comic.webp',
+  'Whimsical storybook illustration': 'style-storybook.webp',
+  'Animated 3D family-film style': 'style-3d-film.webp',
+  'Minimal modern flat vector art': 'style-vector.webp',
+  'Elegant botanical paper-cut style': 'style-papercut.webp',
+  'Cozy hand-drawn colored pencil': 'style-pencil.webp',
+  'Retro travel poster style': 'style-poster.webp',
+  'Claymation-inspired 3D scene': 'style-claymation.webp',
+  'Luxury foil and paper collage': 'style-collage.webp',
+  'Soft pastel nursery-book illustration': 'style-nursery.webp',
+  'Bold graphic poster art': 'style-graphic.webp',
+  'Vintage greeting card illustration': 'style-vintage.webp',
 }
 const initialCreditBalance = 2
 const phoneVerifyBonusCredits = 2
@@ -11204,6 +11204,7 @@ function App() {
               <a className="brand-wordmark-link" href="/" aria-label="Card Genie home">
                 <span className="brand-wordmark">Card Genie</span>
               </a>
+              <span className="field-label-hidden"> – personalized digital greeting cards with custom artwork</span>
             </h1>
           </div>
         )}
@@ -13573,8 +13574,8 @@ function App() {
             <div>
               <h2>Tell us about the card</h2>
               <p>
-                Fill in the fields below. Genie combines your message, ideas, and optional photos into one personal
-                card.
+                Fill in the fields below. Genie turns your ideas and optional photos into one-of-a-kind artwork and a
+                personal message.
               </p>
             </div>
           </div>

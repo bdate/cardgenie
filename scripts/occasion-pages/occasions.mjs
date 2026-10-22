@@ -22,15 +22,16 @@ export const STYLE_TAGS = {
 
 const costFaq = {
   q: 'How much does a card cost?',
-  a: 'Creating and previewing a card is free. Sending it by email or text uses 3 credits, and new accounts get enough free credits for their first send. Credit packs start at $5 for 10 credits. A printed card mailed by USPS uses 10 credits.',
+  a: 'Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.',
+  aHtml: 'Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our <a href="/faq/">FAQ</a>.',
 }
 const editFaq = {
   q: 'Can I change the message or the picture?',
-  a: 'Yes. Edit the inside message yourself for free, switch between short, medium, and long versions, or ask Genie to redo the cover for 1 credit.',
+  a: 'Yes. Edit the inside message yourself for free, switch between short, medium, and long versions, or ask Genie to redo the artwork.',
 }
 const likenessFaq = (who) => ({
   q: `Can the card look like ${who}?`,
-  a: 'Yes. Describe how they look, or add a clear close-up photo, and Genie draws them on the cover in the art style you choose. Looks are used for the artwork only — they won’t show up in the inside message.',
+  a: 'Yes. Describe how they look, or add a clear close-up photo, and Genie draws them into the artwork in the art style you choose. Looks are used for the artwork only — they won’t show up in the inside message.',
 })
 
 export const occasions = [
@@ -38,9 +39,9 @@ export const occasions = [
     slug: 'birthday-cards',
     name: 'Birthday',
     occasion: 'Birthday',
-    title: 'Personalized Birthday Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Birthday Cards with Custom Art | Card Genie',
     description:
-      'Make a one-of-a-kind birthday card with custom artwork of the people and things they love, plus a message written just for them. Send by email or text, or mail a printed card.',
+      'Make a one-of-a-kind digital birthday card with custom artwork of the people and things they love, plus a message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized birthday cards, made just for them',
     lede: 'Tell Card Genie a few things about the birthday person — what they love, a favorite memory, how they look — and get a one-of-a-kind card with custom artwork and a heartfelt message in minutes. Send it by email or text, or have it printed on cardstock and mailed.',
     cta: 'Make a birthday card',
@@ -76,9 +77,9 @@ export const occasions = [
     slug: 'thank-you-cards',
     name: 'Thank you',
     occasion: 'Thank you',
-    title: 'Personalized Thank You Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Thank You Cards with Custom Art | Card Genie',
     description:
-      'Say thank you with a one-of-a-kind card: custom artwork of the moment you’re grateful for and a message written just for them. Send by email or text, or mail a printed card.',
+      'Say thank you with a one-of-a-kind digital card: custom artwork of the moment you’re grateful for and a message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized thank you cards that show you noticed',
     lede: 'A great thank-you names the exact thing someone did. Tell Card Genie what happened and who helped, and get a card with custom artwork of that moment and a sincere message in minutes. Send it by email or text, or have it printed and mailed.',
     cta: 'Make a thank you card',
@@ -114,9 +115,9 @@ export const occasions = [
     slug: 'anniversary-cards',
     name: 'Anniversary',
     occasion: 'Anniversary',
-    title: 'Personalized Anniversary Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Anniversary Cards with Custom Art | Card Genie',
     description:
-      'Celebrate your story with a one-of-a-kind anniversary card: custom artwork of the two of you and a message written about your years together. Send by email or text, or mail a printed card.',
+      'Celebrate your story with a one-of-a-kind digital anniversary card: custom artwork of the two of you and a message written about your years together. Send by email or text, or mail a printed card.',
     h1: 'Personalized anniversary cards about your story',
     lede: 'Where you met, the trip you still talk about, the little rituals that are yours alone — tell Card Genie, and get an anniversary card with custom artwork of the two of you and a message that sounds like your relationship. Send it instantly or have it printed and mailed.',
     cta: 'Make an anniversary card',
@@ -142,7 +143,7 @@ export const occasions = [
     faqs: [
       costFaq,
       likenessFaq('the two of us'),
-      { q: 'Can I add a photo of us together?', a: 'Yes. Add clear close-up photos of each person, and Genie uses them as a guide for the cover art in the style you pick. Group shots can inspire the scene, but faces match more closely from close-ups.' },
+      { q: 'Can I add a photo of us together?', a: 'Yes. Add clear close-up photos of each person, and Genie uses them as a guide for the artwork in the style you pick. Group shots can inspire the scene, but faces match more closely from close-ups.' },
       editFaq,
     ],
     closingHeading: 'Make your anniversary card',
@@ -152,9 +153,9 @@ export const occasions = [
     slug: 'get-well-cards',
     name: 'Get well',
     occasion: 'Get well',
-    title: 'Personalized Get Well Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Get Well Cards with Custom Art | Card Genie',
     description:
-      'Lift someone’s spirits with a one-of-a-kind get well card: custom artwork of the things they love and a warm message written just for them. Send by email or text, or mail a printed card.',
+      'Lift someone’s spirits with a one-of-a-kind digital get well card: custom artwork of the things they love and a warm message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized get well cards to brighten their recovery',
     lede: 'Remind them of what they’ll be back to soon — the chess game, the trail, the pickleball court, the grandkids. Card Genie turns a few details into a cheerful card with custom artwork and a caring message, delivered instantly by email or text, or printed and mailed.',
     cta: 'Make a get well card',
@@ -190,9 +191,9 @@ export const occasions = [
     slug: 'sympathy-cards',
     name: 'Sympathy',
     occasion: 'Sympathy',
-    title: 'Personalized Sympathy Cards | Card Genie',
+    title: 'Personalized Digital Sympathy Cards | Card Genie',
     description:
-      'Send a thoughtful sympathy card with gentle custom artwork that honors the person they lost and a sincere message written with care. Send by email or text, or mail a printed card.',
+      'Send a thoughtful digital sympathy card with gentle custom artwork that honors the person they lost and a sincere message written with care. Send by email or text, or mail a printed card.',
     h1: 'Personalized sympathy cards, written with care',
     lede: 'When the right words are hard to find, Card Genie can help. Share a memory or something the person loved, and get a gentle card with custom artwork and a sincere, comforting message. Send it by email or text, or have it printed and mailed.',
     cta: 'Make a sympathy card',
@@ -218,7 +219,7 @@ export const occasions = [
     faqs: [
       costFaq,
       { q: 'Will the card say “Happy” or anything inappropriate?', a: 'No. Set the occasion to sympathy and Genie keeps the artwork and message gentle and respectful. You can review and edit every word before sending.' },
-      { q: 'Can the card honor the person who passed?', a: 'Yes. Share something they loved — a place, a hobby, a garden — and Genie can paint it into the cover. Many people choose a peaceful scene without people.' },
+      { q: 'Can the card honor the person who passed?', a: 'Yes. Share something they loved — a place, a hobby, a garden — and Genie can paint it into the artwork. Many people choose a peaceful scene without people.' },
       editFaq,
     ],
     closingHeading: 'Let them know you’re thinking of them',
@@ -228,9 +229,9 @@ export const occasions = [
     slug: 'congratulations-cards',
     name: 'Congratulations',
     occasion: 'Congratulations',
-    title: 'Personalized Congratulations Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Congratulations Cards with Custom Art | Card Genie',
     description:
-      'Celebrate a big win with a one-of-a-kind congratulations card: custom artwork of their achievement and a message written just for them. Send by email or text, or mail a printed card.',
+      'Celebrate a big win with a one-of-a-kind digital congratulations card: custom artwork of their achievement and a message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized congratulations cards for every big win',
     lede: 'New job, new house, finished the marathon, finally got the promotion — tell Card Genie what they did, and get a card with custom artwork celebrating that exact moment and a message that cheers them on. Send it instantly or have it printed and mailed.',
     cta: 'Make a congratulations card',
@@ -266,9 +267,9 @@ export const occasions = [
     slug: 'graduation-cards',
     name: 'Graduation',
     occasion: 'Graduation',
-    title: 'Personalized Graduation Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Graduation Cards with Custom Art | Card Genie',
     description:
-      'Celebrate a graduate with a one-of-a-kind card: custom artwork of their school, dreams, and next adventure, plus a message written just for them. Send by email or text, or mail a printed card.',
+      'Celebrate a graduate with a one-of-a-kind digital card: custom artwork of their school, dreams, and next adventure, plus a message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized graduation cards for the class of today',
     lede: 'High school, college, grad school, or kindergarten — tell Card Genie about the graduate’s school, passions, and what comes next, and get a card with custom artwork and a proud, encouraging message. Send it instantly or have it printed and mailed.',
     cta: 'Make a graduation card',
@@ -294,7 +295,7 @@ export const occasions = [
     faqs: [
       costFaq,
       likenessFaq('the graduate'),
-      { q: 'Can I include their school colors or mascot?', a: 'Yes. Mention the colors, mascot, or campus details in Personal details, and Genie works them into the cover art.' },
+      { q: 'Can I include their school colors or mascot?', a: 'Yes. Mention the colors, mascot, or campus details when you describe the card, and Genie works them into the artwork.' },
       editFaq,
     ],
     closingHeading: 'Cheer on your graduate',
@@ -304,9 +305,9 @@ export const occasions = [
     slug: 'wedding-cards',
     name: 'Wedding',
     occasion: 'Wedding',
-    title: 'Personalized Wedding Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Wedding Cards with Custom Art | Card Genie',
     description:
-      'Congratulate the happy couple with a one-of-a-kind wedding card: custom artwork of the two of them and a heartfelt message written just for them. Send by email or text, or mail a printed card.',
+      'Congratulate the happy couple with a one-of-a-kind digital wedding card: custom artwork of the two of them and a heartfelt message written just for them. Send by email or text, or mail a printed card.',
     h1: 'Personalized wedding cards for the happy couple',
     lede: 'How they met, where they’re marrying, the honeymoon they’ve planned — tell Card Genie, and get a wedding card with custom artwork of the couple and a warm message of congratulations. Send it instantly or have it printed and mailed.',
     cta: 'Make a wedding card',
@@ -342,9 +343,9 @@ export const occasions = [
     slug: 'new-baby-cards',
     name: 'New baby',
     occasion: 'New baby',
-    title: 'Personalized New Baby Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital New Baby Cards with Custom Art | Card Genie',
     description:
-      'Welcome a new little one with a one-of-a-kind baby card: sweet custom artwork and a warm message for the new parents. Send by email or text, or mail a printed card.',
+      'Welcome a new little one with a one-of-a-kind digital baby card: sweet custom artwork and a warm message for the new parents. Send by email or text, or mail a printed card.',
     h1: 'Personalized new baby cards to welcome the little one',
     lede: 'Baby’s name, the nursery theme, the big sibling or family pet — tell Card Genie, and get a sweet card with custom artwork and a warm message for the new parents. Send it instantly or have it printed and mailed.',
     cta: 'Make a new baby card',
@@ -369,7 +370,7 @@ export const occasions = [
     ],
     faqs: [
       costFaq,
-      { q: 'Can the card include the baby’s name?', a: 'Yes. Put the baby’s name in Personal details, and Genie can include it in the cover art and the message.' },
+      { q: 'Can the card include the baby’s name?', a: 'Yes. Mention the baby’s name when you describe the card, and Genie can include it in the artwork and the message.' },
       { q: 'Can I send it as a printed card to the new parents?', a: 'Yes. Choose “Mail a printed card,” enter their address, and we’ll print it on cardstock and mail it by USPS.' },
       editFaq,
     ],
@@ -380,9 +381,9 @@ export const occasions = [
     slug: 'retirement-cards',
     name: 'Retirement',
     occasion: 'Retirement',
-    title: 'Personalized Retirement Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Retirement Cards with Custom Art | Card Genie',
     description:
-      'Send them off in style with a one-of-a-kind retirement card: custom artwork of their next adventure and a message celebrating their career. Send by email or text, or mail a printed card.',
+      'Send them off in style with a one-of-a-kind digital retirement card: custom artwork of their next adventure and a message celebrating their career. Send by email or text, or mail a printed card.',
     h1: 'Personalized retirement cards for their next chapter',
     lede: 'Golf every Tuesday, the RV trip, the grandkids, finally finishing that novel — tell Card Genie what’s next for them, and get a retirement card with custom artwork and a message that honors their career and cheers on what comes next.',
     cta: 'Make a retirement card',
@@ -419,11 +420,11 @@ export const occasions = [
     name: 'Invitation',
     label: 'Invitations',
     occasion: 'Invitation',
-    title: 'Personalized Invitations with Custom Art | Card Genie',
+    title: 'Personalized Digital Invitations with Custom Art | Card Genie',
     description:
-      'Make a one-of-a-kind invitation for a birthday party, shower, wedding, graduation, holiday party, and more: custom artwork plus invitation wording with your date, place, and RSVP. Send by email or text, or mail printed invitations.',
+      'Make a one-of-a-kind digital invitation for a birthday party, shower, wedding, graduation, holiday party, and more: custom artwork plus invitation wording with your date, place, and RSVP. Send by email or text, or mail printed invitations.',
     h1: 'Personalized invitations for every kind of get-together',
-    lede: 'Tell Card Genie what you’re celebrating, when and where it is, and how guests should RSVP. You get a one-of-a-kind invitation with custom cover art and inviting wording, with your event details inside. Send it by email or text, or have it printed on cardstock and mailed.',
+    lede: 'Tell Card Genie what you’re celebrating, when and where it is, and how guests should RSVP. You get a one-of-a-kind invitation with custom artwork and inviting wording, with your event details inside. Send it by email or text, or have it printed on cardstock and mailed.',
     cta: 'Make an invitation',
     galleryHeading: 'Invitations our genie has made',
     typesHeading: 'Pick your invitation',
@@ -459,7 +460,7 @@ export const occasions = [
       { q: 'What event details should I include?', a: 'Tell Genie the date and time, the place and address, and how guests should RSVP, plus anything else they need, like a dress code or what to bring. Genie puts these details inside the invitation under the message. If you leave out the date or place, Genie leaves a reminder to fill in, and Card Genie won’t send the invitation until you do.' },
       { q: 'Can I send it to my whole guest list?', a: 'Yes. Add up to 10 email addresses or cellphone numbers in the send panel at once, and send again for more guests. Each guest gets their own link to the invitation.' },
       { q: 'How do guests RSVP?', a: 'Guests reply the way you ask them to, by text, email, or phone. Just include it in your details, for example “RSVP to Sam by November 1.”' },
-      { q: 'Can I mail printed invitations?', a: 'Yes. We print your invitation on premium cardstock and mail it by USPS. A printed card uses 10 credits.' },
+      { q: 'Can I mail printed invitations?', a: 'Yes. We print your invitation on premium cardstock and mail it by USPS.' },
       editFaq,
     ],
     faqHeading: 'Invitation questions',
@@ -470,9 +471,9 @@ export const occasions = [
     slug: 'christmas-cards',
     name: 'Christmas',
     occasion: 'Christmas',
-    title: 'Personalized Christmas Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Christmas Cards with Custom Art | Card Genie',
     description:
-      'Make one-of-a-kind Christmas cards with custom artwork of your family, traditions, and holiday spirit, plus a message written just for each person. Send by email or text, or mail a printed card.',
+      'Make one-of-a-kind digital Christmas cards with custom artwork of your family, traditions, and holiday spirit, plus a message written just for each person. Send by email or text, or mail a printed card.',
     h1: 'Personalized Christmas cards with your family’s magic',
     lede: 'Your family in matching pajamas, the dog in a Santa hat, the cabin you visit every year — tell Card Genie about your traditions, and get Christmas cards with custom artwork and a warm holiday message. Send them instantly or have them printed and mailed.',
     cta: 'Make a Christmas card',
@@ -508,9 +509,9 @@ export const occasions = [
     slug: 'valentines-day-cards',
     name: 'Valentine’s Day',
     occasion: 'Valentine’s Day',
-    title: 'Personalized Valentine’s Day Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Valentine’s Day Cards with Custom Art | Card Genie',
     description:
-      'Make a one-of-a-kind Valentine’s Day card with custom artwork of the two of you and a romantic message written about your story. Send by email or text, or mail a printed card.',
+      'Make a one-of-a-kind digital Valentine’s Day card with custom artwork of the two of you and a romantic message written about your story. Send by email or text, or mail a printed card.',
     h1: 'Personalized Valentine’s Day cards, straight from the heart',
     lede: 'Your first date, your song, the way they make coffee every morning — tell Card Genie, and get a Valentine’s card with custom artwork of the two of you and a message that sounds like your love story. Send it instantly or have it printed and mailed.',
     cta: 'Make a Valentine’s card',
@@ -546,9 +547,9 @@ export const occasions = [
     slug: 'mothers-day-cards',
     name: 'Mother’s Day',
     occasion: 'Mother’s Day',
-    title: 'Personalized Mother’s Day Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Mother’s Day Cards with Custom Art | Card Genie',
     description:
-      'Make Mom a one-of-a-kind Mother’s Day card: custom artwork of her favorite things and a heartfelt message written just for her. Send by email or text, or mail a printed card.',
+      'Make Mom a one-of-a-kind digital Mother’s Day card: custom artwork of her favorite things and a heartfelt message written just for her. Send by email or text, or mail a printed card.',
     h1: 'Personalized Mother’s Day cards she’ll keep forever',
     lede: 'Her pottery, her famous lasagna, the way she still calls every Sunday — tell Card Genie what makes your mom (or grandma, or stepmom) special, and get a card with custom artwork and a heartfelt message. Send it instantly or have it printed and mailed.',
     cta: 'Make a Mother’s Day card',
@@ -584,9 +585,9 @@ export const occasions = [
     slug: 'fathers-day-cards',
     name: 'Father’s Day',
     occasion: 'Father’s Day',
-    title: 'Personalized Father’s Day Cards with Custom Art | Card Genie',
+    title: 'Personalized Digital Father’s Day Cards with Custom Art | Card Genie',
     description:
-      'Make Dad a one-of-a-kind Father’s Day card: custom artwork of his favorite things and a message written just for him. Send by email or text, or mail a printed card.',
+      'Make Dad a one-of-a-kind digital Father’s Day card: custom artwork of his favorite things and a message written just for him. Send by email or text, or mail a printed card.',
     h1: 'Personalized Father’s Day cards as unique as Dad',
     lede: 'His workshop, his fishing spot, his legendary air guitar — tell Card Genie what makes your dad (or grandpa, or stepdad) one of a kind, and get a card with custom artwork and a message he’ll actually read twice.',
     cta: 'Make a Father’s Day card',

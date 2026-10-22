@@ -87,10 +87,20 @@ const footer = `
 </html>
 `
 
-const breadcrumbs = (items) => ({
-  '@context': 'https://schema.org',
+const breadcrumbList = (items) => ({
   '@type': 'BreadcrumbList',
   itemListElement: items.map(([name, item], index) => ({ '@type': 'ListItem', position: index + 1, name, item })),
+})
+
+const breadcrumbs = (items) => ({ '@context': 'https://schema.org', ...breadcrumbList(items) })
+
+const faqPage = (faqs) => ({
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((faq) => ({
+    '@type': 'Question',
+    name: faq.q,
+    acceptedAnswer: { '@type': 'Answer', text: faq.a },
+  })),
 })
 
 const makeHref = (page) => `/?occasion=${encodeURIComponent(page.occasion)}`
@@ -118,7 +128,11 @@ ${group.types.map((type) => `            <a href="/?occasion=${encodeURIComponen
 
 const renderPage = (page) => {
   const url = `${SITE}/${page.slug}/`
-  const missing = page.samples.filter((s) => !existsSync(join(publicDir, page.slug, 'img', `${s.slug}.jpg`)))
+  const missing = page.samples.filter(
+    (s) =>
+      !existsSync(join(publicDir, page.slug, 'img', `${s.slug}.jpg`)) ||
+      !existsSync(join(publicDir, page.slug, 'img', `${s.slug}.webp`)),
+  )
   if (missing.length) throw new Error(`${page.slug}: missing art for ${missing.map((s) => s.slug).join(', ')}`)
 
   const figures = page.samples
@@ -126,7 +140,7 @@ const renderPage = (page) => {
       const quote = insideQuote(page, sample)
       return `        <figure>
           <img
-            src="img/${sample.slug}.jpg"
+            src="img/${sample.slug}.webp"
             alt="${esc(sample.alt)}"
             width="528"
             height="736"
@@ -155,7 +169,7 @@ const renderPage = (page) => {
     .map(
       (faq) => `        <details>
           <summary>${esc(faq.q)}</summary>
-          <p>${esc(faq.a)}</p>
+          <p>${faq.aHtml || esc(faq.a)}</p>
         </details>`,
     )
     .join('\n')
@@ -171,11 +185,17 @@ const renderPage = (page) => {
       description: page.description,
       url,
       image: `${SITE}/${page.slug}/img/${page.samples[0].slug}.jpg`,
-      jsonLd: breadcrumbs([
-        ['Card Genie', `${SITE}/`],
-        ['Occasions', `${SITE}/occasions/`],
-        [pageLabel(page), url],
-      ]),
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@graph': [
+          breadcrumbList([
+            ['Card Genie', `${SITE}/`],
+            ['Occasions', `${SITE}/occasions/`],
+            [pageLabel(page), url],
+          ]),
+          faqPage(page.faqs),
+        ],
+      },
     }) +
     `
       <section class="hero">
@@ -187,8 +207,8 @@ const renderPage = (page) => {
 ${renderTypeGroups(page)}
       <h2>${esc(page.galleryHeading)}</h2>
       <p class="section-intro">
-        Every card starts from a few details. Here’s what Card Genie made from each story — the cover art and the
-        inside message.
+        Every card starts from a few details. Here’s what Card Genie made from each story: one-of-a-kind artwork and
+        a personalized message, so no two digital cards are alike.
       </p>
       <div class="gallery">
 ${figures}
@@ -206,11 +226,11 @@ ${figures}
         </li>
         <li>
           <strong>Get your card in minutes</strong>
-          <p>Custom cover art in the style you pick, plus a message written for them. Revise anything you like.</p>
+          <p>Custom artwork created for them in the style you pick, plus a message written for them. Revise anything you like.</p>
         </li>
         <li>
           <strong>Send it your way</strong>
-          <p>By email or text for instant delivery, or printed on cardstock and mailed by USPS.</p>
+          <p>Send your digital card by email or text for instant delivery, or have it printed on cardstock and mailed by USPS.</p>
         </li>
       </ol>
 
@@ -245,16 +265,16 @@ const renderHub = () => {
   const tiles = occasions
     .map(
       (page, index) => `        <a href="/${page.slug}/">
-          <img src="/${page.slug}/img/${page.samples[0].slug}.jpg" alt="" width="528" height="560" loading="${index < 6 ? 'eager' : 'lazy'}" />
+          <img src="/${page.slug}/img/${page.samples[0].slug}.webp" alt="" width="528" height="560" loading="${index < 6 ? 'eager' : 'lazy'}" />
           <span>${esc(pageLabel(page))}</span>
         </a>`,
     )
     .join('\n')
   return (
     head({
-      title: 'Personalized Cards for Every Occasion | Card Genie',
+      title: 'Personalized Digital Cards for Every Occasion | Card Genie',
       description:
-        'Birthday, thank you, anniversary, sympathy, holidays, invitations, and more: make a one-of-a-kind card with custom artwork and a message written just for them.',
+        'Birthday, thank you, anniversary, sympathy, holidays, invitations, and more: make a one-of-a-kind digital card with custom artwork and a message written just for them.',
       url,
       image: `${SITE}/og-image.png`,
       jsonLd: breadcrumbs([

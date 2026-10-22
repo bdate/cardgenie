@@ -5,20 +5,31 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="format-detection" content="telephone=no, email=no, address=no" />
-    <title>Card Genie – Personalized Greeting Cards, Made in Minutes</title>
+    <script>
+      document.documentElement.classList.add('js')
+    </script>
+    <style>
+      .js .seo-intro { display: none; }
+      .seo-intro { max-width: 760px; margin: 0 auto; padding: 32px 20px 56px; color: #315f5b; font-family: Inter, system-ui, -apple-system, sans-serif; line-height: 1.55; }
+      .seo-intro h1 { font-family: "Playfair Display", Georgia, serif; font-size: 2.2rem; line-height: 1.1; margin: 18px 0 12px; }
+      .seo-intro h2 { font-size: 1.2rem; margin: 28px 0 8px; }
+      .seo-intro a { color: #3f9b91; font-weight: 700; }
+      .seo-intro ul { padding-left: 20px; }
+    </style>
+    <title>Card Genie | Personalized AI Digital Greeting Cards</title>
     <meta
       name="description"
-      content="Create a one-of-a-kind greeting card with custom artwork and a heartfelt message written just for them. Send it by email or text, or have it printed and mailed."
+      content="Create a one-of-a-kind digital greeting card with a personalized image and message. Card Genie makes birthdays, anniversaries and special occasions more personal."
     />
     <link rel="canonical" href="https://www.card-genie.com/" />
     <meta name="theme-color" content="#fff8ef" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Card Genie" />
-    <meta property="og:title" content="Card Genie – Personalized Greeting Cards, Made in Minutes" />
+    <meta property="og:title" content="Card Genie | Personalized AI Digital Greeting Cards" />
     <meta
       property="og:description"
-      content="Custom artwork and a heartfelt message written just for them. Send by email or text, or mail a printed card."
+      content="A one-of-a-kind digital greeting card with custom artwork and a message written just for them. Send by email or text, or mail a printed card."
     />
     <meta property="og:url" content="https://www.card-genie.com/" />
     <meta property="og:image" content="https://www.card-genie.com/og-image.png" />
@@ -26,10 +37,10 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Card Genie – personalized greeting cards, made with a little magic" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Card Genie – Personalized Greeting Cards, Made in Minutes" />
+    <meta name="twitter:title" content="Card Genie | Personalized AI Digital Greeting Cards" />
     <meta
       name="twitter:description"
-      content="Custom artwork and a heartfelt message written just for them. Send by email or text, or mail a printed card."
+      content="A one-of-a-kind digital greeting card with custom artwork and a message written just for them. Send by email or text, or mail a printed card."
     />
     <meta name="twitter:image" content="https://www.card-genie.com/og-image.png" />
     <script type="application/ld+json">
@@ -57,6 +68,15 @@
             "name": "Card Genie",
             "url": "https://www.card-genie.com/",
             "publisher": { "@id": "https://www.card-genie.com/#org" }
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://www.card-genie.com/#webpage",
+            "url": "https://www.card-genie.com/",
+            "name": "Card Genie | Personalized AI Digital Greeting Cards",
+            "description": "Create a one-of-a-kind digital greeting card with a personalized image and message. Card Genie makes birthdays, anniversaries and special occasions more personal.",
+            "isPartOf": { "@id": "https://www.card-genie.com/#website" },
+            "about": { "@id": "https://www.card-genie.com/#org" }
           }
         ]
       }
@@ -97,7 +117,42 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="seo-intro">
+        <a href="/"><img src="/logo-mark.png" alt="Card Genie lamp logo" width="72" height="72" /></a>
+        <h1>Card Genie: personalized digital greeting cards with custom artwork</h1>
+        <p>
+          Card Genie creates a one-of-a-kind digital card for someone you love. You get two things made just for
+          them: a custom image inspired by their hobbies, personality, and your relationship, and a personal message
+          written for the occasion. No one else will have a card like it.
+        </p>
+        <p>
+          Tell Genie a few details or chat with the genie lamp, pick an art style like watercolor, storybook, or comic
+          book, and add photos if you want the people you love drawn into the artwork. Send your digital card by email
+          or text, or have it printed on cardstock and mailed.
+        </p>
+        <p><a href="/">Make a personalized digital card</a></p>
+        <h2>Popular occasions</h2>
+        <ul>
+          <li><a href="/birthday-cards/">Personalized digital birthday cards</a></li>
+          <li><a href="/thank-you-cards/">Custom thank you cards</a></li>
+          <li><a href="/anniversary-cards/">Personalized anniversary cards</a></li>
+          <li><a href="/get-well-cards/">Get well cards</a></li>
+          <li><a href="/sympathy-cards/">Sympathy cards</a></li>
+          <li><a href="/wedding-cards/">Wedding cards</a></li>
+          <li><a href="/new-baby-cards/">New baby cards</a></li>
+          <li><a href="/graduation-cards/">Graduation cards</a></li>
+          <li><a href="/christmas-cards/">Christmas cards</a></li>
+          <li><a href="/invitations/">Digital invitations</a></li>
+          <li><a href="/occasions/">All occasions</a></li>
+        </ul>
+        <h2>Learn more</h2>
+        <ul>
+          <li><a href="/styles/">Art styles for your card</a></li>
+          <li><a href="/faq/">Card Genie FAQ</a></li>
+        </ul>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
