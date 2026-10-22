@@ -1116,6 +1116,20 @@ commonOccasions.push(...invitationOccasions)
 
 const invitationOccasionPattern = /\binvit(?:e|es|ation|ations)\b|\bsave[\s-]+the[\s-]+date\b/i
 
+const homeOccasionLinks: [string, string][] = [
+  ['/birthday-cards/', 'Birthday cards'],
+  ['/thank-you-cards/', 'Thank you cards'],
+  ['/anniversary-cards/', 'Anniversary cards'],
+  ['/get-well-cards/', 'Get well cards'],
+  ['/sympathy-cards/', 'Sympathy cards'],
+  ['/wedding-cards/', 'Wedding cards'],
+  ['/new-baby-cards/', 'New baby cards'],
+  ['/graduation-cards/', 'Graduation cards'],
+  ['/christmas-cards/', 'Christmas cards'],
+  ['/invitations/', 'Invitations'],
+  ['/occasions/', 'All occasions'],
+]
+
 const defaultKeyDetailsExample =
   'Example: Thank our neighbor Linda for watching our dog Biscuit all week. Show Biscuit napping on her porch swing.'
 
@@ -16013,6 +16027,27 @@ function App() {
           )}
         </section>}
       </section>
+      {!isRecipientView && !showProofPanel && !showAccountPage && !adminView && (
+        <section className="home-about" aria-labelledby="home-about-title">
+          <h2 id="home-about-title">About Card Genie</h2>
+          <p>
+            Card Genie creates one-of-a-kind digital greeting cards. Each card gets a custom image inspired by their
+            hobbies, personality, and your relationship, plus a personal message written for the occasion. Send it by
+            email or text, or have it printed on cardstock and mailed.
+          </p>
+          <h3>Popular occasions</h3>
+          <nav className="home-about-links" aria-label="Popular occasions">
+            {homeOccasionLinks.map(([href, label]) => (
+              <a key={href} href={href}>
+                {label}
+              </a>
+            ))}
+          </nav>
+          <p className="home-about-more">
+            <a href="/styles/">See all 15 art styles</a>
+          </p>
+        </section>
+      )}
       <footer className="site-footer">
         <div className="footer-primary">
           {!isRecipientView && (

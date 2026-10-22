@@ -3816,6 +3816,65 @@ textarea:focus {
   font-weight: 800;
 }
 
+.home-about {
+  max-width: 720px;
+  margin: 28px auto 0;
+  padding: 22px 24px;
+  border: 1px solid rgba(143, 208, 201, 0.34);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--gcu-grey);
+}
+
+.home-about h2 {
+  margin: 0 0 8px;
+  color: var(--gcu-dark-teal);
+  font-size: 1.15rem;
+}
+
+.home-about h3 {
+  margin: 16px 0 10px;
+  color: var(--gcu-ink, #315f5b);
+  font-size: 0.95rem;
+}
+
+.home-about p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.home-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-about-links a {
+  padding: 6px 14px;
+  border: 1px solid rgba(63, 155, 145, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--gcu-dark-teal);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.home-about-links a:hover,
+.home-about-links a:focus-visible {
+  background: rgba(143, 208, 201, 0.25);
+}
+
+.home-about .home-about-more {
+  margin-top: 14px;
+  font-size: 0.92rem;
+}
+
+.home-about-more a {
+  color: var(--gcu-dark-teal);
+  font-weight: 800;
+}
+
 .site-footer {
   display: flex;
   flex-wrap: wrap;
