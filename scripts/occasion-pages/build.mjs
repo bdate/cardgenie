@@ -37,6 +37,7 @@ const head = ({ title, description, url, image, jsonLd }) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script async src="/ads-tag.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}" />
