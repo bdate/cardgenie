@@ -2,6 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  clearConversionCheckPending,
+  hasConversionCheckPending,
+  markConversionCheckPending,
+  reportCreditPurchaseConversions,
+} from './adsConversions'
+import {
   connectLampGenieRealtime,
   LAMP_GENIE_COMPLETE_LINE,
   type LampGenieRealtimeSession,
@@ -4871,6 +4877,7 @@ function App() {
       setCreditNotice('Checkout canceled. No payment was taken.')
       setShowCreditMenu(false)
       clearBillingParam()
+      clearConversionCheckPending()
       return
     }
 
@@ -4895,6 +4902,8 @@ function App() {
         setCreditNotice('Payment received. Confirm your mobile number to see your updated credits.')
         return
       }
+
+      void reportCreditPurchaseConversions({ token, apiUrl, attempts: 8 })
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
         try {
@@ -4922,6 +4931,14 @@ function App() {
 
     void refreshAfterPurchase()
   }, [])
+
+  const accountSessionToken = accountSession?.token || ''
+  useEffect(() => {
+    if (!accountSessionToken || isRecipientView || !hasConversionCheckPending()) {
+      return
+    }
+    void reportCreditPurchaseConversions({ token: accountSessionToken, apiUrl })
+  }, [accountSessionToken, isRecipientView])
 
   useEffect(() => {
     if (step === 'front') {
@@ -8492,6 +8509,7 @@ function App() {
         clearActionFeedback()
         return
       }
+      markConversionCheckPending()
       window.location.assign(String(data.url))
     } catch (caughtError) {
       setCreditNotice(caughtError instanceof Error ? caughtError.message : 'Unable to start checkout.')

@@ -1080,6 +1080,81 @@ export const recordStripeCreditPurchase = async (
   return { alreadyProcessed: false, paymentId, creditBalance }
 }
 
+const ensureAdConversionsTable = async (db) => {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS ad_conversions (
+        payment_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        value_cents INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        reported_at TEXT
+      )`,
+    )
+    .run()
+}
+
+/** Queues a Google Ads purchase conversion for a verified, paid Stripe credit purchase. */
+export const queueAdConversion = async (env, { paymentId, userId, valueCents, currency = 'usd' }) => {
+  const cents = Math.floor(Number(valueCents) || 0)
+  if (!env.ACCOUNT_DB || !paymentId || !userId || cents <= 0) {
+    return false
+  }
+  await ensureAdConversionsTable(env.ACCOUNT_DB)
+  await env.ACCOUNT_DB.prepare(
+    `INSERT OR IGNORE INTO ad_conversions (payment_id, user_id, value_cents, currency, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(paymentId, userId, cents, String(currency || 'usd').toLowerCase(), isoNow())
+    .run()
+  return true
+}
+
+/** Unreported conversions from the last 30 days whose payment is still recorded as paid. */
+export const listPendingAdConversions = async (env, userId) => {
+  if (!env.ACCOUNT_DB || !userId) {
+    return []
+  }
+  await ensureAdConversionsTable(env.ACCOUNT_DB)
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const rows = await env.ACCOUNT_DB.prepare(
+    `SELECT c.payment_id, c.value_cents, c.currency
+     FROM ad_conversions c
+     JOIN payments p ON p.id = c.payment_id
+     WHERE c.user_id = ? AND c.reported_at IS NULL AND c.created_at >= ?
+       AND p.status = 'paid' AND p.amount_cents > 0 AND COALESCE(p.amount_refunded_cents, 0) = 0
+     ORDER BY c.created_at ASC
+     LIMIT 10`,
+  )
+    .bind(userId, since)
+    .all()
+  return (rows.results || []).map((row) => ({
+    transactionId: row.payment_id,
+    value: Math.round(Number(row.value_cents)) / 100,
+    currency: String(row.currency || 'usd').toUpperCase(),
+  }))
+}
+
+export const markAdConversionsReported = async (env, userId, paymentIds = []) => {
+  const ids = [...new Set(paymentIds.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 10)
+  if (!env.ACCOUNT_DB || !userId || !ids.length) {
+    return 0
+  }
+  await ensureAdConversionsTable(env.ACCOUNT_DB)
+  const now = isoNow()
+  let marked = 0
+  for (const id of ids) {
+    const result = await env.ACCOUNT_DB.prepare(
+      'UPDATE ad_conversions SET reported_at = ? WHERE payment_id = ? AND user_id = ? AND reported_at IS NULL',
+    )
+      .bind(now, id, userId)
+      .run()
+    marked += Number(result?.meta?.changes || 0)
+  }
+  return marked
+}
+
 export const createTestimonial = async (
   env,
   { name, rating, comment, source, userId, phoneE164 },

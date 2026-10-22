@@ -47,6 +47,9 @@ import {
   updateAccountProfile,
   updateTestimonialStatus,
   upsertUserOnLogin,
+  queueAdConversion,
+  listPendingAdConversions,
+  markAdConversionsReported,
   TEST_LOGIN_PHONE,
 } from './account-db.js'
 import { USAGE_KINDS, getAdminCosts, recordUsage, smsSegmentCount } from './costs.js'
@@ -3623,7 +3626,52 @@ const grantCreditsFromCheckoutSession = async (env, checkoutSession) => {
     priceId: pack?.priceId || metadata.priceId || '',
   })
 
+  // Only real money from Card Genie checkouts counts as a Google Ads conversion: not Stripe test
+  // mode, not $0 sessions, not GCU-branded checkouts, and not the fictional test-login account.
+  const paidCents = Math.floor(Number(checkoutSession.amount_total) || 0)
+  const countsAsAdConversion =
+    result &&
+    !result.alreadyProcessed &&
+    result.paymentId &&
+    checkoutSession.livemode === true &&
+    checkoutSession.payment_status === 'paid' &&
+    paidCents > 0 &&
+    metadata.source !== 'gcu' &&
+    phoneE164 !== TEST_LOGIN_PHONE
+  if (countsAsAdConversion) {
+    try {
+      await queueAdConversion(env, {
+        paymentId: result.paymentId,
+        userId,
+        valueCents: paidCents,
+        currency: checkoutSession.currency || 'usd',
+      })
+    } catch (error) {
+      console.error('Unable to queue ad conversion.', error)
+    }
+  }
+
   return { ok: true, ...result }
+}
+
+const handleListAdConversions = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Sign in to continue.' }, 401)
+  }
+  const conversions = await listPendingAdConversions(env, session.userId)
+  return jsonResponse(request, env, { ok: true, conversions })
+}
+
+const handleMarkAdConversionsReported = async (request, env) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  if (!session) {
+    return jsonResponse(request, env, { error: 'Sign in to continue.' }, 401)
+  }
+  const body = (await readJson(request)) || {}
+  const ids = Array.isArray(body.transactionIds) ? body.transactionIds : []
+  const marked = await markAdConversionsReported(env, session.userId, ids)
+  return jsonResponse(request, env, { ok: true, marked })
 }
 
 const RECIPIENT_PRINT_PRICE_CENTS = 500
@@ -8223,6 +8271,14 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/billing/webhook') {
     return handleStripeWebhook(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/billing/conversions') {
+    return handleListAdConversions(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/billing/conversions/reported') {
+    return handleMarkAdConversionsReported(request, env)
   }
 
   if (request.method === 'GET' && url.pathname === '/api/testimonials') {
