@@ -31,7 +31,7 @@
 .fan-1 { width:48%; right:0; top:32px; transform:rotate(11deg); z-index:2; }
 .fan-2 { width:48%; left:29%; top:100px; transform:rotate(-2deg); z-index:3; }
 .welcome-fan-card:hover { transform:translateY(-12px) rotate(0deg); z-index:4; }
-.welcome-hand-note { position:absolute; bottom:-15px; right:5%; font:700 23px 'Dancing Script',cursive; transform:rotate(-4deg); }
+.welcome-hand-note { position:absolute; bottom:-65px; right:5%; font:700 23px 'Dancing Script',cursive; transform:rotate(-4deg); }
 .welcome-transformation { display:grid; grid-template-columns: .7fr 1fr; gap:15px; align-items:center; position:relative; min-width:0; }
 .welcome-story-note { padding:23px 18px; background:#f6e9ca; transform:rotate(-4deg); border-radius:3px; box-shadow:0 8px 17px #493b1b0e; position:relative; }
 .welcome-story-note:before { content:''; position:absolute; top:-10px; left:35%; height:22px; width:65px; background:#e2c78d80; transform:rotate(7deg); }
@@ -104,7 +104,7 @@
 @media(max-width:900px) {
  .welcome-header { padding:20px 25px; }.welcome-hero { padding:40px 25px 65px; gap:16px; min-height:580px; }
  .welcome h1 { font-size:50px; letter-spacing:-2px; }.welcome-lede { font-size:14px; }.welcome-card-fan { height:390px; }
- .welcome-hand-note { font-size:20px; bottom:0; }.welcome-transformation { grid-template-columns:.8fr 1fr; gap:10px; }.welcome-story-note { padding:16px 12px; }.welcome-story-note blockquote { font-size:14px; }
+ .welcome-hand-note { font-size:20px; bottom:-35px; }.welcome-transformation { grid-template-columns:.8fr 1fr; gap:10px; }.welcome-story-note { padding:16px 12px; }.welcome-story-note blockquote { font-size:14px; }
  .welcome-promise { padding:20px 25px; font-size:10px; }.welcome-gallery { gap:20px; }.welcome-gallery-art { padding:15px; }.welcome-examples { padding:60px 25px; }.welcome-how { padding-inline:25px; }.welcome-footer { padding-inline:25px; }.welcome-footer>p { display:none; }
 }
 @media(max-width:650px) {

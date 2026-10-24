@@ -12,6 +12,20 @@ const maxAge = 30 * 24 * 60 * 60 * 1000
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')
 const sent = new Set<string>()
 
+export async function landingExperimentReady(): Promise<boolean> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 1500)
+  try {
+    const response = await fetch(`${apiBase}/api/landing-experiment`, {
+      signal: controller.signal, cache: 'no-store',
+    })
+    if (!response.ok) return false
+    const config = await response.json()
+    return config?.experiment === 'welcome-v1' && config?.enabled === true
+  } catch { return false }
+  finally { clearTimeout(timer) }
+}
+
 export function readLandingAssignment(): LandingAssignment | null {
   if (new URLSearchParams(location.search).has('landing_preview')) return null
   try {

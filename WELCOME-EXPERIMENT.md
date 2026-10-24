@@ -1,6 +1,6 @@
 # Welcome experiment v1
 
-New visitors to the root homepage are assigned randomly 50/50 to A (finished cards) or B (story to card). Assignment is first-touch, per browser, for 30 days. Paid traffic is identified by a Google click identifier or cpc/ppc/paidsearch UTM medium and reported separately from other traffic. No advertising budget or targeting changes are required.
+Once the API readiness endpoint responds with `welcome-v1` and `enabled: true`, new visitors to the root homepage are assigned randomly 50/50 to A (finished cards) or B (story to card). Until then, the existing creator remains the homepage. Preview links always work. Assignment is first-touch, per browser, for 30 days. Paid traffic is identified by a Google click identifier or cpc/ppc/paidsearch UTM medium and reported separately from other traffic. No advertising budget or targeting changes are required.
 
 Review both versions without enrolling or recording funnel events:
 
@@ -13,7 +13,9 @@ The existing admin Analytics screen includes a since-launch welcome funnel by ve
 
 Events are stored in a new, self-initializing `landing_events` table in the existing ACCOUNT_DB. Only experiment IDs, random visitor IDs, variant, source category, fixed milestone names and timestamps are collected. Purchases are recorded from verified live paid Stripe checkout sessions, deduplicated by checkout ID. Unpaid/test/GCU purchases and the test-login account are excluded. Form contents, names, phone numbers, images, URLs and click identifiers are not recorded in the experiment table. The Google Ads purchase conversion code is unchanged.
 
-`welcome-api.yml` uses the existing Cloudflare deployment credential to deploy the API changes when the experiment module changes. The existing Pages workflow publishes the frontend. Both deployments must succeed for a measured experiment. If the API deployment fails, do not interpret an empty funnel as lack of engagement. Existing creation and payment operations continue independently of analytics failures.
+The existing Pages workflow publishes the frontend. The repository's Cloudflare automation token cannot update `cardgenie-api` (confirmed deployment error: no access to the specified service). The existing Cloudflare Git integration points at an older `bdate/cardgenie-api` repository, which is not the current production source. Do not rebuild that stale repository over the current API. The dashboard editor was inspected but no code change was accepted or deployed there.
+
+Deploy the checked API from an authorized local checkout of **bdate/cardgenie** with `git pull --ff-only` followed by `npx wrangler deploy`. This preserves the existing secret values and bindings. The homepage experiment starts automatically after that deployment; no further frontend push is needed. An unavailable or mismatched readiness response falls back to the existing creator, so paid visitors are not enrolled in an unmeasured experiment. Existing creation and payment operations continue independently of analytics failures.
 
 Validation:
 
@@ -23,4 +25,4 @@ npm run build
 npx wrangler deploy --dry-run
 ```
 
-To disable the welcome experience, replace `const Experience = shouldShowWelcome()` in `src/main.tsx` with `const Experience = false` and redeploy the frontend; the existing creator remains the fallback. Keep the report available for reviewing collected data. Samples reuse existing fictional demonstration artwork and messages; no customer cards or source photos are exposed.
+To disable the welcome experience, return `enabled: false` from `/api/landing-experiment` and deploy the API. Alternatively, make `shouldShowWelcome()` return `false` and redeploy the frontend. Keep the report available for reviewing collected data. Samples reuse existing fictional demonstration artwork and messages; no customer cards or source photos are exposed.

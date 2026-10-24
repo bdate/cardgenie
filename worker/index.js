@@ -8035,6 +8035,10 @@ const handleRequest = async (request, env, ctx) => {
     return jsonResponse(request, env, { ok: true })
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/landing-experiment') {
+    return jsonResponse(request, env, { experiment: 'welcome-v1', enabled: Boolean(env.ACCOUNT_DB) })
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/landing-events') {
     const origin = request.headers.get('Origin')
     if (!origin || !getAllowedOrigins(env).includes(origin)) {

@@ -1,11 +1,15 @@
 import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { shouldShowWelcome } from './landingExperiment'
+import { landingExperimentReady, shouldShowWelcome } from './landingExperiment'
 
-const Experience = shouldShowWelcome()
-  ? lazy(() => import('./Welcome'))
-  : lazy(() => import('./App'))
+const Experience = lazy(async () => {
+  if (shouldShowWelcome()) {
+    const preview = new URLSearchParams(location.search).get('welcome')
+    if (preview === 'a' || preview === 'b' || await landingExperimentReady()) return import('./Welcome')
+  }
+  return import('./App')
+})
 
 declare global {
   interface Window {

@@ -70,6 +70,19 @@ test('interaction tracking deduplicates on-change events and excludes customer d
   locationAt('/gcu/123'); client.trackLanding('view', assignment); assert.equal(requests.length, 1)
 })
 
+test('live routing only enables the experiment when the reporting API is ready', async () => {
+  globalThis.fetch = async () => ({ ok: false })
+  assert.equal(await client.landingExperimentReady(), false)
+  globalThis.fetch = async () => { throw new Error('offline') }
+  assert.equal(await client.landingExperimentReady(), false)
+  for (const config of [{ enabled: true }, { experiment: 'old', enabled: true }, { experiment: 'welcome-v1', enabled: false }]) {
+    globalThis.fetch = async () => ({ ok: true, json: async () => config })
+    assert.equal(await client.landingExperimentReady(), false)
+  }
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ experiment: 'welcome-v1', enabled: true }) })
+  assert.equal(await client.landingExperimentReady(), true)
+})
+
 function database() {
   const db = new DatabaseSync(':memory:')
   return { ACCOUNT_DB: { prepare(sql) {

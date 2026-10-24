@@ -12524,7 +12524,7 @@ function App() {
                     <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
                     <td>{row.visitors ? (100 * row.buyers / row.visitors).toFixed(1) : '0.0'}%</td><td>${(row.revenueCents / 100).toFixed(2)}</td>
                   </tr>)}</tbody>
-                </table> : <p>No measured welcome-page visitors yet.</p>}
+                </table> : <p>{Array.isArray(adminMetrics.welcomeExperiment) ? 'No measured welcome-page visitors yet.' : 'Welcome experiment reporting is waiting for the API update.'}</p>}
               </div>
               <div className="admin-stat-grid">
                 <div>
