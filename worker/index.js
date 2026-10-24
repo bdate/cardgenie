@@ -1,3 +1,4 @@
+import { landingIdentity, LANDING_EVENTS, recordLandingEvent, landingCheckoutMetadata, recordLandingPurchase, landingReport } from './landing-experiment.js'
 import OpenAI from 'openai'
 import Stripe from 'stripe'
 import { migrateAssetsToR2 } from './assets.js'
@@ -3547,7 +3548,7 @@ const handleCreateCheckoutSession = async (request, env) => {
         packId: pack.id,
         priceId: pack.priceId,
         ...(resumeQuery ? { resumeCardId } : {}),
-        ...(gcuReturnPath ? { source: 'gcu' } : {}),
+        ...(gcuReturnPath ? { source: 'gcu' } : landingCheckoutMetadata(body.landing)),
       },
       integration_identifier: `card-genie-credits-${integrationSuffix}`,
     })
@@ -3649,6 +3650,11 @@ const grantCreditsFromCheckoutSession = async (env, checkoutSession) => {
     } catch (error) {
       console.error('Unable to queue ad conversion.', error)
     }
+  }
+
+  if (result && phoneE164 !== TEST_LOGIN_PHONE) {
+    try { await recordLandingPurchase(env, checkoutSession) }
+    catch (error) { console.error('Unable to record welcome purchase.', error) }
   }
 
   return { ok: true, ...result }
@@ -4348,7 +4354,10 @@ const handleGetAdminMetrics = async (request, env) => {
     return jsonResponse(request, env, { error: 'Unable to load admin metrics.' }, 500)
   }
 
-  return jsonResponse(request, env, { ok: true, ...metrics })
+  let welcomeExperiment = []
+  try { welcomeExperiment = await landingReport(env) }
+  catch (error) { console.error('Unable to load welcome experiment.', error) }
+  return jsonResponse(request, env, { ok: true, ...metrics, welcomeExperiment })
 }
 
 const handleGetAdminCosts = async (request, env) => {
@@ -8024,6 +8033,27 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/health') {
     return jsonResponse(request, env, { ok: true })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/landing-events') {
+    const origin = request.headers.get('Origin')
+    if (!origin || !getAllowedOrigins(env).includes(origin)) {
+      return jsonResponse(request, env, { error: 'Origin not allowed.' }, 403)
+    }
+    const text = await request.text()
+    if (text.length > 1024) return jsonResponse(request, env, { error: 'Invalid event.' }, 400)
+    let body
+    try { body = JSON.parse(text) } catch { return jsonResponse(request, env, { error: 'Invalid event.' }, 400) }
+    const identity = landingIdentity(body)
+    if (!identity || !LANDING_EVENTS.has(body.event)) {
+      return jsonResponse(request, env, { error: 'Invalid event.' }, 400)
+    }
+    try {
+      const recorded = await recordLandingEvent(env, identity, body.event)
+      return jsonResponse(request, env, { ok: recorded }, recorded ? 200 : 503)
+    } catch {
+      return jsonResponse(request, env, { error: 'Event storage unavailable.' }, 503)
+    }
   }
 
   const gcuPath = matchGcuPath(url.pathname)

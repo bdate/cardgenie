@@ -1,3 +1,5 @@
+import { readLandingAssignment, trackLanding } from './landingExperiment'
+import './Welcome.css'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -3654,6 +3656,7 @@ function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [adminMetrics, setAdminMetrics] = useState<{
+    welcomeExperiment?: Array<{ variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; checkouts: number; buyers: number; revenueCents: number }>
     today?: string
     period?: string
     rangeStart?: string
@@ -8499,6 +8502,7 @@ function App() {
         body: JSON.stringify({
           packId: pack.id,
           priceId: pack.priceId,
+          landing: readLandingAssignment(),
           ...(resumeCardId ? { resumeCardId } : {}),
         }),
       })
@@ -8509,6 +8513,7 @@ function App() {
         clearActionFeedback()
         return
       }
+      trackLanding('checkout_start')
       markConversionCheckPending()
       window.location.assign(String(data.url))
     } catch (caughtError) {
@@ -8534,6 +8539,7 @@ function App() {
     },
     signatureName: string,
   ) => {
+    trackLanding('generation_complete')
     const selectedLength =
       data.selectedLength === 'short' || data.selectedLength === 'long' ? data.selectedLength : 'medium'
     const variants =
@@ -8602,6 +8608,7 @@ function App() {
         clearStoredGenerationJob()
       }
 
+      trackLanding('generation_error')
       setError(message)
       if (restoreSentAfterFailedGenerateRef.current) {
         setHasSentCurrentCard(true)
@@ -8638,6 +8645,7 @@ function App() {
     setHighlightInvalidFields(false)
     setError('')
 
+    trackLanding('generation_start')
     restoreSentAfterFailedGenerateRef.current = hasSentCurrentCard
     replaceCreatedCardIdRef.current = hasSentCurrentCard || hasPrintedCurrentCard ? '' : sharedCard?.id || ''
     setIsGenerating(true)
@@ -8701,6 +8709,7 @@ function App() {
         return
       }
 
+      trackLanding('generation_error')
       setError(getFriendlyErrorMessage(caughtError, 'Unable to generate the card.'))
       if (restoreSentAfterFailedGenerateRef.current) {
         setHasSentCurrentCard(true)
@@ -12505,6 +12514,18 @@ function App() {
                     : `${adminMetrics.rangeStart} – ${adminMetrics.rangeEnd} (Pacific).`}{' '}
                 Cards are recorded when first sent.
               </p>
+              <div className="welcome-report">
+                <h3>Welcome page A/B test</h3>
+                <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner.</p>
+                {adminMetrics.welcomeExperiment?.length ? <table>
+                  <thead><tr><th>Version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
+                  <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.variant}-${row.source}`}>
+                    <td>{row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
+                    <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
+                    <td>{row.visitors ? (100 * row.buyers / row.visitors).toFixed(1) : '0.0'}%</td><td>${(row.revenueCents / 100).toFixed(2)}</td>
+                  </tr>)}</tbody>
+                </table> : <p>No measured welcome-page visitors yet.</p>}
+              </div>
               <div className="admin-stat-grid">
                 <div>
                   <span>
@@ -13601,6 +13622,7 @@ function App() {
             className={`card-panel form-panel${highlightInvalidFields ? ' is-validated' : ''}`}
             noValidate
             onSubmit={generateCard}
+            onChange={() => trackLanding('form_start')}
           >
           <div className="panel-heading">
             <div>
