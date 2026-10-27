@@ -1,7 +1,7 @@
 // First-party welcome-page funnel. No names, phone numbers, images, card text, or IP addresses.
 export const LANDING_EXPERIMENT = 'welcome-v1'
 export const LANDING_EVENTS = new Set(['view', 'sample_open', 'create_start', 'form_start',
-  'generation_start', 'generation_complete', 'generation_error', 'checkout_start'])
+  'generation_start', 'generation_complete', 'generation_error', 'account_created', 'card_sent', 'checkout_start'])
 const ready = new WeakMap()
 
 export function landingIdentity(value) {
@@ -62,6 +62,8 @@ export async function landingReport(env) {
     COUNT(DISTINCT CASE WHEN e.event = 'form_start' THEN e.visitor END) AS forms,
     COUNT(DISTINCT CASE WHEN e.event = 'generation_complete' THEN e.visitor END) AS completed,
     COUNT(DISTINCT CASE WHEN e.event = 'generation_error' THEN e.visitor END) AS errors,
+    COUNT(DISTINCT CASE WHEN e.event = 'account_created' THEN e.visitor END) AS accounts,
+    COUNT(DISTINCT CASE WHEN e.event = 'card_sent' THEN e.visitor END) AS sends,
     COUNT(DISTINCT CASE WHEN e.event = 'checkout_start' THEN e.visitor END) AS checkouts,
     COUNT(DISTINCT CASE WHEN e.event = 'purchase' THEN e.visitor END) AS buyers,
     COALESCE(SUM(CASE WHEN e.event = 'purchase' THEN e.amount_cents ELSE 0 END), 0) AS revenueCents

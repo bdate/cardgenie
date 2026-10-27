@@ -86,6 +86,45 @@ const isValidConversion = (item: unknown): item is PendingConversion => {
   )
 }
 
+// Secondary (observation-only) Google Ads conversions for earlier funnel steps. A step stays off
+// until its send_to label from Google Ads is filled in here.
+export type FunnelStep = 'landing_click' | 'card_created' | 'account_created' | 'card_sent'
+const funnelSendTo: Record<FunnelStep, string> = {
+  landing_click: '',
+  card_created: '',
+  account_created: '',
+  card_sent: '',
+}
+const funnelFiredStorageKey = 'card-genie-ads-funnel-fired'
+
+const shortHash = (value: string) => {
+  let hash = 5381
+  for (let index = 0; index < value.length; index += 1) hash = ((hash << 5) + hash + value.charCodeAt(index)) | 0
+  return (hash >>> 0).toString(36)
+}
+
+/** Fires a funnel step once per browser for the given item (a card, or the visitor for one-time steps). */
+export const trackFunnelConversion = (step: FunnelStep, itemKey = 'once') => {
+  const sendTo = funnelSendTo[step]
+  if (!sendTo || typeof window.gtag !== 'function' || /^\/gcu\//i.test(window.location.pathname)) return false
+  const firedKey = `${step}:${shortHash(itemKey)}`
+  let fired: string[] = []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(funnelFiredStorageKey) || '[]')
+    fired = Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    fired = []
+  }
+  if (fired.includes(firedKey)) return false
+  window.gtag('event', 'conversion', { send_to: sendTo })
+  try {
+    window.localStorage.setItem(funnelFiredStorageKey, JSON.stringify([...fired, firedKey].slice(-100)))
+  } catch {
+    // Storage may be unavailable; Google Ads "Count: One" still limits repeats per ad click.
+  }
+  return true
+}
+
 let inFlight: Promise<number> | null = null
 
 /**

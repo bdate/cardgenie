@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { assignLanding, creatorUrl, trackLanding } from './landingExperiment'
+import { trackFunnelConversion } from './adsConversions'
 import './Welcome.css'
 
 const samples = [
@@ -75,6 +76,7 @@ export default function Welcome() {
   const start = (occasion?: string) => {
     if (assignment) {
       trackLanding('create_start', assignment)
+      trackFunnelConversion('landing_click', assignment.visitor)
       try { localStorage.setItem('cardGenieWelcomeStarted', '1') } catch { /* URL also bypasses landing. */ }
     }
     location.assign(creatorUrl(occasion, preview))
@@ -119,7 +121,7 @@ export default function Welcome() {
 
       <section className="welcome-how" aria-labelledby="how-heading"><p className="welcome-eyebrow">YOU BRING THE THOUGHT. GENIE BRINGS THE MAGIC.</p><h2 id="how-heading">From “what should I say?”<br />to <em>“I made this for you.”</em></h2><ol><li><span>01</span><h3>Tell us about them</h3><p>A hobby, an inside joke, a memory. Add a photo if you’d like them in the artwork.</p></li><li><span>02</span><h3>Make it yours</h3><p>Genie creates the artwork and message. Preview your card and edit the words for free.</p></li><li><span>03</span><h3>Make their day</h3><p>Send by email or text, or have a printed card mailed. Most cards are ready in a few minutes.</p></li></ol></section>
 
-      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing are free. Sending uses 3 credits; new users receive 2 credits plus 2 more after mobile verification, enough for a first send. Credit packs start at $5 for 10 credits. Printed cards cost $5 (10 credits), mailed by USPS.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
+      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
     </main>
     <footer className="welcome-footer"><a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
 

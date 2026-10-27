@@ -6,7 +6,7 @@ export type LandingAssignment = {
   source: 'paid' | 'other'
   assignedAt: number
 }
-export type LandingEvent = 'view' | 'sample_open' | 'create_start' | 'form_start' | 'generation_start' | 'generation_complete' | 'generation_error' | 'checkout_start'
+export type LandingEvent = 'view' | 'sample_open' | 'create_start' | 'form_start' | 'generation_start' | 'generation_complete' | 'generation_error' | 'account_created' | 'card_sent' | 'checkout_start'
 export const landingStorageKey = 'cardGenieWelcomeV1'
 const maxAge = 30 * 24 * 60 * 60 * 1000
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')

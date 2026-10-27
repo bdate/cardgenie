@@ -8,6 +8,7 @@ import {
   hasConversionCheckPending,
   markConversionCheckPending,
   reportCreditPurchaseConversions,
+  trackFunnelConversion,
 } from './adsConversions'
 import {
   connectLampGenieRealtime,
@@ -3656,7 +3657,7 @@ function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [adminMetrics, setAdminMetrics] = useState<{
-    welcomeExperiment?: Array<{ variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; checkouts: number; buyers: number; revenueCents: number }>
+    welcomeExperiment?: Array<{ variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; accounts?: number; sends?: number; checkouts: number; buyers: number; revenueCents: number }>
     today?: string
     period?: string
     rangeStart?: string
@@ -8540,6 +8541,7 @@ function App() {
     signatureName: string,
   ) => {
     trackLanding('generation_complete')
+    trackFunnelConversion('card_created', data.imageUrl.slice(0, 300) + data.imageUrl.length)
     const selectedLength =
       data.selectedLength === 'short' || data.selectedLength === 'long' ? data.selectedLength : 'medium'
     const variants =
@@ -10763,6 +10765,10 @@ function App() {
       }
       setAccountCode('')
       setAccountCodeSentTo('')
+      if (data.isNew === true) {
+        trackLanding('account_created')
+        trackFunnelConversion('account_created')
+      }
       const bonusCredits = Number(data.phoneVerifyBonusCredits) || 0
       const registrationMessage =
         data.isNew && bonusCredits > 0
@@ -11109,6 +11115,11 @@ function App() {
         typeof data.creditCost === 'number' && Number.isFinite(data.creditCost)
           ? data.creditCost
           : getSendCreditCost(deliveredCount)
+
+      if (sentResults.length > 0) {
+        trackLanding('card_sent')
+        trackFunnelConversion('card_sent', shared.id)
+      }
 
       for (const result of sentResults) {
         addDeliveryLog({
@@ -12518,10 +12529,10 @@ function App() {
                 <h3>Welcome page A/B test</h3>
                 <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner.</p>
                 {adminMetrics.welcomeExperiment?.length ? <table>
-                  <thead><tr><th>Version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
+                  <thead><tr><th>Version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Accounts</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
                   <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.variant}-${row.source}`}>
                     <td>{row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
-                    <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
+                    <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.accounts ?? 0}</td><td>{row.sends ?? 0}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
                     <td>{row.visitors ? (100 * row.buyers / row.visitors).toFixed(1) : '0.0'}%</td><td>${(row.revenueCents / 100).toFixed(2)}</td>
                   </tr>)}</tbody>
                 </table> : <p>{Array.isArray(adminMetrics.welcomeExperiment) ? 'No measured welcome-page visitors yet.' : 'Welcome experiment reporting is waiting for the API update.'}</p>}
