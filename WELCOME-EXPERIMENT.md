@@ -13,7 +13,7 @@ The existing admin Analytics screen includes a since-launch welcome funnel by ve
 
 Milestones: view, sample opened, Create clicked, form started, card created or failed, account created (only when sign-in reports a brand-new account), card sent (only when at least one delivery succeeds; scheduled sends are not counted), checkout started, and verified purchase.
 
-Google Ads secondary conversions for landing click, card created, account created and card sent are wired in `src/adsConversions.ts` and stay off until their `send_to` labels are filled in. Credit purchase remains the only primary conversion.
+Google Ads secondary conversions (Count: One, no value) fire from `src/adsConversions.ts` for landing click (Create clicked on the welcome page), card created, account created and card sent, once per visitor or card in each browser. Credit purchase remains the only primary conversion. Google Ads cannot split these by welcome version; use the admin report for that.
 
 Events are stored in a new, self-initializing `landing_events` table in the existing ACCOUNT_DB. Only experiment IDs, random visitor IDs, variant, source category, fixed milestone names and timestamps are collected. Purchases are recorded from verified live paid Stripe checkout sessions, deduplicated by checkout ID. Unpaid/test/GCU purchases and the test-login account are excluded. Form contents, names, phone numbers, images, URLs and click identifiers are not recorded in the experiment table. The Google Ads purchase conversion code is unchanged.
 

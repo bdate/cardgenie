@@ -90,10 +90,10 @@ const isValidConversion = (item: unknown): item is PendingConversion => {
 // until its send_to label from Google Ads is filled in here.
 export type FunnelStep = 'landing_click' | 'card_created' | 'account_created' | 'card_sent'
 const funnelSendTo: Record<FunnelStep, string> = {
-  landing_click: '',
-  card_created: '',
-  account_created: '',
-  card_sent: '',
+  landing_click: 'AW-18531832400/39zvCJuAk6sdENCk1YRF',
+  card_created: 'AW-18531832400/liNkCJ6Ak6sdENCk1YRF',
+  account_created: 'AW-18531832400/5QFfCIiRl6sdENCk1YRF',
+  card_sent: 'AW-18531832400/n0hcCKGAk6sdENCk1YRF',
 }
 const funnelFiredStorageKey = 'card-genie-ads-funnel-fired'
 
