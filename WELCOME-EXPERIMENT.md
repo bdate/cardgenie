@@ -1,6 +1,8 @@
-# Welcome experiment v1
+# Welcome experiment v2
 
-Once the API readiness endpoint responds with `welcome-v1` and `enabled: true`, new visitors to the root homepage are assigned randomly 50/50 to A (finished cards) or B (story to card). Until then, the existing creator remains the homepage. Preview links always work. Assignment is first-touch, per browser, for 30 days. Paid traffic is identified by a Google click identifier or cpc/ppc/paidsearch UTM medium and reported separately from other traffic. No advertising budget or targeting changes are required.
+v2 started Oct 27, 2026, when Version B changed from a story-to-card example to a real photo-to-card example (the Robin and Lesley congratulations card, shown with permission; headline "Turn your photos and memories into a one-of-a-kind greeting."). Version A (finished sample cards) is unchanged. v1 data stays in `landing_events` and appears as separate rows in the admin report.
+
+Once the API readiness endpoint responds with `welcome-v2` and `enabled: true`, new visitors to the root homepage are assigned randomly 50/50 to A (finished cards) or B (photo to card). Until then, the existing creator remains the homepage. Preview links always work. Assignment is first-touch, per browser, for 30 days. Paid traffic is identified by a Google click identifier or cpc/ppc/paidsearch UTM medium and reported separately from other traffic. No advertising budget or targeting changes are required.
 
 Review both versions without enrolling or recording funnel events:
 

@@ -24,7 +24,6 @@ export default function Welcome() {
   const preview = forced === 'a' || forced === 'b'
   const [assignment] = useState(() => preview ? null : assignLanding())
   const variant = preview ? forced : assignment?.variant || 'b'
-  const [story, setStory] = useState<Sample>(samples[0])
   const [opened, setOpened] = useState<Sample | null>(null)
   const [inside, setInside] = useState(false)
   const [sound, setSound] = useState(false)
@@ -92,8 +91,10 @@ export default function Welcome() {
       <section className="welcome-hero" aria-labelledby="welcome-heading">
         <div className="welcome-intro">
           <p className="welcome-eyebrow"><span aria-hidden="true">✧</span> THEIR PEOPLE. THEIR PASSIONS. THEIR CARD.</p>
-          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : <>A little about them.<br />A card like<br /><em>no other.</em></>}</h1>
-          <p className="welcome-lede">Turn their favorite things, your shared memories, and optional photos into custom artwork and words that feel like you.</p>
+          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
+          <p className="welcome-lede">{variant === 'a'
+            ? 'Turn their favorite things, your shared memories, and optional photos into custom artwork and words that feel like you.'
+            : 'Add a photo and a few details. Genie paints the people you love into custom artwork, with a message written just for them.'}</p>
           <div className="welcome-hero-actions"><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><a className="welcome-text-link" href="#examples">Take a peek first <span aria-hidden="true">↓</span></a></div>
           <p className="welcome-reassurance">Free to create & preview. No sign-up to get started.</p>
           <a className="welcome-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">From the people behind GreetingCardUniverse.com</a>
@@ -101,11 +102,12 @@ export default function Welcome() {
         {variant === 'a' ? <div className="welcome-card-fan" aria-label="Sample greeting cards">
           {samples.map((sample, index) => <button key={sample.id} className={`welcome-fan-card fan-${index}`} onClick={() => openSample(sample)} aria-label={`Open sample: ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" fetchPriority={index === 0 ? 'high' : 'auto'} /><span>Open sample <span aria-hidden="true">↗</span></span></button>)}
           <p className="welcome-hand-note">Their story, beautifully told. <span aria-hidden="true">↖</span></p>
-        </div> : <div className="welcome-transformation">
-          <div className="welcome-story-note"><p>YOU TELL GENIE…</p><blockquote>“{story.prompt}”</blockquote><div role="group" aria-label="Choose an example story">{samples.map(sample => <button key={sample.id} aria-pressed={story.id === sample.id} onClick={() => setStory(sample)}>{sample.id === 'dad' ? 'Dad' : sample.id === 'grandma' ? 'Grandma' : 'My love'}</button>)}</div></div>
+        </div> : <figure className="welcome-transformation welcome-photo-pair" aria-label="A real photo and the card Card Genie made from it">
+          <div className="welcome-photo-original"><img src="/welcome/photo-to-card-photo.webp" width="480" height="640" alt="The original party photo of two friends, Robin and Lesley, smiling together" fetchPriority="high" /><span>THE PHOTO</span></div>
           <span className="welcome-magic-arrow" aria-hidden="true">✧ →</span>
-          <button className="welcome-result" onClick={() => openSample(story)} aria-label={`Open sample: ${story.title}`}><img src={story.image} width="528" height="736" alt={story.alt} fetchPriority="high" /><span>…AND GENIE CREATES THIS <span aria-hidden="true">↗</span></span></button>
-        </div>}
+          <div className="welcome-result"><img src="/welcome/photo-to-card-card.webp" width="528" height="736" alt="The watercolor congratulations card Card Genie made from that photo: Robin and Lesley holding a trophy, with a Price is Right winner banner" fetchPriority="high" /><span>…AND GENIE CREATES THIS</span></div>
+          <figcaption>A real Card Genie card, shared with permission.</figcaption>
+        </figure>}
       </section>
 
       <div className="welcome-promise"><span>Made around <strong>your person</strong></span><span>Artwork + a <strong>personal message</strong></span><span>Send by <strong>email or text</strong></span><span>Or <strong>print & mail</strong></span></div>

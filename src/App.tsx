@@ -3657,7 +3657,7 @@ function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [adminMetrics, setAdminMetrics] = useState<{
-    welcomeExperiment?: Array<{ variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; accounts?: number; sends?: number; checkouts: number; buyers: number; revenueCents: number }>
+    welcomeExperiment?: Array<{ experiment?: string; variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; accounts?: number; sends?: number; checkouts: number; buyers: number; revenueCents: number }>
     today?: string
     period?: string
     rangeStart?: string
@@ -12527,11 +12527,11 @@ function App() {
               </p>
               <div className="welcome-report">
                 <h3>Welcome page A/B test</h3>
-                <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner.</p>
+                <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner. Test v2 (photo-to-card Version B) started Oct 27, 2026; v1 rows are the earlier test and are not combined.</p>
                 {adminMetrics.welcomeExperiment?.length ? <table>
-                  <thead><tr><th>Version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Accounts</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
-                  <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.variant}-${row.source}`}>
-                    <td>{row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
+                  <thead><tr><th>Test · version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Accounts</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
+                  <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.experiment || 'welcome-v1'}-${row.variant}-${row.source}`}>
+                    <td>{(row.experiment || 'welcome-v1').replace('welcome-', '')} · {row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
                     <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.accounts ?? 0}</td><td>{row.sends ?? 0}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
                     <td>{row.visitors ? (100 * row.buyers / row.visitors).toFixed(1) : '0.0'}%</td><td>${(row.revenueCents / 100).toFixed(2)}</td>
                   </tr>)}</tbody>

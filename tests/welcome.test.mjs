@@ -82,11 +82,11 @@ test('live routing only enables the experiment when the reporting API is ready',
   assert.equal(await client.landingExperimentReady(), false)
   globalThis.fetch = async () => { throw new Error('offline') }
   assert.equal(await client.landingExperimentReady(), false)
-  for (const config of [{ enabled: true }, { experiment: 'old', enabled: true }, { experiment: 'welcome-v1', enabled: false }]) {
+  for (const config of [{ enabled: true }, { experiment: 'old', enabled: true }, { experiment: 'welcome-v2', enabled: false }]) {
     globalThis.fetch = async () => ({ ok: true, json: async () => config })
     assert.equal(await client.landingExperimentReady(), false)
   }
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ experiment: 'welcome-v1', enabled: true }) })
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ experiment: 'welcome-v2', enabled: true }) })
   assert.equal(await client.landingExperimentReady(), true)
 })
 
@@ -99,7 +99,7 @@ function database() {
       async all() { return { results: db.prepare(sql).all(...params) } } }
   } } }
 }
-const identity = { experiment: 'welcome-v1', variant: 'a', visitor: 'a'.repeat(32), source: 'paid' }
+const identity = { experiment: 'welcome-v2', variant: 'a', visitor: 'a'.repeat(32), source: 'paid' }
 const paidCheckout = { id: 'cs_one', livemode: true, payment_status: 'paid', amount_total: 500,
   metadata: landingCheckoutMetadata(identity) }
 

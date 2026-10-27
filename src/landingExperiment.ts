@@ -1,13 +1,13 @@
 export type LandingVariant = 'a' | 'b'
 export type LandingAssignment = {
-  experiment: 'welcome-v1'
+  experiment: 'welcome-v2'
   variant: LandingVariant
   visitor: string
   source: 'paid' | 'other'
   assignedAt: number
 }
 export type LandingEvent = 'view' | 'sample_open' | 'create_start' | 'form_start' | 'generation_start' | 'generation_complete' | 'generation_error' | 'account_created' | 'card_sent' | 'checkout_start'
-export const landingStorageKey = 'cardGenieWelcomeV1'
+export const landingStorageKey = 'cardGenieWelcomeV2'
 const maxAge = 30 * 24 * 60 * 60 * 1000
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')
 const sent = new Set<string>()
@@ -21,7 +21,7 @@ export async function landingExperimentReady(): Promise<boolean> {
     })
     if (!response.ok) return false
     const config = await response.json()
-    return config?.experiment === 'welcome-v1' && config?.enabled === true
+    return config?.experiment === 'welcome-v2' && config?.enabled === true
   } catch { return false }
   finally { clearTimeout(timer) }
 }
@@ -30,7 +30,7 @@ export function readLandingAssignment(): LandingAssignment | null {
   if (new URLSearchParams(location.search).has('landing_preview')) return null
   try {
     const value = JSON.parse(localStorage.getItem(landingStorageKey) || 'null')
-    if (value?.experiment !== 'welcome-v1' || !['a', 'b'].includes(value.variant) ||
+    if (value?.experiment !== 'welcome-v2' || !['a', 'b'].includes(value.variant) ||
       !/^[a-f0-9]{32}$/.test(value.visitor) || !['paid', 'other'].includes(value.source) ||
       !Number.isFinite(value.assignedAt) || Date.now() - value.assignedAt > maxAge) return null
     return value
@@ -61,7 +61,7 @@ export function assignLanding(): LandingAssignment {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   const query = new URLSearchParams(location.search)
   const assignment: LandingAssignment = {
-    experiment: 'welcome-v1',
+    experiment: 'welcome-v2',
     variant: bytes[0] < 128 ? 'a' : 'b',
     visitor: Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''),
     source: ['gclid', 'gbraid', 'wbraid', 'gad_source'].some(key => query.has(key)) ||

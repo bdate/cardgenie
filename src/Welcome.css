@@ -45,6 +45,13 @@
 .welcome-result:hover { transform:rotate(1deg) translateY(-4px); }
 .welcome-result img { display:block; width:100%; height:auto; border-radius:3px; }
 .welcome-result>span { display:flex; justify-content:space-between; padding:10px 2px 3px; font-size:8px; font-weight:800; letter-spacing:1px; color:var(--ink); }
+.welcome-photo-pair { margin:0; }
+.welcome-photo-original { padding:9px 9px 0; background:#fff; border-radius:7px; box-shadow:0 14px 30px #394f3d1c; transform:rotate(-4deg); }
+.welcome-photo-original img { display:block; width:100%; height:auto; border-radius:3px; }
+.welcome-photo-original>span { display:block; padding:9px 2px 10px; font-size:8px; font-weight:800; letter-spacing:1px; color:var(--ink); }
+.welcome-photo-pair .welcome-result { cursor:default; }
+.welcome-photo-pair .welcome-result:hover { transform:rotate(5deg); }
+.welcome-photo-pair figcaption { grid-column:1 / -1; margin-top:10px; text-align:center; font-size:10px; color:#63756a; }
 .welcome-promise { display:flex; justify-content:space-between; gap:16px; border-block:1px solid #315f5b22; padding:24px 40px; font-size:11px; color:#5b6f66; }
 .welcome-promise strong { color:var(--ink); }
 .welcome-examples { padding:78px 40px; scroll-margin-top:20px; }
@@ -108,11 +115,12 @@
  .welcome-promise { padding:20px 25px; font-size:10px; }.welcome-gallery { gap:20px; }.welcome-gallery-art { padding:15px; }.welcome-examples { padding:60px 25px; }.welcome-how { padding-inline:25px; }.welcome-footer { padding-inline:25px; }.welcome-footer>p { display:none; }
 }
 @media(max-width:650px) {
+ .welcome.welcome-b h1 { font-size:38px; line-height:1.08; letter-spacing:-1.4px; }.welcome.welcome-b .welcome-lede { margin-bottom:18px; }
  .welcome-header { padding:16px 20px; }.welcome-brand img { width:43px; height:43px; }.welcome-brand span { font-size:29px; }.welcome-header nav { gap:15px; font-size:11px; }.welcome-header nav button { padding:9px 16px; }
  .welcome-hero { grid-template-columns:1fr; padding:30px 24px 35px; gap:30px; min-height:0; }.welcome h1 { font-size:53px; line-height:1.05; letter-spacing:-2.4px; }.welcome-eyebrow { font-size:8px; letter-spacing:1.5px; margin-bottom:18px; }
  .welcome-lede { font-size:14px; line-height:1.75; max-width:360px; margin-bottom:22px; }.welcome-primary { padding:15px 22px; font-size:13px; }.welcome-hero-actions { gap:18px; }.welcome-text-link { font-size:11px; }.welcome-reassurance { margin:13px 0 18px; font-size:10px; }.welcome-powered { font-size:9px; }
  .welcome-card-fan { height:370px; max-width:400px; width:100%; margin:0 auto; }.fan-0 { top:20px; }.fan-1 { top:0; }.fan-2 { top:48px; }.welcome-hand-note { bottom:0; right:0; }
- .welcome-transformation { grid-template-columns:.85fr 1fr; gap:15px; width:100%; max-width:420px; margin:12px auto 20px; }.welcome-story-note { padding:18px 14px; }.welcome-story-note blockquote { font-size:15px; }.welcome-story-note>p { font-size:7px; }.welcome-result>span { font-size:6px; letter-spacing:.5px; }.welcome-magic-arrow { top:-22px; font-size:25px; }
+ .welcome-transformation { grid-template-columns:.85fr 1fr; gap:15px; width:100%; max-width:420px; margin:12px auto 20px; }.welcome-story-note { padding:18px 14px; }.welcome-story-note blockquote { font-size:15px; }.welcome-story-note>p { font-size:7px; }.welcome-result>span, .welcome-photo-original>span { font-size:6px; letter-spacing:.5px; }.welcome-magic-arrow { top:-22px; font-size:25px; }
  .welcome-promise { display:grid; grid-template-columns:1fr 1fr; gap:16px 8px; padding:20px 24px; font-size:10px; }
  .welcome-examples { padding:45px 24px 35px; }.welcome-section-heading { display:block; margin-bottom:25px; }.welcome-section-heading>p { margin:18px 0 0; max-width:330px; font-size:12px; }.welcome h2 { font-size:33px; }.welcome-gallery { gap:28px; grid-template-columns:1fr; max-width:370px; margin:auto; }.welcome-gallery-art { padding:28px 38px; border-radius:95px 95px 5px 5px; }.welcome-gallery-art img { max-height:360px; width:auto; max-width:100%; margin:auto; }.welcome-sample-caption { padding-top:15px; }.welcome-sample-caption h3 { font-size:23px; }.welcome-sample-caption button { font-size:11px; }.welcome-example-note { font-size:9px; line-height:1.7; }
  .welcome-how { padding:20px 24px 45px; text-align:left; }.welcome-how ol { grid-template-columns:1fr; gap:25px; padding-top:25px; }.welcome-how li { display:grid; grid-template-columns:40px 1fr; column-gap:18px; }.welcome-how li>span { grid-row:1/3; border:0; padding:0; }.welcome-how h3 { margin:0 0 7px; }.welcome-how li p { grid-column:2; }

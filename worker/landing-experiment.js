@@ -1,5 +1,5 @@
 // First-party welcome-page funnel. No names, phone numbers, images, card text, or IP addresses.
-export const LANDING_EXPERIMENT = 'welcome-v1'
+export const LANDING_EXPERIMENT = 'welcome-v2'
 export const LANDING_EVENTS = new Set(['view', 'sample_open', 'create_start', 'form_start',
   'generation_start', 'generation_complete', 'generation_error', 'account_created', 'card_sent', 'checkout_start'])
 const ready = new WeakMap()
@@ -55,7 +55,8 @@ export async function landingReport(env) {
   if (!env.ACCOUNT_DB) return []
   await ensureTable(env.ACCOUNT_DB)
   // Join all milestones back to exposure: buyers are unique people, revenue includes repeat purchases.
-  const result = await env.ACCOUNT_DB.prepare(`SELECT v.variant, v.source,
+  // Earlier experiment versions stay in the report as separate rows; their numbers are never combined.
+  const result = await env.ACCOUNT_DB.prepare(`SELECT v.experiment, v.variant, v.source,
     COUNT(DISTINCT v.visitor) AS visitors,
     COUNT(DISTINCT CASE WHEN e.event = 'sample_open' THEN e.visitor END) AS samples,
     COUNT(DISTINCT CASE WHEN e.event = 'create_start' THEN e.visitor END) AS starts,
@@ -69,7 +70,8 @@ export async function landingReport(env) {
     COALESCE(SUM(CASE WHEN e.event = 'purchase' THEN e.amount_cents ELSE 0 END), 0) AS revenueCents
     FROM landing_events v LEFT JOIN landing_events e
       ON e.visitor = v.visitor AND e.experiment = v.experiment AND e.variant = v.variant AND e.source = v.source
-    WHERE v.event = 'view' AND v.experiment = ?
-    GROUP BY v.variant, v.source ORDER BY v.source, v.variant`).bind(LANDING_EXPERIMENT).all()
+    WHERE v.event = 'view' AND v.experiment IN (?, 'welcome-v1')
+    GROUP BY v.experiment, v.variant, v.source
+    ORDER BY v.experiment = ? DESC, v.experiment DESC, v.source, v.variant`).bind(LANDING_EXPERIMENT, LANDING_EXPERIMENT).all()
   return result.results || []
 }
