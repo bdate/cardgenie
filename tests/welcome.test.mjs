@@ -26,6 +26,11 @@ test('welcome protects recipient links, checkout returns, account links, saved d
   }
   locationAt('/?gclid=ad&occasion=Birthday')
   assert.equal(client.shouldShowWelcome(), true)
+  // Real Google Ads clicks carry gad_source/gad_campaignid (and sometimes gbraid) next to gclid.
+  locationAt('/?gad_source=1&gad_campaignid=24392343745&gbraid=0AAAA&gclid=ad')
+  assert.equal(client.shouldShowWelcome(), true)
+  locationAt('/?gad_source=1&gad_campaignid=24392343745&gclid=ad&card=private')
+  assert.equal(client.shouldShowWelcome(), false)
   for (const key of ['cardGenieAccountSession', 'cardGenieFormDraft', 'cardGenieInterviewSession',
     'cardgenie.generationJob', 'cardGenieCheckoutResume', 'cardGenieWelcomeStarted']) {
     localStorage.setItem(key, '{}'); assert.equal(client.shouldShowWelcome(), false, key); localStorage.clear()
@@ -43,6 +48,8 @@ test('assignment persists, separates paid traffic, rejects expired or malformed 
   const next = client.assignLanding(); assert.equal(next.source, 'other'); assert.notEqual(first.visitor, next.visitor)
   localStorage.setItem(client.landingStorageKey, JSON.stringify({ ...next, visitor: 'user@example.com' }))
   assert.equal(client.readLandingAssignment(), null)
+  localStorage.clear(); locationAt('/?gad_source=1&gad_campaignid=24392343745')
+  assert.equal(client.assignLanding().source, 'paid')
 })
 
 test('preview does not enroll, creation preserves click attribution and selected occasion', () => {

@@ -8,7 +8,7 @@
   window.__cardGenieAdsTag = true
   if (/^\/gcu\//i.test(location.pathname)) return
 
-  var keptParams = /^(gclid|gbraid|wbraid|dclid|utm_(source|medium|campaign|term|content|id)|occasion|style)$/i
+  var keptParams = /^(gclid|gbraid|wbraid|dclid|gad_source|gad_campaignid|utm_(source|medium|campaign|term|content|id)|occasion|style)$/i
 
   var trimUrl = function (url) {
     try {

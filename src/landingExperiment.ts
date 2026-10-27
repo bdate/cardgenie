@@ -43,8 +43,9 @@ export function shouldShowWelcome(): boolean {
   if (query.get('welcome') === 'a' || query.get('welcome') === 'b') return true
   // Never intercept personal cards, checkout returns, account links, or saved work.
   let specialLink = Boolean(location.hash)
+  // Ad and analytics tags (Google Ads adds gad_source/gad_campaignid next to gclid) are normal traffic.
   query.forEach((_value, key) => {
-    if (!/^(gclid|gbraid|wbraid|dclid|utm_(source|medium|campaign|term|content|id)|occasion|style)$/i.test(key)) specialLink = true
+    if (!/^(gclid|gbraid|wbraid|dclid|gad_[a-z]+|msclkid|fbclid|srsltid|_gl|utm_[a-z]+|occasion|style)$/i.test(key)) specialLink = true
   })
   if (specialLink) return false
   try {
@@ -63,7 +64,7 @@ export function assignLanding(): LandingAssignment {
     experiment: 'welcome-v1',
     variant: bytes[0] < 128 ? 'a' : 'b',
     visitor: Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''),
-    source: ['gclid', 'gbraid', 'wbraid'].some(key => query.has(key)) ||
+    source: ['gclid', 'gbraid', 'wbraid', 'gad_source'].some(key => query.has(key)) ||
       /^(cpc|ppc|paidsearch)$/i.test(query.get('utm_medium') || '') ? 'paid' : 'other',
     assignedAt: Date.now(),
   }
