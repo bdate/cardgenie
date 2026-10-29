@@ -2398,15 +2398,25 @@ const twilioSenderFields = (env) => {
   return { From: env.TWILIO_FROM_NUMBER }
 }
 
+// Carrier/RCS compliance: every program text names Card Genie and carries the standard disclosures.
+const SMS_DISCLOSURE = 'Msg & data rates may apply. Msg frequency varies. Reply HELP for help, STOP to opt out.'
+
+const formatSmsBody = (text) => {
+  const body = String(text || '').trim()
+  const branded = /card genie/i.test(body) ? body : `Card Genie: ${body}`
+  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${SMS_DISCLOSURE}`
+}
+
 const sendTextDelivery = async ({ env, to, copy }) => {
   const sender = twilioSenderFields(env)
   const twilioAuth = getTwilioAuthCredentials(env)
   const normalizedTo = normalizePhoneNumber(to)
+  const body = formatSmsBody(copy.text)
 
   const form = new URLSearchParams({
     ...sender,
     To: normalizedTo,
-    Body: copy.text,
+    Body: body,
   })
 
   const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioAuth.accountSid}/Messages.json`, {
@@ -2423,7 +2433,7 @@ const sendTextDelivery = async ({ env, to, copy }) => {
     throw new Error(`Twilio could not send the card. ${errorText}`)
   }
 
-  await recordUsage(env, USAGE_KINDS.smsCard, { units: smsSegmentCount(copy.text) })
+  await recordUsage(env, USAGE_KINDS.smsCard, { units: smsSegmentCount(body) })
   return normalizedTo
 }
 
@@ -4475,7 +4485,6 @@ const handleAdminGrantCredits = async (request, env) => {
     `${firstName ? `Hi ${firstName}! ` : 'Hi! '}Good news from Card Genie: we've added ${creditWord(amount)} to your account, on us.`,
     `You now have ${creditWord(nextBalance)} to create and send personalized cards.`,
     `Make one anytime at ${getPublicAppUrl(request, env)}`,
-    'Reply STOP to opt out.',
   ].join(' ')
   let textSent = false
   try {
