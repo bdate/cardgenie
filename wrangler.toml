@@ -16,7 +16,7 @@ pattern = "api.card-genie.com"
 custom_domain = true
 
 [triggers]
-crons = ["*/15 * * * *", "*/5 * * * *"]
+crons = ["*/15 * * * *", "*/5 * * * *", "0 * * * *"]
 
 [[kv_namespaces]]
 binding = "CARD_STORE"

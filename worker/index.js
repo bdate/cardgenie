@@ -54,6 +54,7 @@ import {
   TEST_LOGIN_PHONE,
 } from './account-db.js'
 import { USAGE_KINDS, getAdminCosts, recordUsage, smsSegmentCount } from './costs.js'
+import { buildDailyReport, pacificNow } from './daily-report.js'
 import {
   ensureCoverThumbForRecord,
   getCoverThumbBytes,
@@ -4980,6 +4981,42 @@ const runCardDelivery = async (request, env, { session, record, method, destinat
 }
 
 const SCHEDULED_SEND_CRON = '*/5 * * * *'
+const DAILY_REPORT_CRON = '0 * * * *'
+const DAILY_REPORT_TO = 'cardgenie@gcuniverse.com'
+
+const sendDailyReport = async (env, dayKey) => {
+  const report = await buildDailyReport(env, dayKey)
+  await sendEmailDelivery({ env, to: env.DAILY_REPORT_TO || DAILY_REPORT_TO, copy: report })
+  return report
+}
+
+// Runs hourly; sends the report once, during the 11 PM Pacific hour, for that Pacific day.
+const maybeSendDailyReport = async (env) => {
+  const now = pacificNow()
+  if (now.hour !== 23 || !env.CARD_STORE) return
+  const sentKey = `daily-report-sent:${now.day}`
+  if (await env.CARD_STORE.get(sentKey)) return
+  await env.CARD_STORE.put(sentKey, new Date().toISOString(), { expirationTtl: 3 * 24 * 60 * 60 })
+  try {
+    await sendDailyReport(env, now.day)
+  } catch (error) {
+    await env.CARD_STORE.delete(sentKey)
+    throw error
+  }
+}
+
+const handleAdminDailyReport = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) return denied
+  const requested = new URL(request.url).searchParams.get('day') || ''
+  const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : pacificNow().day
+  if (new URL(request.url).searchParams.get('preview') === '1') {
+    const preview = await buildDailyReport(env, dayKey)
+    return jsonResponse(request, env, { ok: true, day: dayKey, subject: preview.subject, text: preview.text })
+  }
+  const report = await sendDailyReport(env, dayKey)
+  return jsonResponse(request, env, { ok: true, day: report.dayKey, subject: report.subject, to: env.DAILY_REPORT_TO || DAILY_REPORT_TO })
+}
 const SCHEDULED_SEND_MIN_LEAD_MS = 14 * 60 * 1000
 const SCHEDULED_SEND_MAX_LEAD_MS = 366 * 24 * 60 * 60 * 1000
 const SCHEDULED_SEND_MAX_ATTEMPTS = 3
@@ -8217,6 +8254,10 @@ const handleRequest = async (request, env, ctx) => {
     return handleAdminResendCardEmail(request, env)
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/admin/daily-report') {
+    return handleAdminDailyReport(request, env)
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/admin/card-cover-video') {
     return handleAdminCardCoverVideo(request, env)
   }
@@ -8499,6 +8540,10 @@ export default {
   async scheduled(event, env, ctx) {
     if (event?.cron === SCHEDULED_SEND_CRON) {
       ctx.waitUntil(processDueScheduledSends(env).catch((error) => console.error('scheduled sends failed', error)))
+      return
+    }
+    if (event?.cron === DAILY_REPORT_CRON) {
+      ctx.waitUntil(maybeSendDailyReport(env).catch((error) => console.error('daily report failed', error)))
       return
     }
     ctx.waitUntil(sendScheduledShipmentEmails(env))
