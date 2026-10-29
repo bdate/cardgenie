@@ -54,7 +54,7 @@ import {
   TEST_LOGIN_PHONE,
 } from './account-db.js'
 import { USAGE_KINDS, getAdminCosts, recordUsage, smsSegmentCount } from './costs.js'
-import { buildDailyReport, pacificNow } from './daily-report.js'
+import { buildReport, isLastDayOfMonth, pacificNow, weekStartDay } from './daily-report.js'
 import {
   ensureCoverThumbForRecord,
   getCoverThumbBytes,
@@ -4984,37 +4984,51 @@ const SCHEDULED_SEND_CRON = '*/5 * * * *'
 const DAILY_REPORT_CRON = '0 * * * *'
 const DAILY_REPORT_TO = 'cardgenie@gcuniverse.com'
 
-const sendDailyReport = async (env, dayKey) => {
-  const report = await buildDailyReport(env, dayKey)
+const reportRange = (kind, dayKey) => {
+  if (kind === 'weekly') return { kind, startDay: weekStartDay(dayKey), endDay: dayKey }
+  if (kind === 'monthly') return { kind, startDay: `${dayKey.slice(0, 8)}01`, endDay: dayKey }
+  return { kind: 'daily', startDay: dayKey, endDay: dayKey }
+}
+
+const sendReport = async (env, kind, dayKey) => {
+  const report = await buildReport(env, reportRange(kind, dayKey))
   await sendEmailDelivery({ env, to: env.DAILY_REPORT_TO || DAILY_REPORT_TO, copy: report })
   return report
 }
 
-// Runs hourly; sends the report once, during the 11 PM Pacific hour, for that Pacific day.
+// Runs hourly. During the 11 PM Pacific hour it sends the daily report, plus the weekly report on
+// Sundays (Monday–Sunday) and the monthly report on the month's last day. Each is sent once.
 const maybeSendDailyReport = async (env) => {
   const now = pacificNow()
   if (now.hour !== 23 || !env.CARD_STORE) return
-  const sentKey = `daily-report-sent:${now.day}`
-  if (await env.CARD_STORE.get(sentKey)) return
-  await env.CARD_STORE.put(sentKey, new Date().toISOString(), { expirationTtl: 3 * 24 * 60 * 60 })
-  try {
-    await sendDailyReport(env, now.day)
-  } catch (error) {
-    await env.CARD_STORE.delete(sentKey)
-    throw error
+  const due = ['daily']
+  if (new Date(`${now.day}T12:00:00Z`).getUTCDay() === 0) due.push('weekly')
+  if (isLastDayOfMonth(now.day)) due.push('monthly')
+  for (const kind of due) {
+    const sentKey = `${kind}-report-sent:${now.day}`
+    if (await env.CARD_STORE.get(sentKey)) continue
+    await env.CARD_STORE.put(sentKey, new Date().toISOString(), { expirationTtl: 3 * 24 * 60 * 60 })
+    try {
+      await sendReport(env, kind, now.day)
+    } catch (error) {
+      await env.CARD_STORE.delete(sentKey)
+      console.error(`${kind} report failed`, error)
+    }
   }
 }
 
 const handleAdminDailyReport = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) return denied
-  const requested = new URL(request.url).searchParams.get('day') || ''
+  const params = new URL(request.url).searchParams
+  const requested = params.get('day') || ''
   const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : pacificNow().day
-  if (new URL(request.url).searchParams.get('preview') === '1') {
-    const preview = await buildDailyReport(env, dayKey)
+  const kind = ['weekly', 'monthly'].includes(params.get('kind')) ? params.get('kind') : 'daily'
+  if (params.get('preview') === '1') {
+    const preview = await buildReport(env, reportRange(kind, dayKey))
     return jsonResponse(request, env, { ok: true, day: dayKey, subject: preview.subject, text: preview.text })
   }
-  const report = await sendDailyReport(env, dayKey)
+  const report = await sendReport(env, kind, dayKey)
   return jsonResponse(request, env, { ok: true, day: report.dayKey, subject: report.subject, to: env.DAILY_REPORT_TO || DAILY_REPORT_TO })
 }
 const SCHEDULED_SEND_MIN_LEAD_MS = 14 * 60 * 1000

@@ -86,11 +86,55 @@ const escape = (value) =>
 
 const pct = (part, whole) => (whole ? `${Math.round((100 * part) / whole)}%` : '–')
 
-export const buildDailyReport = async (env, dayKey) => {
+const PERIODS = {
+  daily: { title: 'daily report', word: 'today' },
+  weekly: { title: 'weekly report', word: 'this week' },
+  monthly: { title: 'monthly report', word: 'this month' },
+}
+
+const shortDate = (dayKey, withYear = false) =>
+  new Date(`${dayKey}T12:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(withYear ? { year: 'numeric' } : {}),
+    timeZone: 'UTC',
+  })
+
+const periodLabel = (kind, startDay, endDay) => {
+  if (kind === 'monthly') {
+    return new Date(`${startDay}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  }
+  if (kind === 'weekly') return `${shortDate(startDay)} – ${shortDate(endDay, true)}`
+  return new Date(`${startDay}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+export const shiftDay = (dayKey, days) => {
+  const [year, month, day] = dayKey.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/** Monday of the Pacific week containing dayKey. */
+export const weekStartDay = (dayKey) => {
+  const weekday = new Date(`${dayKey}T12:00:00Z`).getUTCDay()
+  return shiftDay(dayKey, -((weekday + 6) % 7))
+}
+
+export const isLastDayOfMonth = (dayKey) => shiftDay(dayKey, 1).slice(8) === '01'
+
+export const buildDailyReport = (env, dayKey) => buildReport(env, { kind: 'daily', startDay: dayKey, endDay: dayKey })
+
+export const buildReport = async (env, { kind = 'daily', startDay, endDay }) => {
   const db = env.ACCOUNT_DB
   if (!db) throw new Error('Account database is not available.')
-  const start = dayStartUtc(dayKey).toISOString()
-  const end = dayStartUtc(nextDayKey(dayKey)).toISOString()
+  const period = PERIODS[kind] || PERIODS.daily
+  const start = dayStartUtc(startDay).toISOString()
+  const end = dayStartUtc(nextDayKey(endDay)).toISOString()
   const range = [start, end]
 
   const [funnelRows, cardRows, accountRows, deliveryRows, failedRows, paymentRows, printRows, adRows, errorRows, occasionRows, reviewRows, testTotalsRows] =
@@ -161,7 +205,25 @@ export const buildDailyReport = async (env, dayKey) => {
   let costs = null
   try {
     const adminCosts = await getAdminCosts(env)
-    costs = adminCosts?.daily?.find((entry) => entry.day === dayKey) || null
+    if (kind === 'monthly' && adminCosts?.summaries?.month && startDay === `${adminCosts.today.slice(0, 8)}01`) {
+      const month = adminCosts.summaries.month
+      costs = {
+        cost: Number(month.cost) || 0,
+        net: (Number(month.revenue) || 0) - (Number(month.cost) || 0),
+        categories: Object.fromEntries(Object.entries(month.categories || {}).map(([id, value]) => [id, Number(value?.cost ?? value) || 0])),
+      }
+    } else {
+      const days = (adminCosts?.daily || []).filter((entry) => entry.day >= startDay && entry.day <= endDay)
+      if (days.length) {
+        const categories = {}
+        for (const entry of days) {
+          for (const [id, value] of Object.entries(entry.categories || {})) categories[id] = (categories[id] || 0) + (Number(value) || 0)
+        }
+        const cost = days.reduce((sum, entry) => sum + (Number(entry.cost) || 0), 0)
+        const revenue = days.reduce((sum, entry) => sum + (Number(entry.revenue) || 0), 0)
+        costs = { cost, net: revenue - cost, categories }
+      }
+    }
   } catch (error) {
     console.error('daily report costs failed', error)
   }
@@ -187,25 +249,26 @@ export const buildDailyReport = async (env, dayKey) => {
   const failed = failedRows.reduce((sum, row) => sum + Number(row.n || 0), 0)
   const payment = paymentRows[0] || {}
   const prints = printRows.reduce((sum, row) => sum + Number(row.n || 0), 0)
+  const recipientRow = printRows.find((row) => row.order_source === 'recipient') || {}
+  const recipientPrints = { n: Number(recipientRow.n || 0), cents: Number(recipientRow.cents || 0) }
   const ads = adRows[0] || {}
   const paidViews = paidFunnel[0].total
   const paidStarts = paidFunnel[2].total
   const cardsSent = Number(sent.email?.cards || 0) + Number(sent.text?.cards || 0)
 
-  const dateLabel = new Date(`${dayKey}T12:00:00Z`).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
+  const dateLabel = periodLabel(kind, startDay, endDay)
 
   const highlights = [
     ['Revenue', `${money(Number(payment.cents || 0) / 100)} from ${Number(payment.n || 0)} credit purchase${Number(payment.n) === 1 ? '' : 's'}`],
     ['Cards created', String(Number(cardRows[0]?.n || 0))],
     ['New accounts', String(Number(accountRows[0]?.n || 0))],
     ['Cards sent', `${cardsSent} (email ${Number(sent.email?.deliveries || 0)}, text ${Number(sent.text?.deliveries || 0)} deliveries)`],
-    ['Printed card orders', String(prints)],
+    [
+      'Printed card orders',
+      recipientPrints.n
+        ? `${prints} (${recipientPrints.n} paid directly by recipients, ${money(recipientPrints.cents / 100)})`
+        : String(prints),
+    ],
     ['Ad visitors (paid)', `${paidViews} saw the welcome page, ${paidStarts} clicked Create (${pct(paidStarts, paidViews)})`],
     ['Purchases reported to Google Ads', `${Number(ads.n || 0)} (${money(Number(ads.cents || 0) / 100)})`],
   ]
@@ -228,11 +291,11 @@ export const buildDailyReport = async (env, dayKey) => {
   const reviews = Number(reviewRows[0]?.n || 0)
 
   const text = [
-    `Card Genie daily report – ${dateLabel} (Pacific time)`,
+    `Card Genie ${period.title} – ${dateLabel} (Pacific time)`,
     '',
     ...highlights.map(([label, value]) => `${label}: ${value}`),
     '',
-    'Ad visitors through the welcome page today (paid traffic, test v2):',
+    `Ad visitors through the welcome page ${period.word} (paid traffic, test v2):`,
     ...paidFunnel.map((row) => `  ${row.label}: A ${row.a} · B ${row.b} · total ${row.total}`),
     `Other (non-ad) welcome visitors: ${otherViews} saw it, ${otherStarts} clicked Create.`,
     '',
@@ -252,12 +315,12 @@ export const buildDailyReport = async (env, dayKey) => {
   const cell = 'padding:6px 10px;border-bottom:1px solid #e3ece9;text-align:left;'
   const num = 'padding:6px 10px;border-bottom:1px solid #e3ece9;text-align:right;'
   const html = `<div style="font-family:Arial,sans-serif;color:#2d4b48;max-width:640px;">
-<h2 style="margin:0 0 4px;color:#3f9b91;">Card Genie daily report</h2>
+<h2 style="margin:0 0 4px;color:#3f9b91;">Card Genie ${escape(period.title)}</h2>
 <p style="margin:0 0 16px;color:#5f6b6a;">${escape(dateLabel)} · Pacific time</p>
 <table style="border-collapse:collapse;width:100%;margin-bottom:20px;">${highlights
     .map(([label, value]) => `<tr><td style="${cell}font-weight:bold;">${escape(label)}</td><td style="${cell}">${escape(value)}</td></tr>`)
     .join('')}</table>
-<h3 style="margin:0 0 8px;">Ad visitors through the welcome page today</h3>
+<h3 style="margin:0 0 8px;">Ad visitors through the welcome page ${escape(period.word)}</h3>
 <p style="margin:0 0 8px;color:#5f6b6a;font-size:13px;">Paid traffic, welcome test v2. Version A = finished sample cards, Version B = photo to card.</p>
 <table style="border-collapse:collapse;width:100%;margin-bottom:8px;">
 <tr><th style="${cell}">Step</th><th style="${num}">Version A</th><th style="${num}">Version B</th><th style="${num}">Total</th></tr>
@@ -266,7 +329,7 @@ ${paidFunnel
   .join('')}
 </table>
 <p style="margin:0 0 20px;color:#5f6b6a;font-size:13px;">Other (non-ad) welcome visitors: ${otherViews} saw it, ${otherStarts} clicked Create.</p>
-<h3 style="margin:0 0 8px;">Also today</h3>
+<h3 style="margin:0 0 8px;">Also ${escape(period.word)}</h3>
 <ul style="margin:0 0 20px;padding-left:20px;line-height:1.6;">
 <li><strong>Problems:</strong> ${escape(problems.length ? problems.join('; ') : 'none')}</li>
 <li><strong>Top occasions:</strong> ${escape(occasions.length ? occasions.join(', ') : 'none')}</li>
@@ -276,8 +339,8 @@ ${costLines.length ? `<li><strong>Cost breakdown:</strong> ${escape(costLines.jo
     testTotals.map((row) => `${TOTAL_LABELS[row.event]} A ${row.a} / B ${row.b}`).join(' · '),
   )}</li>
 </ul>
-<p style="margin:0;color:#5f6b6a;font-size:12px;">Google Ads clicks and spend are not included; see Google Ads for those. Small daily counts swing a lot, so judge the A/B test on the running totals.</p>
+<p style="margin:0;color:#5f6b6a;font-size:12px;">Google Ads clicks and spend are not included; see Google Ads for those. Small counts swing a lot, so judge the A/B test on the running totals.</p>
 </div>`
 
-  return { subject: `Card Genie daily report – ${dateLabel}`, text, html, dayKey }
+  return { subject: `Card Genie ${period.title} – ${dateLabel}`, text, html, dayKey: endDay, startDay, kind }
 }
