@@ -8096,7 +8096,7 @@ const handleRequest = async (request, env, ctx) => {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/landing-experiment') {
-    return jsonResponse(request, env, { experiment: 'welcome-v2', enabled: Boolean(env.ACCOUNT_DB) })
+    return jsonResponse(request, env, { experiment: 'welcome-v3', enabled: Boolean(env.ACCOUNT_DB) })
   }
 
   if (request.method === 'POST' && url.pathname === '/api/landing-events') {

@@ -1,11 +1,11 @@
 // First-party welcome-page funnel. No names, phone numbers, images, card text, or IP addresses.
-export const LANDING_EXPERIMENT = 'welcome-v2'
+export const LANDING_EXPERIMENT = 'welcome-v3'
 export const LANDING_EVENTS = new Set(['view', 'sample_open', 'create_start', 'form_start',
   'generation_start', 'generation_complete', 'generation_error', 'account_created', 'card_sent', 'checkout_start'])
 const ready = new WeakMap()
 
 export function landingIdentity(value) {
-  if (value?.experiment !== LANDING_EXPERIMENT || !['a', 'b'].includes(value.variant) ||
+  if (value?.experiment !== LANDING_EXPERIMENT || !['a', 'b', 'c'].includes(value.variant) ||
     !/^[a-f0-9]{32}$/.test(String(value.visitor || '')) || !['paid', 'other'].includes(value.source)) return null
   return { experiment: LANDING_EXPERIMENT, variant: value.variant, visitor: value.visitor, source: value.source }
 }
@@ -70,7 +70,7 @@ export async function landingReport(env) {
     COALESCE(SUM(CASE WHEN e.event = 'purchase' THEN e.amount_cents ELSE 0 END), 0) AS revenueCents
     FROM landing_events v LEFT JOIN landing_events e
       ON e.visitor = v.visitor AND e.experiment = v.experiment AND e.variant = v.variant AND e.source = v.source
-    WHERE v.event = 'view' AND v.experiment IN (?, 'welcome-v1')
+    WHERE v.event = 'view' AND v.experiment IN (?, 'welcome-v2', 'welcome-v1')
     GROUP BY v.experiment, v.variant, v.source
     ORDER BY v.experiment = ? DESC, v.experiment DESC, v.source, v.variant`).bind(LANDING_EXPERIMENT, LANDING_EXPERIMENT).all()
   return result.results || []

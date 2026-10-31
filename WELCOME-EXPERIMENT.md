@@ -1,4 +1,8 @@
-# Welcome experiment v2
+# Welcome experiment v3
+
+v3 started Oct 31, 2026: Version A (finished sample cards) against Version C (quick start). Version C asks only From, To and Occasion (with the same occasion type-ahead as the card form), then opens the card form with those filled in and the cursor in "Who are they to you?". Names are handed over in browser storage (`cardGenieWelcomeHandoff`), never in the URL. Version B (photo to card) is retired but still previewable at `/?welcome=b`. v1 and v2 rows stay separate in the admin report.
+
+Previous version notes:
 
 v2 started Oct 27, 2026, when Version B changed from a story-to-card example to a real photo-to-card example (the Robin and Lesley congratulations card, shown with permission; headline "Turn your photos and memories into a one-of-a-kind greeting."). Version A (finished sample cards) is unchanged. v1 data stays in `landing_events` and appears as separate rows in the admin report.
 
@@ -8,6 +12,7 @@ Review both versions without enrolling or recording funnel events:
 
 - https://www.card-genie.com/?welcome=a
 - https://www.card-genie.com/?welcome=b
+- https://www.card-genie.com/?welcome=c
 
 The Create button preserves click identifiers/UTMs and optional occasion/style parameters. Preview links continue with `landing_preview=1`; those visits are excluded from experiment purchases. `/?create=1` opens the existing creator directly. Account links, personal cards, GCU pages, checkout returns, hash links, and saved drafts bypass the welcome experience. Returning members and browsers that have started creating keep the creator as their homepage.
 

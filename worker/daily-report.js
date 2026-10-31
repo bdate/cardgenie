@@ -2,7 +2,7 @@
 import { getAdminCosts } from './costs.js'
 
 const TIME_ZONE = 'America/Los_Angeles'
-const WELCOME_EXPERIMENT = 'welcome-v2'
+const WELCOME_EXPERIMENT = 'welcome-v3'
 
 const FUNNEL_STEPS = [
   ['view', 'Saw the welcome page'],
@@ -232,17 +232,17 @@ export const buildReport = async (env, { kind = 'daily', startDay, endDay }) => 
     Number(list.find((row) => row.source === source && row.variant === variant && row.event === event)?.people || 0)
   const paidFunnel = FUNNEL_STEPS.map(([event, label]) => {
     const a = count(funnelRows, 'paid', 'a', event)
-    const b = count(funnelRows, 'paid', 'b', event)
+    const b = count(funnelRows, 'paid', 'c', event)
     return { label, a, b, total: a + b }
   })
-  const otherViews = count(funnelRows, 'other', 'a', 'view') + count(funnelRows, 'other', 'b', 'view')
-  const otherStarts = count(funnelRows, 'other', 'a', 'create_start') + count(funnelRows, 'other', 'b', 'create_start')
+  const otherViews = count(funnelRows, 'other', 'a', 'view') + count(funnelRows, 'other', 'c', 'view')
+  const otherStarts = count(funnelRows, 'other', 'a', 'create_start') + count(funnelRows, 'other', 'c', 'create_start')
   const totalsCount = (variant, event) =>
     Number(testTotalsRows.find((row) => row.variant === variant && row.event === event)?.people || 0)
   const testTotals = ['view', 'create_start', 'generation_complete', 'card_sent', 'purchase'].map((event) => ({
     event,
     a: totalsCount('a', event),
-    b: totalsCount('b', event),
+    b: totalsCount('c', event),
   }))
 
   const sent = Object.fromEntries(deliveryRows.map((row) => [row.method, row]))
@@ -295,8 +295,8 @@ export const buildReport = async (env, { kind = 'daily', startDay, endDay }) => 
     '',
     ...highlights.map(([label, value]) => `${label}: ${value}`),
     '',
-    `Ad visitors through the welcome page ${period.word} (paid traffic, test v2):`,
-    ...paidFunnel.map((row) => `  ${row.label}: A ${row.a} · B ${row.b} · total ${row.total}`),
+    `Ad visitors through the welcome page ${period.word} (paid traffic, test v3):`,
+    ...paidFunnel.map((row) => `  ${row.label}: A ${row.a} · C ${row.b} · total ${row.total}`),
     `Other (non-ad) welcome visitors: ${otherViews} saw it, ${otherStarts} clicked Create.`,
     '',
     `Problems: ${problems.length ? problems.join('; ') : 'none'}`,
@@ -304,8 +304,8 @@ export const buildReport = async (env, { kind = 'daily', startDay, endDay }) => 
     `New reviews submitted: ${reviews}`,
     costLines.length ? `Cost breakdown: ${costLines.join(', ')}` : '',
     '',
-    'Welcome test v2 totals since Oct 27 (paid): ' +
-      testTotals.map((row) => `${TOTAL_LABELS[row.event]} A ${row.a}/B ${row.b}`).join(' · '),
+    'Welcome test v3 totals since Oct 31 (paid): ' +
+      testTotals.map((row) => `${TOTAL_LABELS[row.event]} A ${row.a}/C ${row.b}`).join(' · '),
     '',
     'Google Ads clicks and spend are not included; see Google Ads for those.',
   ]
@@ -321,9 +321,9 @@ export const buildReport = async (env, { kind = 'daily', startDay, endDay }) => 
     .map(([label, value]) => `<tr><td style="${cell}font-weight:bold;">${escape(label)}</td><td style="${cell}">${escape(value)}</td></tr>`)
     .join('')}</table>
 <h3 style="margin:0 0 8px;">Ad visitors through the welcome page ${escape(period.word)}</h3>
-<p style="margin:0 0 8px;color:#5f6b6a;font-size:13px;">Paid traffic, welcome test v2. Version A = finished sample cards, Version B = photo to card.</p>
+<p style="margin:0 0 8px;color:#5f6b6a;font-size:13px;">Paid traffic, welcome test v3. Version A = finished sample cards, Version C = quick start (From, To, Occasion).</p>
 <table style="border-collapse:collapse;width:100%;margin-bottom:8px;">
-<tr><th style="${cell}">Step</th><th style="${num}">Version A</th><th style="${num}">Version B</th><th style="${num}">Total</th></tr>
+<tr><th style="${cell}">Step</th><th style="${num}">Version A</th><th style="${num}">Version C</th><th style="${num}">Total</th></tr>
 ${paidFunnel
   .map((row) => `<tr><td style="${cell}">${escape(row.label)}</td><td style="${num}">${row.a}</td><td style="${num}">${row.b}</td><td style="${num}">${row.total}</td></tr>`)
   .join('')}
@@ -335,8 +335,8 @@ ${paidFunnel
 <li><strong>Top occasions:</strong> ${escape(occasions.length ? occasions.join(', ') : 'none')}</li>
 <li><strong>New reviews submitted:</strong> ${reviews}</li>
 ${costLines.length ? `<li><strong>Cost breakdown:</strong> ${escape(costLines.join(', '))}</li>` : ''}
-<li><strong>Welcome test v2 totals since Oct 27 (paid):</strong> ${escape(
-    testTotals.map((row) => `${TOTAL_LABELS[row.event]} A ${row.a} / B ${row.b}`).join(' · '),
+<li><strong>Welcome test v3 totals since Oct 31 (paid):</strong> ${escape(
+    testTotals.map((row) => `${TOTAL_LABELS[row.event]} A ${row.a} / C ${row.b}`).join(' · '),
   )}</li>
 </ul>
 <p style="margin:0;color:#5f6b6a;font-size:12px;">Google Ads clicks and spend are not included; see Google Ads for those. Small counts swing a lot, so judge the A/B test on the running totals.</p>

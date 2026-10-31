@@ -82,11 +82,11 @@ test('live routing only enables the experiment when the reporting API is ready',
   assert.equal(await client.landingExperimentReady(), false)
   globalThis.fetch = async () => { throw new Error('offline') }
   assert.equal(await client.landingExperimentReady(), false)
-  for (const config of [{ enabled: true }, { experiment: 'old', enabled: true }, { experiment: 'welcome-v2', enabled: false }]) {
+  for (const config of [{ enabled: true }, { experiment: 'old', enabled: true }, { experiment: 'welcome-v3', enabled: false }]) {
     globalThis.fetch = async () => ({ ok: true, json: async () => config })
     assert.equal(await client.landingExperimentReady(), false)
   }
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ experiment: 'welcome-v2', enabled: true }) })
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ experiment: 'welcome-v3', enabled: true }) })
   assert.equal(await client.landingExperimentReady(), true)
 })
 
@@ -99,13 +99,14 @@ function database() {
       async all() { return { results: db.prepare(sql).all(...params) } } }
   } } }
 }
-const identity = { experiment: 'welcome-v2', variant: 'a', visitor: 'a'.repeat(32), source: 'paid' }
+const identity = { experiment: 'welcome-v3', variant: 'a', visitor: 'a'.repeat(32), source: 'paid' }
 const paidCheckout = { id: 'cs_one', livemode: true, payment_status: 'paid', amount_total: 500,
   metadata: landingCheckoutMetadata(identity) }
 
 test('fixed schema rejects malformed identities and never accepts public purchase events', () => {
   assert.equal(landingIdentity({ ...identity, visitor: 'not-an-anonymous-id' }), null)
-  assert.equal(landingIdentity({ ...identity, variant: 'c' }), null)
+  assert.equal(landingIdentity({ ...identity, variant: 'd' }), null)
+  assert.deepEqual(landingIdentity({ ...identity, variant: 'c' }), { ...identity, variant: 'c' })
   assert.equal(landingIdentity({ ...identity, source: 'anything' }), null)
   assert.equal(LANDING_EVENTS.has('purchase'), false)
 })
@@ -140,4 +141,13 @@ test('cohorts remain separate and non-exposed clients never inflate conversion r
   const rows = await landingReport(env)
   assert.equal(rows.length, 2); assert.equal(rows.reduce((n, row) => n + row.visitors, 0), 2)
   assert.equal(rows.reduce((n, row) => n + row.completed, 0), 0)
+})
+
+test('v3 assigns only A or C, keeps the choice, and previews C without enrolling', () => {
+  const seen = new Set()
+  for (let i = 0; i < 200; i++) { localStorage.clear(); locationAt('/?gclid=ad'); seen.add(client.assignLanding().variant) }
+  assert.deepEqual([...seen].sort(), ['a', 'c'])
+  localStorage.clear(); locationAt('/?welcome=c')
+  assert.equal(client.shouldShowWelcome(), true)
+  assert.equal(client.readLandingAssignment(), null)
 })

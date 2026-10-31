@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { assignLanding, creatorUrl, trackLanding } from './landingExperiment'
 import { trackFunnelConversion } from './adsConversions'
+import { buildOccasionSuggestions } from './occasions'
+
+const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')
+const handoffStorageKey = 'cardGenieWelcomeHandoff'
+type QuickField = 'from' | 'to' | 'occasion'
 import './Welcome.css'
 
 const samples = [
@@ -21,7 +26,7 @@ type Sample = typeof samples[number]
 
 export default function Welcome() {
   const forced = new URLSearchParams(location.search).get('welcome')
-  const preview = forced === 'a' || forced === 'b'
+  const preview = forced === 'a' || forced === 'b' || forced === 'c'
   const [assignment] = useState(() => preview ? null : assignLanding())
   const variant = preview ? forced : assignment?.variant || 'b'
   const [opened, setOpened] = useState<Sample | null>(null)
@@ -31,6 +36,21 @@ export default function Welcome() {
   const audio = useRef<AudioContext | null>(null)
   const viewed = useRef(false)
   const previousFocus = useRef<HTMLElement | null>(null)
+  const [quick, setQuick] = useState({ from: '', to: '', occasion: '' })
+  const [quickError, setQuickError] = useState('')
+  const [popularOccasions, setPopularOccasions] = useState<{ label: string; uses: number }[]>([])
+  const [showOccasionList, setShowOccasionList] = useState(false)
+  const [activeOccasion, setActiveOccasion] = useState(-1)
+  const quickStarted = useRef(false)
+  const quickRefs = { from: useRef<HTMLInputElement>(null), to: useRef<HTMLInputElement>(null), occasion: useRef<HTMLInputElement>(null) }
+  const occasionSuggestions = useMemo(() => buildOccasionSuggestions(quick.occasion, popularOccasions), [quick.occasion, popularOccasions])
+
+  useEffect(() => {
+    if (variant !== 'c') return
+    fetch(`${apiBase}/api/occasions`).then(response => response.ok ? response.json() : null)
+      .then(data => { if (Array.isArray(data?.occasions)) setPopularOccasions(data.occasions) }).catch(() => {})
+  }, [variant])
+  useEffect(() => setActiveOccasion(-1), [quick.occasion])
 
   useEffect(() => {
     if (!viewed.current && assignment) {
@@ -72,6 +92,41 @@ export default function Welcome() {
     dialog.current?.close()
     previousFocus.current?.focus()
   }
+  const updateQuick = (field: QuickField, value: string) => {
+    setQuick(current => ({ ...current, [field]: value }))
+    setQuickError('')
+    if (!quickStarted.current && assignment) {
+      quickStarted.current = true
+      trackLanding('form_start', assignment)
+    }
+  }
+  const focusQuick = () => {
+    const empty = (['from', 'to', 'occasion'] as QuickField[]).find(field => !quick[field].trim()) || 'from'
+    quickRefs[empty].current?.focus()
+    return empty
+  }
+  const goToQuickForm = (occasion?: string) => {
+    if (occasion && !quick.occasion.trim()) setQuick(current => ({ ...current, occasion }))
+    document.getElementById('welcome-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.setTimeout(focusQuick, 350)
+  }
+  const pickOccasion = (label: string) => {
+    updateQuick('occasion', label)
+    setShowOccasionList(false)
+  }
+  const submitQuick = (event: React.FormEvent) => {
+    event.preventDefault()
+    const from = quick.from.trim(), to = quick.to.trim(), occasion = quick.occasion.trim()
+    if (!from || !to || !occasion) {
+      setQuickError('Please fill in all three so Genie can get started.')
+      focusQuick()
+      return
+    }
+    // Names stay in this browser; they never go into the URL or analytics.
+    try { localStorage.setItem(handoffStorageKey, JSON.stringify({ senderName: from, recipientName: to, occasion, at: Date.now() })) } catch { /* The creator still opens. */ }
+    start()
+  }
+  const begin = (occasion?: string) => variant === 'c' ? goToQuickForm(occasion) : start(occasion)
   const start = (occasion?: string) => {
     if (assignment) {
       trackLanding('create_start', assignment)
@@ -91,15 +146,48 @@ export default function Welcome() {
       <section className="welcome-hero" aria-labelledby="welcome-heading">
         <div className="welcome-intro">
           <p className="welcome-eyebrow"><span aria-hidden="true">✧</span> THEIR PEOPLE. THEIR PASSIONS. THEIR CARD.</p>
-          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
+          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : variant === 'c' ? <>Who’s the card <em>for?</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
           <p className="welcome-lede">{variant === 'a'
             ? 'Turn their favorite things, your shared memories, and optional photos into custom artwork and words that feel like you.'
-            : 'Add a photo and a few details. Genie paints the people you love into custom artwork, with a message written just for them.'}</p>
-          <div className="welcome-hero-actions"><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><a className="welcome-text-link" href="#examples">Take a peek first <span aria-hidden="true">↓</span></a></div>
+            : variant === 'c'
+              ? 'Start with three quick answers. You can add photos and more details on the next screen.'
+              : 'Add a photo and a few details. Genie paints the people you love into custom artwork, with a message written just for them.'}</p>
+          {variant === 'c' ? <form className="welcome-quick" onSubmit={submitQuick} noValidate>
+            <label>From<input ref={quickRefs.from} value={quick.from} onChange={event => updateQuick('from', event.target.value)} placeholder="Example: your name" autoComplete="given-name" maxLength={60} /></label>
+            <label>To<input ref={quickRefs.to} value={quick.to} onChange={event => updateQuick('to', event.target.value)} placeholder="Example: Jamie" autoComplete="off" maxLength={60} /></label>
+            <label className="welcome-quick-occasion">Occasion<input ref={quickRefs.occasion} value={quick.occasion}
+              onChange={event => { updateQuick('occasion', event.target.value); setShowOccasionList(true) }}
+              onFocus={() => setShowOccasionList(true)}
+              onBlur={event => { const input = event.currentTarget; window.setTimeout(() => { if (document.activeElement !== input) setShowOccasionList(false) }, 150) }}
+              onKeyDown={event => {
+                const open = showOccasionList && occasionSuggestions.length > 0
+                if (event.key === 'Escape') setShowOccasionList(false)
+                else if (open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                  event.preventDefault()
+                  const step = event.key === 'ArrowDown' ? 1 : -1
+                  setActiveOccasion(current => current < 0 && step < 0 ? occasionSuggestions.length - 1 : (current + step + occasionSuggestions.length) % occasionSuggestions.length)
+                } else if (event.key === 'Enter' && open && occasionSuggestions[activeOccasion]) {
+                  event.preventDefault()
+                  pickOccasion(occasionSuggestions[activeOccasion])
+                }
+              }}
+              placeholder="Start typing: birthday, thank you…" autoComplete="off" maxLength={60} role="combobox" aria-autocomplete="list"
+              aria-controls="welcome-occasion-suggestions" aria-expanded={showOccasionList && occasionSuggestions.length > 0}
+              aria-activedescendant={occasionSuggestions[activeOccasion] ? `welcome-occasion-${activeOccasion}` : undefined} />
+              {showOccasionList && occasionSuggestions.length > 0 && <ul id="welcome-occasion-suggestions" role="listbox" aria-label="Occasions">
+                {occasionSuggestions.map((label, index) => <li key={label} id={`welcome-occasion-${index}`} role="option" aria-selected={index === activeOccasion}>
+                  <button type="button" tabIndex={-1} className={index === activeOccasion ? 'is-active' : undefined} onMouseDown={event => event.preventDefault()} onClick={() => pickOccasion(label)}>{label}</button>
+                </li>)}
+              </ul>}
+            </label>
+            {quickError && <p className="welcome-quick-error" role="alert">{quickError}</p>}
+            <button className="welcome-primary" type="submit">Start my card <span aria-hidden="true">↗</span></button>
+          </form>
+          : <div className="welcome-hero-actions"><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><a className="welcome-text-link" href="#examples">Take a peek first <span aria-hidden="true">↓</span></a></div>}
           <p className="welcome-reassurance">Free to create & preview. No sign-up to get started.</p>
           <a className="welcome-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">From the people behind GreetingCardUniverse.com</a>
         </div>
-        {variant === 'a' ? <div className="welcome-card-fan" aria-label="Sample greeting cards">
+        {variant !== 'b' ? <div className="welcome-card-fan" aria-label="Sample greeting cards">
           {samples.map((sample, index) => <button key={sample.id} className={`welcome-fan-card fan-${index}`} onClick={() => openSample(sample)} aria-label={`Open sample: ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" fetchPriority={index === 0 ? 'high' : 'auto'} /><span>Open sample <span aria-hidden="true">↗</span></span></button>)}
           <p className="welcome-hand-note">Their story, beautifully told. <span aria-hidden="true">↖</span></p>
         </div> : <figure className="welcome-transformation welcome-photo-pair" aria-label="A real photo and the card Card Genie made from it">
@@ -116,20 +204,20 @@ export default function Welcome() {
         <div className="welcome-section-heading"><div><p className="welcome-eyebrow">A LITTLE INSPIRATION</p><h2 id="examples-heading">Not just a card.<br />An <em>“oh, that’s so me.”</em></h2></div><p>See how a few personal details become something worth opening. Tap a card to see the cover and message.</p></div>
         <div className="welcome-gallery">{samples.map(sample => <article key={sample.id}>
           <button className="welcome-gallery-art" onClick={() => openSample(sample)} aria-label={`Preview ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" loading="lazy" /><span className="welcome-open-label">Open sample ↗</span></button>
-          <div className="welcome-sample-caption"><span>{sample.occasion} · {sample.style}</span><h3>{sample.title}</h3><button className="welcome-text-link" onClick={() => start(sample.occasion)}>Make one for someone I love ↗</button></div>
+          <div className="welcome-sample-caption"><span>{sample.occasion} · {sample.style}</span><h3>{sample.title}</h3><button className="welcome-text-link" onClick={() => begin(sample.occasion)}>Make one for someone I love ↗</button></div>
         </article>)}</div>
         <p className="welcome-example-note">Illustrative examples made with Card Genie. Sample people and stories are fictional.</p>
       </section>
 
       <section className="welcome-how" aria-labelledby="how-heading"><p className="welcome-eyebrow">YOU BRING THE THOUGHT. GENIE BRINGS THE MAGIC.</p><h2 id="how-heading">From “what should I say?”<br />to <em>“I made this for you.”</em></h2><ol><li><span>01</span><h3>Tell us about them</h3><p>A hobby, an inside joke, a memory. Add a photo if you’d like them in the artwork.</p></li><li><span>02</span><h3>Make it yours</h3><p>Genie creates the artwork and message. Preview your card and edit the words for free.</p></li><li><span>03</span><h3>Make their day</h3><p>Send by email or text, or have a printed card mailed. Most cards are ready in a few minutes.</p></li></ol></section>
 
-      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => start()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
+      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => begin()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
     </main>
     <footer className="welcome-footer"><a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
 
     <dialog ref={dialog} className="welcome-dialog" aria-labelledby="sample-heading" onCancel={() => previousFocus.current?.focus()} onClick={event => { if (event.target === dialog.current) closeSample() }}>
       <button className="welcome-close" onClick={closeSample} aria-label="Close sample">×</button>
-      {opened && <><div className={`welcome-preview-card ${inside ? 'is-inside' : ''}`}><img src={opened.image} width="528" height="736" alt={opened.alt} /><div className="welcome-inside"><span aria-hidden="true">✧</span><p>{opened.message}</p><p><em>{opened.closing}</em></p></div></div><div className="welcome-preview-info"><p className="welcome-eyebrow">A CARD GENIE EXAMPLE</p><h2 id="sample-heading">{opened.title}</h2><p>{opened.prompt}</p><button className="welcome-preview-toggle" onClick={() => { setInside(!inside); chime() }}>{inside ? 'See the cover' : 'Read the message'} <span aria-hidden="true">↗</span></button><label className="welcome-sound"><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> Play a little chime when opening</label><button className="welcome-primary" onClick={() => start(opened.occasion)}>Create My Card ↗</button><small>Example preview. Your card will be made just for you.</small></div></>}
+      {opened && <><div className={`welcome-preview-card ${inside ? 'is-inside' : ''}`}><img src={opened.image} width="528" height="736" alt={opened.alt} /><div className="welcome-inside"><span aria-hidden="true">✧</span><p>{opened.message}</p><p><em>{opened.closing}</em></p></div></div><div className="welcome-preview-info"><p className="welcome-eyebrow">A CARD GENIE EXAMPLE</p><h2 id="sample-heading">{opened.title}</h2><p>{opened.prompt}</p><button className="welcome-preview-toggle" onClick={() => { setInside(!inside); chime() }}>{inside ? 'See the cover' : 'Read the message'} <span aria-hidden="true">↗</span></button><label className="welcome-sound"><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> Play a little chime when opening</label><button className="welcome-primary" onClick={() => { if (variant === 'c') closeSample(); begin(opened.occasion) }}>Create My Card ↗</button><small>Example preview. Your card will be made just for you.</small></div></>}
     </dialog>
   </div>
 }

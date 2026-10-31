@@ -6,7 +6,7 @@ import { landingExperimentReady, shouldShowWelcome } from './landingExperiment'
 const Experience = lazy(async () => {
   if (shouldShowWelcome()) {
     const preview = new URLSearchParams(location.search).get('welcome')
-    if (preview === 'a' || preview === 'b' || await landingExperimentReady()) return import('./Welcome')
+    if (preview === 'a' || preview === 'b' || preview === 'c' || await landingExperimentReady()) return import('./Welcome')
   }
   return import('./App')
 })

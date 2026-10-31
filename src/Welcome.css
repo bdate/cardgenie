@@ -128,3 +128,15 @@
  .welcome-dialog { padding:40px 22px 25px; }.welcome-dialog[open] { grid-template-columns:1fr; gap:25px; }.welcome-preview-card { width:min(100%,260px); margin:auto; }.welcome-inside p { font-size:16px; }.welcome-preview-info h2 { font-size:26px; }.welcome-preview-info .welcome-eyebrow { margin-bottom:10px; }
 }
 @media(prefers-reduced-motion:reduce) { .welcome *, .welcome *:before { transition:none!important; scroll-behavior:auto!important; }.welcome-preview-card.is-inside>img { transform:none; } }
+.welcome-quick { display:grid; gap:12px; max-width:420px; margin:0 0 14px; }
+.welcome-quick label { display:grid; gap:6px; font-size:12px; font-weight:800; letter-spacing:.3px; color:var(--ink); }
+.welcome-quick input { width:100%; padding:13px 15px; border:1px solid #315f5b33; border-radius:14px; background:#fff; color:var(--ink); font:500 16px/1.3 Inter,system-ui,sans-serif; }
+.welcome-quick input::placeholder { color:#9aa7a2; }
+.welcome-quick input:focus { outline:none; border-color:#f59e33; box-shadow:0 0 0 3px #f59e3333; }
+.welcome-quick-occasion { position:relative; }
+.welcome-quick-occasion ul { position:absolute; top:100%; left:0; right:0; z-index:5; margin:6px 0 0; padding:6px; list-style:none; background:#fff; border:1px solid #315f5b22; border-radius:14px; box-shadow:0 14px 30px #394f3d22; max-height:280px; overflow:auto; }
+.welcome-quick-occasion li button { display:block; width:100%; padding:10px 12px; border:0; border-radius:10px; background:transparent; color:var(--ink); text-align:left; font:600 15px/1.3 Inter,system-ui,sans-serif; cursor:pointer; }
+.welcome-quick-occasion li button:hover, .welcome-quick-occasion li button.is-active { background:#e9f4f2; }
+.welcome-quick-error { margin:0; color:#b4532a; font-size:13px; font-weight:600; }
+.welcome-quick .welcome-primary { justify-self:start; margin-top:4px; }
+@media(max-width:650px) { .welcome.welcome-c h1 { font-size:46px; } .welcome-quick { max-width:none; } .welcome-quick .welcome-primary { justify-self:stretch; justify-content:center; } }

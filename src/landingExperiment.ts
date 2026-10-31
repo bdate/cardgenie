@@ -1,13 +1,13 @@
-export type LandingVariant = 'a' | 'b'
+export type LandingVariant = 'a' | 'b' | 'c'
 export type LandingAssignment = {
-  experiment: 'welcome-v2'
+  experiment: 'welcome-v3'
   variant: LandingVariant
   visitor: string
   source: 'paid' | 'other'
   assignedAt: number
 }
 export type LandingEvent = 'view' | 'sample_open' | 'create_start' | 'form_start' | 'generation_start' | 'generation_complete' | 'generation_error' | 'account_created' | 'card_sent' | 'checkout_start'
-export const landingStorageKey = 'cardGenieWelcomeV2'
+export const landingStorageKey = 'cardGenieWelcomeV3'
 const maxAge = 30 * 24 * 60 * 60 * 1000
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')
 const sent = new Set<string>()
@@ -21,7 +21,7 @@ export async function landingExperimentReady(): Promise<boolean> {
     })
     if (!response.ok) return false
     const config = await response.json()
-    return config?.experiment === 'welcome-v2' && config?.enabled === true
+    return config?.experiment === 'welcome-v3' && config?.enabled === true
   } catch { return false }
   finally { clearTimeout(timer) }
 }
@@ -30,7 +30,7 @@ export function readLandingAssignment(): LandingAssignment | null {
   if (new URLSearchParams(location.search).has('landing_preview')) return null
   try {
     const value = JSON.parse(localStorage.getItem(landingStorageKey) || 'null')
-    if (value?.experiment !== 'welcome-v2' || !['a', 'b'].includes(value.variant) ||
+    if (value?.experiment !== 'welcome-v3' || !['a', 'c'].includes(value.variant) ||
       !/^[a-f0-9]{32}$/.test(value.visitor) || !['paid', 'other'].includes(value.source) ||
       !Number.isFinite(value.assignedAt) || Date.now() - value.assignedAt > maxAge) return null
     return value
@@ -40,7 +40,7 @@ export function readLandingAssignment(): LandingAssignment | null {
 export function shouldShowWelcome(): boolean {
   if (location.pathname !== '/' && location.pathname !== '/index.html') return false
   const query = new URLSearchParams(location.search)
-  if (query.get('welcome') === 'a' || query.get('welcome') === 'b') return true
+  if (['a', 'b', 'c'].includes(query.get('welcome') || '')) return true
   // Never intercept personal cards, checkout returns, account links, or saved work.
   let specialLink = Boolean(location.hash)
   // Ad and analytics tags (Google Ads adds gad_source/gad_campaignid next to gclid) are normal traffic.
@@ -61,8 +61,8 @@ export function assignLanding(): LandingAssignment {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   const query = new URLSearchParams(location.search)
   const assignment: LandingAssignment = {
-    experiment: 'welcome-v2',
-    variant: bytes[0] < 128 ? 'a' : 'b',
+    experiment: 'welcome-v3',
+    variant: bytes[0] < 128 ? 'a' : 'c',
     visitor: Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''),
     source: ['gclid', 'gbraid', 'wbraid', 'gad_source'].some(key => query.has(key)) ||
       /^(cpc|ppc|paidsearch)$/i.test(query.get('utm_medium') || '') ? 'paid' : 'other',
