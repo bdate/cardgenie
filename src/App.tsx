@@ -53,7 +53,7 @@ const coverDetailFields: Array<[keyof CardDetails, string]> = [
   ['imageStyle', 'Image style'],
   ['keyDetails', 'What to say or show'],
 ]
-const relationFieldLabel = 'Who is this person to you?'
+const relationFieldLabel = 'Who are they to you?'
 const keyDetailsFieldLabel = 'What should the card say or show?'
 
 type SharedCard = {
