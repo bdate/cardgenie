@@ -140,3 +140,5 @@
 .welcome-quick-error { margin:0; color:#b4532a; font-size:13px; font-weight:600; }
 .welcome-quick .welcome-primary { justify-self:start; margin-top:4px; }
 @media(max-width:650px) { .welcome.welcome-c h1 { font-size:46px; } .welcome-quick { max-width:none; } .welcome-quick .welcome-primary { justify-self:stretch; justify-content:center; } }
+.welcome.welcome-c h1 { white-space:nowrap; font-size:clamp(28px, 4.6vw, 62px); letter-spacing:-1.6px; }
+@media(max-width:650px) { .welcome.welcome-c h1 { font-size:clamp(28px, 9.4vw, 46px); letter-spacing:-1.2px; } }

@@ -140,12 +140,12 @@ export default function Welcome() {
     <a className="welcome-skip" href="#welcome-main">Skip to content</a>
     <header className="welcome-header">
       <a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="56" height="56" alt="" /><span>Card Genie</span></a>
-      <nav aria-label="Welcome navigation"><a href="#examples">See examples</a><button onClick={() => location.assign(creatorUrl(undefined, preview) + '&account=1')}>Sign in</button></nav>
+      <nav aria-label="Welcome navigation">{variant !== 'c' && <a href="#examples">See examples</a>}<button onClick={() => location.assign(creatorUrl(undefined, preview) + '&account=1')}>Sign in</button></nav>
     </header>
     <main id="welcome-main">
       <section className="welcome-hero" aria-labelledby="welcome-heading">
         <div className="welcome-intro">
-          <p className="welcome-eyebrow"><span aria-hidden="true">✧</span> THEIR PEOPLE. THEIR PASSIONS. THEIR CARD.</p>
+          {variant !== 'c' && <p className="welcome-eyebrow"><span aria-hidden="true">✧</span> THEIR PEOPLE. THEIR PASSIONS. THEIR CARD.</p>}
           <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : variant === 'c' ? <>Who’s the card <em>for?</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
           <p className="welcome-lede">{variant === 'a'
             ? 'Turn their favorite things, your shared memories, and optional photos into custom artwork and words that feel like you.'
@@ -188,7 +188,7 @@ export default function Welcome() {
           <a className="welcome-powered" href="https://www.greetingcarduniverse.com" target="_blank" rel="noreferrer">From the people behind GreetingCardUniverse.com</a>
         </div>
         {variant !== 'b' ? <div className="welcome-card-fan" aria-label="Sample greeting cards">
-          {samples.map((sample, index) => <button key={sample.id} className={`welcome-fan-card fan-${index}`} onClick={() => openSample(sample)} aria-label={`Open sample: ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" fetchPriority={index === 0 ? 'high' : 'auto'} /><span>Open sample <span aria-hidden="true">↗</span></span></button>)}
+          {(variant === 'c' ? [samples[2], samples[0], samples[1]] : samples).map((sample, index) => <button key={sample.id} className={`welcome-fan-card fan-${index}`} onClick={() => openSample(sample)} aria-label={`Open sample: ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" fetchPriority={index === 0 ? 'high' : 'auto'} /><span>Open sample <span aria-hidden="true">↗</span></span></button>)}
           <p className="welcome-hand-note">Their story, beautifully told. <span aria-hidden="true">↖</span></p>
         </div> : <figure className="welcome-transformation welcome-photo-pair" aria-label="A real photo and the card Card Genie made from it">
           <div className="welcome-photo-original"><img src="/welcome/photo-to-card-photo.webp" width="480" height="640" alt="The original party photo of two friends, Robin and Lesley, smiling together" fetchPriority="high" /><span>THE PHOTO</span></div>
