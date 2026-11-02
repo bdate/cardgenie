@@ -2412,6 +2412,26 @@ const twilioSenderFields = (env) => {
 // Carrier/RCS compliance: every program text names Card Genie and carries the standard disclosures.
 const SMS_DISCLOSURE = 'Msg & data rates may apply. Msg frequency varies. Reply HELP for help, STOP to opt out.'
 
+// The first card text a number ever receives doubles as the program's welcome / opt-in confirmation.
+const SMS_WELCOME_PREFIX = 'Welcome to Card Genie card texts!'
+
+const hasReceivedCardText = async (env, phoneE164) => {
+  if (!env.ACCOUNT_DB || !phoneE164) return false
+  try {
+    const row = await env.ACCOUNT_DB.prepare(
+      `SELECT 1 AS n FROM deliveries
+       WHERE method = 'text' AND destination = ? AND status = 'sent' AND COALESCE(is_sender_copy, 0) = 0
+       LIMIT 1`,
+    )
+      .bind(phoneE164)
+      .first()
+    return Boolean(row)
+  } catch (error) {
+    console.error('Unable to check earlier card texts.', error)
+    return false
+  }
+}
+
 const formatSmsBody = (text) => {
   const body = String(text || '').trim()
   const branded = /card genie/i.test(body) ? body : `Card Genie: ${body}`
@@ -4895,7 +4915,10 @@ const runCardDelivery = async (request, env, { session, record, method, destinat
 
     try {
       const openToken = createDeliveryOpenToken()
-      const copy = buildDeliveryCopy(record, withOpenToken(shareUrl, openToken), coverUrl)
+      let copy = buildDeliveryCopy(record, withOpenToken(shareUrl, openToken), coverUrl)
+      if (method === 'text' && !(await hasReceivedCardText(env, normalizedDestination))) {
+        copy = { ...copy, text: `${SMS_WELCOME_PREFIX} ${copy.text}` }
+      }
       const deliveredTo =
         method === 'email'
           ? await sendEmailDelivery({ env, to: normalizedDestination, copy })

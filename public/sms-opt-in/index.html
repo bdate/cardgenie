@@ -106,7 +106,7 @@
       </header>
       <div class="card">
         <h1>SMS Opt-In for Card Genie</h1>
-        <p>Last updated: October 29, 2026</p>
+        <p>Last updated: November 2, 2026</p>
 
         <p>
           Card Genie by Greeting Card Universe lets users create personalized digital greeting cards and choose whether
@@ -137,6 +137,11 @@
             <a href="/privacy/index.html">Privacy</a> · <a href="/terms/index.html">Terms</a>
           </span>
         </div>
+        <p>Screenshot of the send form, showing the recipient phone number field the user fills in and the opt-in
+          checkbox (unchecked by default; "Send by text" stays disabled until it is checked):</p>
+        <p>
+          <img src="/sms-opt-in/opt-in-form.png" width="480" alt="Card Genie send form with Text selected: the recipient phone number field filled in with (925) 555-0142, and the unchecked SMS consent checkbox reading: OK to text them this card, one message, no marketing. Msg and data rates may apply. Reply STOP to opt out, HELP for help." style="max-width:100%;height:auto;border:1px solid #d9e8e5;border-radius:12px" />
+        </p>
         <p>
           Tapping "more" next to the checkbox shows: "Message frequency is one message per card delivery request. SMS
           consent is optional and is not required to create a card or use email delivery."
@@ -151,7 +156,15 @@
         </p>
 
         <h2>Example Messages</h2>
-        <p>Card delivery (the first and usually only message a recipient receives):</p>
+        <p>Welcome message / opt-in confirmation (the first text Card Genie sends to a number):</p>
+        <p>
+          <code>
+            Welcome to Card Genie card texts! Rob, open your personalized card from Nasser.
+            https://api.card-genie.com/c/[card-id] Msg &amp; data rates may apply. Msg frequency varies. Reply HELP for
+            help, STOP to opt out.
+          </code>
+        </p>
+        <p>Later card texts to the same number:</p>
         <p>
           <code>
             Card Genie: Rob, open your personalized card from Nasser. https://api.card-genie.com/c/[card-id] Msg &amp; data
