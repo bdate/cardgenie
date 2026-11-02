@@ -3472,7 +3472,6 @@ function App() {
   const [isDelivering, setIsDelivering] = useState(false)
   const [deliveryNotice, setDeliveryNotice] = useState('')
   const [lastSentNotice, setLastSentNotice] = useState('')
-  const [showAccountConfirm, setShowAccountConfirm] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [accountCode, setAccountCode] = useState('')
   const [accountCodeSentTo, setAccountCodeSentTo] = useState('')
@@ -12447,7 +12446,7 @@ function App() {
                 <h3>Welcome page A/B test</h3>
                 <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner. Test v2 (photo-to-card Version B) started Oct 27, 2026; v1 rows are the earlier test and are not combined.</p>
                 {adminMetrics.welcomeExperiment?.length ? <table>
-                  <thead><tr><th>Test · version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Revealed</th><th>Send form</th><th>Phone step</th><th>Code sent</th><th>Confirmed</th><th>Accounts</th><th>Tapped send</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
+                  <thead><tr><th>Test · version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Revealed</th><th>Send form</th><th>Phone typed</th><th>Code sent</th><th>Confirmed</th><th>Accounts</th><th>Tapped send</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
                   <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.experiment || 'welcome-v1'}-${row.variant}-${row.source}`}>
                     <td>{(row.experiment || 'welcome-v1').replace('welcome-', '')} · {row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
                     <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.revealed ?? 0}</td><td>{row.sendForms ?? 0}</td><td>{row.confirmOpened ?? 0}</td><td>{row.codes ?? 0}</td><td>{row.confirmed ?? 0}</td><td>{row.accounts ?? 0}</td><td>{row.sendAttempts ?? 0}</td><td>{row.sends ?? 0}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
@@ -15283,77 +15282,57 @@ function App() {
                     ✓ Phone confirmed: {formatPhoneNumberDisplay(accountSession.phoneE164).replace(/^\+1 /, '')}
                   </p>
                 ) : (
-                  <>
-                    <label className="sender-copy">
+                  <div className="account-gate">
+                    <span className="field-title">Confirm your number to send</span>
+                    <p className="field-help">
+                      Your first send is free. We’ll text you a one-time code, and new accounts get{' '}
+                      {phoneVerifyBonusCredits} extra credits when you confirm.
+                    </p>
+                    <label>
+                      Mobile number
                       <input
-                        type="checkbox"
-                        checked={showAccountConfirm}
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={accountPhone}
                         onChange={(event) => {
-                          const checked = event.target.checked
-                          setShowAccountConfirm(checked)
-                          if (checked) trackLanding('confirm_opened')
-                          if (!checked) {
-                            setAccountPhone('')
-                            setAccountCode('')
-                          } else {
-                            focusFieldAfterRender('.delivery-panel .account-gate input[type="tel"]')
-                          }
-                          setDeliveryNotice('')
+                          setAccountPhone(event.target.value)
+                          if (event.target.value.trim()) trackLanding('confirm_opened')
                         }}
+                        placeholder="(925) 555-1234"
                       />
-                      <span className="sender-copy-nowrap">Confirm my number for {phoneVerifyBonusCredits} credits</span>
                     </label>
-                    {showAccountConfirm && (
-                      <div className="account-gate">
-                        <span className="field-title">Your mobile number</span>
-                        <p className="field-help">
-                          Confirm your number to send. We’ll text a one-time code. New accounts get{' '}
-                          {phoneVerifyBonusCredits} extra credits when you confirm.
-                        </p>
-                        <label>
-                          Mobile number
-                          <input
-                            type="tel"
-                            inputMode="tel"
-                            autoComplete="tel"
-                            value={accountPhone}
-                            onChange={(event) => setAccountPhone(event.target.value)}
-                            placeholder="(925) 555-1234"
-                          />
-                        </label>
-                        <div className="account-code-row">
-                          <label>
-                            Text code
-                            <input
-                              inputMode="numeric"
-                              autoComplete="one-time-code"
-                              value={accountCode}
-                              onChange={(event) => setAccountCode(event.target.value)}
-                              placeholder="6-digit code"
-                            />
-                          </label>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            disabled={isSendingAccountCode}
-                            aria-busy={isSendingAccountCode}
-                            onClick={() => void requestAccountCode()}
-                          >
-                            {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
-                          </button>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            disabled={isVerifyingAccountCode || !accountCode.trim()}
-                            aria-busy={isVerifyingAccountCode}
-                            onClick={() => void verifyAccountCode()}
-                          >
-                            {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                    <div className="account-code-row">
+                      <label>
+                        Text code
+                        <input
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          value={accountCode}
+                          onChange={(event) => setAccountCode(event.target.value)}
+                          placeholder="6-digit code"
+                        />
+                      </label>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={isSendingAccountCode}
+                        aria-busy={isSendingAccountCode}
+                        onClick={() => void requestAccountCode()}
+                      >
+                        {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={isVerifyingAccountCode || !accountCode.trim()}
+                        aria-busy={isVerifyingAccountCode}
+                        onClick={() => void verifyAccountCode()}
+                      >
+                        {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <div className="credit-action-block">
                   {hasSentCurrentCard && lastSentNotice && sentButtonLabel?.key !== 'deliver' && !isDelivering && (

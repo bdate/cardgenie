@@ -12,7 +12,7 @@ const FUNNEL_STEPS = [
   ['generation_complete', 'Card created'],
   ['card_revealed', 'Opened the card'],
   ['send_form_seen', 'Saw the send form'],
-  ['confirm_opened', 'Ticked "Confirm my number"'],
+  ['confirm_opened', 'Started entering their phone'],
   ['code_requested', 'Requested a text code'],
   ['phone_confirmed', 'Confirmed their phone'],
   ['account_created', 'Created an account (new)'],
