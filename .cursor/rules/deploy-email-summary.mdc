@@ -30,4 +30,17 @@ DEPLOY_NOTIFY_SECRET=… node scripts/notify-deploy.mjs --file /tmp/deploy-summa
 
 `DEPLOY_NOTIFY_SECRET` is a Wrangler secret on `cardgenie-api`. Endpoint: `POST /api/admin/deploy-summary`.
 
+Where the value comes from (never paste or print it):
+
+- Cursor cloud / mobile agents: the `DEPLOY_NOTIFY_SECRET` environment variable from Cursor Dashboard → Cloud Agents → Secrets.
+- Nasser's Mac: the git-ignored file `.cursor/deploy-notify.secret`.
+
+This works in both places:
+
+```bash
+DEPLOY_NOTIFY_SECRET="${DEPLOY_NOTIFY_SECRET:-$(cat .cursor/deploy-notify.secret 2>/dev/null)}" node scripts/notify-deploy.mjs --file /tmp/deploy-summary.txt
+```
+
+If neither is available, say so instead of asking the user to paste the secret into chat.
+
 Do this as part of finishing the live move — not as a separate “want me to email?” question.
