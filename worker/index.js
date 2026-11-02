@@ -48,6 +48,7 @@ import {
   updateAccountProfile,
   updateTestimonialStatus,
   upsertUserOnLogin,
+  createGiftAccount,
   queueAdConversion,
   listPendingAdConversions,
   markAdConversionsReported,
@@ -4454,8 +4455,9 @@ const handleUpdateAdminTestimonial = async (request, env, testimonialId) => {
 }
 
 const handleAdminGrantCredits = async (request, env) => {
-  if (!(await isAdminRequest(request, env))) {
-    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) {
+    return denied
   }
 
   if (!accountDbReady(env)) {
@@ -4487,7 +4489,12 @@ const handleAdminGrantCredits = async (request, env) => {
     return jsonResponse(request, env, { error: 'Enter a credit amount between 1 and 500.' }, 400)
   }
 
-  const user = await findUserByPhone(env, phoneE164)
+  let user = await findUserByPhone(env, phoneE164)
+  let createdAccount = false
+  if (!user && body.createIfMissing === true) {
+    user = await createGiftAccount(env, { phoneE164, preferredName: body.name })
+    createdAccount = Boolean(user)
+  }
   if (!user) {
     return jsonResponse(
       request,
@@ -4497,13 +4504,15 @@ const handleAdminGrantCredits = async (request, env) => {
     )
   }
 
+  const customNote = String(body.note || '').trim().slice(0, 160)
+  const grantedBy = session?.phoneE164 ? `Admin grant by ${session.phoneE164}` : 'Admin grant'
   const nextBalance = await applyCreditChange(env, {
     userId: user.id,
     phoneE164,
     delta: amount,
     reason: 'admin_grant',
     kind: 'grant',
-    note: session?.phoneE164 ? `Admin grant by ${session.phoneE164}` : 'Admin grant',
+    note: customNote ? `${grantedBy}. ${customNote}` : grantedBy,
   })
 
   if (nextBalance === null) {
@@ -4517,22 +4526,29 @@ const handleAdminGrantCredits = async (request, env) => {
     `You now have ${creditWord(nextBalance)} to create and send personalized cards.`,
     `Make one anytime at ${getPublicAppUrl(request, env)}`,
   ].join(' ')
+  // notify: false skips the text, e.g. when the person hasn't opted in to Card Genie texts yet.
+  const shouldText = body.notify !== false
   let textSent = false
-  try {
-    await sendTextDelivery({ env, to: phoneE164, copy: { text: grantText } })
-    textSent = true
-  } catch (textError) {
-    console.error('Credit grant text failed.', textError)
+  if (shouldText) {
+    try {
+      await sendTextDelivery({ env, to: phoneE164, copy: { text: grantText } })
+      textSent = true
+    } catch (textError) {
+      console.error('Credit grant text failed.', textError)
+    }
   }
 
   return jsonResponse(request, env, {
     ok: true,
     phoneE164,
+    createdAccount,
     creditsAdded: amount,
     creditBalance: nextBalance,
     previousBalance: Math.max(0, nextBalance - amount),
     textSent,
-    message: `Added ${amount} credits. New balance: ${nextBalance}. ${textSent ? 'We texted them to let them know.' : 'The text notification could not be sent.'}`,
+    message: `Added ${amount} credits. New balance: ${nextBalance}. ${
+      !shouldText ? 'No text was sent.' : textSent ? 'We texted them to let them know.' : 'The text notification could not be sent.'
+    }`,
   })
 }
 

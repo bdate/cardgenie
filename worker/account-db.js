@@ -391,6 +391,24 @@ export const upsertUserOnLogin = async (env, { phoneE164, request, existingUserI
   }
 }
 
+/** Creates an account ahead of first sign-in so admin-granted credits wait for that number. */
+export const createGiftAccount = async (env, { phoneE164, preferredName = '' }) => {
+  if (!env.ACCOUNT_DB || !phoneE164) return null
+  const existing = await getUserByPhone(env.ACCOUNT_DB, phoneE164)
+  if (existing) return mapUser(existing)
+  const now = isoNow()
+  const userId = crypto.randomUUID()
+  await env.ACCOUNT_DB.prepare(
+    `INSERT INTO users (
+      id, phone_e164, created_at, last_used_at, last_login_at, status, signup_source,
+      credit_balance, credits_granted, updated_at, preferred_name
+    ) VALUES (?, ?, ?, ?, ?, 'active', 'admin_grant', 0, 0, ?, ?)`,
+  )
+    .bind(userId, phoneE164, now, now, now, now, String(preferredName || '').trim().slice(0, 60) || null)
+    .run()
+  return mapUser(await getUserByPhone(env.ACCOUNT_DB, phoneE164))
+}
+
 export const ensureAccountUser = async (env, { userId, phoneE164 }) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
