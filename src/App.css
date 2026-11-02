@@ -5110,14 +5110,19 @@ select.is-placeholder option {
 
 .delivery-log-row {
   display: grid;
-  grid-template-columns: minmax(72px, 0.7fr) minmax(70px, 0.7fr) minmax(150px, 1.4fr) minmax(130px, 1fr);
+  grid-template-columns: minmax(56px, 0.6fr) minmax(52px, 0.6fr) minmax(0, 1.7fr) minmax(0, 1fr);
   gap: 10px;
-  min-width: 580px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   border-top: 1px solid rgba(63, 155, 145, 0.14);
   padding: 10px 14px;
   color: var(--gcu-dark-grey);
   font-size: 0.82rem;
   align-items: center;
+}
+
+.delivery-log-row > * {
+  min-width: 0;
 }
 
 .delivery-log-header {
@@ -5145,6 +5150,48 @@ select.is-placeholder option {
 
 .delivery-log-row .is-failed {
   color: #972044;
+}
+
+@media (max-width: 640px) {
+  .delivery-log-header {
+    display: none;
+  }
+
+  .delivery-log-row {
+    min-width: 0;
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      'status method time'
+      'destination destination destination'
+      'message message message';
+    gap: 4px 10px;
+  }
+
+  .delivery-log-row > :nth-child(1) {
+    grid-area: status;
+  }
+
+  .delivery-log-row > :nth-child(2) {
+    grid-area: method;
+  }
+
+  .delivery-log-row > :nth-child(3) {
+    grid-area: destination;
+    overflow-wrap: anywhere;
+    color: var(--gcu-ink);
+    font-size: 0.86rem;
+  }
+
+  .delivery-log-row > :nth-child(4) {
+    grid-area: time;
+    justify-self: end;
+    text-align: right;
+    color: var(--gcu-grey);
+  }
+
+  .delivery-log-row > small {
+    grid-area: message;
+  }
 }
 
 .card-editor {
