@@ -3330,6 +3330,9 @@ textarea:focus {
 
 .delivery-add-recipient {
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
   font-size: 0.92rem;
 }
 
