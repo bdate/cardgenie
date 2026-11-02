@@ -3508,7 +3508,7 @@ function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [adminMetrics, setAdminMetrics] = useState<{
-    welcomeExperiment?: Array<{ experiment?: string; variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; accounts?: number; sends?: number; checkouts: number; buyers: number; revenueCents: number }>
+    welcomeExperiment?: Array<{ experiment?: string; variant: string; source: string; visitors: number; samples: number; starts: number; forms: number; completed: number; errors: number; revealed?: number; sendForms?: number; confirmOpened?: number; codes?: number; confirmed?: number; sendAttempts?: number; accounts?: number; sends?: number; checkouts: number; buyers: number; revenueCents: number }>
     today?: string
     period?: string
     rangeStart?: string
@@ -4027,6 +4027,27 @@ function App() {
                 : 'your-turn'
               : 'get-ready'
   const showSendActions = step === 'front' || step === 'inside'
+  const sendFormVisible = showSendActions && Boolean(card) && !isRecipientView
+  // Counts the send form as seen only once it's actually scrolled into view.
+  useEffect(() => {
+    if (!sendFormVisible || typeof IntersectionObserver === 'undefined') return
+    let observer: IntersectionObserver | null = null
+    const timer = window.setTimeout(() => {
+      const panel = document.querySelector('.delivery-panel')
+      if (!panel) return
+      observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          trackLanding('send_form_seen')
+          observer?.disconnect()
+        }
+      }, { threshold: 0.3 })
+      observer.observe(panel)
+    }, 300)
+    return () => {
+      window.clearTimeout(timer)
+      observer?.disconnect()
+    }
+  }, [sendFormVisible])
   const showReviseButton = showSendActions
   const coverDetailChanges = card?.coverDetails
     ? coverDetailFields
@@ -4798,6 +4819,7 @@ function App() {
   useEffect(() => {
     if (step === 'front') {
       setHasViewedFront(true)
+      trackLanding('card_revealed')
     }
 
     if (step === 'inside') {
@@ -10586,6 +10608,7 @@ function App() {
       setAccountPhone(sentTo)
       const resent = Boolean(accountCodeSentTo)
       setAccountCodeSentTo(sentTo)
+      trackLanding('code_requested')
       focusFieldAfterRender('.account-gate input[autocomplete="one-time-code"]')
       const notice = data.message || 'We texted you a 6-digit code.'
       if (showAccountPage) {
@@ -10658,6 +10681,7 @@ function App() {
       }
       setAccountCode('')
       setAccountCodeSentTo('')
+      trackLanding('phone_confirmed')
       if (data.isNew === true) {
         trackLanding('account_created')
         trackFunnelConversion('account_created')
@@ -10937,6 +10961,7 @@ function App() {
       return
     }
 
+    trackLanding('send_attempt')
     if (sendTiming === 'later') {
       await scheduleCardDelivery({
         destinations: validatedDestinations.map((entry) => entry.value),
@@ -12422,10 +12447,10 @@ function App() {
                 <h3>Welcome page A/B test</h3>
                 <p>Since launch · unique visitors per step · preview links excluded. Paid and other traffic are separate. Purchases are verified paid credit purchases; small counts are not a reliable winner. Test v2 (photo-to-card Version B) started Oct 27, 2026; v1 rows are the earlier test and are not combined.</p>
                 {adminMetrics.welcomeExperiment?.length ? <table>
-                  <thead><tr><th>Test · version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Accounts</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
+                  <thead><tr><th>Test · version / traffic</th><th>Visitors</th><th>Samples</th><th>Started</th><th>Form</th><th>Created</th><th>Errors</th><th>Revealed</th><th>Send form</th><th>Phone step</th><th>Code sent</th><th>Confirmed</th><th>Accounts</th><th>Tapped send</th><th>Sent</th><th>Checkout</th><th>Buyers</th><th>Purchase rate</th><th>Revenue</th></tr></thead>
                   <tbody>{adminMetrics.welcomeExperiment.map(row => <tr key={`${row.experiment || 'welcome-v1'}-${row.variant}-${row.source}`}>
                     <td>{(row.experiment || 'welcome-v1').replace('welcome-', '')} · {row.variant.toUpperCase()} · {row.source === 'paid' ? 'Paid' : 'Other'}</td>
-                    <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.accounts ?? 0}</td><td>{row.sends ?? 0}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
+                    <td>{row.visitors}</td><td>{row.samples}</td><td>{row.starts}</td><td>{row.forms}</td><td>{row.completed}</td><td>{row.errors}</td><td>{row.revealed ?? 0}</td><td>{row.sendForms ?? 0}</td><td>{row.confirmOpened ?? 0}</td><td>{row.codes ?? 0}</td><td>{row.confirmed ?? 0}</td><td>{row.accounts ?? 0}</td><td>{row.sendAttempts ?? 0}</td><td>{row.sends ?? 0}</td><td>{row.checkouts}</td><td>{row.buyers}</td>
                     <td>{row.visitors ? (100 * row.buyers / row.visitors).toFixed(1) : '0.0'}%</td><td>${(row.revenueCents / 100).toFixed(2)}</td>
                   </tr>)}</tbody>
                 </table> : <p>{Array.isArray(adminMetrics.welcomeExperiment) ? 'No measured welcome-page visitors yet.' : 'Welcome experiment reporting is waiting for the API update.'}</p>}
@@ -15266,6 +15291,7 @@ function App() {
                         onChange={(event) => {
                           const checked = event.target.checked
                           setShowAccountConfirm(checked)
+                          if (checked) trackLanding('confirm_opened')
                           if (!checked) {
                             setAccountPhone('')
                             setAccountCode('')
