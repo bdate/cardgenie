@@ -6963,3 +6963,11 @@ select.is-placeholder option {
   align-items: center;
   gap: 8px 16px;
 }
+
+.photo-rejection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 10px;
+}

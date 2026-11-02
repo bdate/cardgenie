@@ -453,6 +453,8 @@ const phoneVerifyBonusCredits = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
 const welcomeHandoffStorageKey = 'cardGenieWelcomeHandoff'
+// Matches the server's photo rejection message prefix (photoRejectionMessage in worker/index.js).
+const isPhotoRejection = (message: string) => /^(This photo|One of the photos) could not be used\./.test(message)
 const formDraftMaxAgeMs = 7 * 24 * 60 * 60 * 1000
 const finishedFormDraftMaxAgeMs = 12 * 60 * 60 * 1000
 const formDraftVersion = 1 as const
@@ -8501,6 +8503,23 @@ function App() {
 
   followGenerationJobRef.current = followGenerationJob
 
+  const retryWithoutPhotos = () => {
+    setReferencePhotos([])
+    setError('')
+    window.setTimeout(() => createFormRef.current?.requestSubmit(), 60)
+  }
+
+  const chooseDifferentPhoto = () => {
+    setError('')
+    if (referencePhotos.length === 1) {
+      // Open the picker inside the tap itself; phone browsers block it after a delay.
+      document.getElementById('reference-photos')?.click()
+      setReferencePhotos([])
+      return
+    }
+    document.querySelector('.reference-photos-field')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   const generateCard = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = event.currentTarget
@@ -14164,6 +14183,16 @@ function App() {
           {error && (
             <div className="error-message" role="alert">
               {error}
+              {isPhotoRejection(error) && referencePhotos.length > 0 && !isGenerating && (
+                <div className="photo-rejection-actions">
+                  <button className="secondary-button" type="button" onClick={retryWithoutPhotos}>
+                    Try without the photo{referencePhotos.length > 1 ? 's' : ''}
+                  </button>
+                  <button className="text-action-link" type="button" onClick={chooseDifferentPhoto}>
+                    Choose a different photo
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

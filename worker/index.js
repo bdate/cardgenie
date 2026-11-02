@@ -610,17 +610,21 @@ const createPublicError = (message, { safety = true } = {}) => {
 }
 
 const photoRejectionMessage = (error, photoCount = 1, details = {}) => {
-  const text = getErrorText(error)
+  // The app shows "Try without the photo" / "Choose a different photo" buttons for messages with this prefix.
+  const text = `${getErrorText(error)} ${getModerationCategories(error).join(' ')}`
   const prefix = photoCount > 1 ? 'One of the photos could not be used. ' : 'This photo could not be used. '
-  let message = `${prefix}Try a closer, well-lit photo of the person's face. Group shots and distant photos are harder to match. You can also generate without a photo.`
+  let message = `${prefix}Try a closer, well-lit photo of the person's face. Group shots and distant photos are harder to match. You can also make the card without a photo.`
 
+  // The safety filter only reports a category, never what in the photo caused it, so these are common causes.
   if (/sexual/i.test(text)) {
-    message = `${prefix}Please choose a photo where everyone is fully clothed, with faces clearly visible, or generate without a photo.`
-  } else if (/violence|self-harm|hate/i.test(text)) {
-    message = `${prefix}Please try a different photo of the person, or generate without a photo.`
+    message = `${prefix}The image AI's safety filter flagged it for sexual content. That often happens with swimwear, beach, pool or bath photos, shirtless people, low-cut tops, or babies and kids who aren't fully dressed. Try a photo where everyone is fully clothed, or make the card without a photo.`
+  } else if (/violence/i.test(text)) {
+    message = `${prefix}The image AI's safety filter flagged it as violent. That often happens with toy or real guns, knives, swords, costumes, Halloween makeup, or anything that looks like blood. Try a different photo, or make the card without a photo.`
+  } else if (/self-harm|self_harm|hate/i.test(text)) {
+    message = `${prefix}The image AI's safety filter blocked it. Try a different, everyday photo of the person, or make the card without a photo.`
   }
 
-  const blocked = formatBlockedTextNote(details, error)
+  const blocked = findBlockedTextSnippets(details).length > 0 ? formatBlockedTextNote(details, error) : ''
   return blocked ? `${message} ${blocked}` : message
 }
 
