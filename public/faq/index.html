@@ -60,6 +60,15 @@
         margin-top: 0;
       }
 
+      .price-list {
+        margin: 0 0 14px;
+        padding-left: 20px;
+      }
+
+      .price-list li {
+        margin: 4px 0;
+      }
+
       .card {
         border: 1px solid rgba(63, 155, 145, 0.2);
         border-radius: 24px;
@@ -103,12 +112,30 @@
 
         <h2>What do credits cost, and when are they used?</h2>
         <p>
-          You start with 2 free credits. When you confirm your mobile number, we add 2 more. Creating a card is free.
-          Sending a card uses 3 credits. Revising the cover or using an AI rewrite of the inside message uses 1 credit.
-          Editing the message yourself is free. A printed card mailed by USPS is $5 and uses 10 credits from your
-          balance. Credits are used when the send, revision, or print order succeeds. If generation fails, those credits
-          stay in your account.
+          Creating and previewing a card is free. You start with 2 free credits, and we add 2 more when you confirm your
+          mobile number, which is enough for your first send.
         </p>
+        <ul class="price-list">
+          <li><strong>Send a card to one person:</strong> 3 credits ($1.50 or less, depending on your pack)</li>
+          <li><strong>Send the same card to 2 or more people:</strong> 2 credits per person (3 people = 6 credits)</li>
+          <li><strong>Revise the cover, or have Genie rewrite the inside message:</strong> 1 credit</li>
+          <li><strong>Edit the message yourself:</strong> free</li>
+          <li><strong>Printed card, mailed by USPS:</strong> $5 (uses 10 credits)</li>
+        </ul>
+        <p>
+          Credits are used only when the send, revision, or print order succeeds. If something fails, your credits stay
+          in your account. Credits never expire.
+        </p>
+
+        <h2>How much do credit packs cost?</h2>
+        <ul class="price-list">
+          <li><strong>10 credits:</strong> $5</li>
+          <li><strong>21 credits:</strong> $10</li>
+          <li><strong>53 credits:</strong> $25</li>
+          <li><strong>108 credits:</strong> $50</li>
+          <li><strong>222 credits:</strong> $100 (best value, about 45¢ per credit)</li>
+        </ul>
+        <p>Buy credits anytime from your account or when you send a card. Payment is handled securely by Stripe.</p>
 
         <h2>Why do I need a phone number to send?</h2>
         <p>
