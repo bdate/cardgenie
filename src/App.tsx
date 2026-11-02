@@ -8481,9 +8481,10 @@ function App() {
 
       if (!keepStoredJob) {
         clearStoredGenerationJob()
+        // A dropped connection isn't a failure: the job keeps running and resumes on return.
+        trackLanding('generation_error')
       }
 
-      trackLanding('generation_error')
       setError(message)
       if (restoreSentAfterFailedGenerateRef.current) {
         setHasSentCurrentCard(true)

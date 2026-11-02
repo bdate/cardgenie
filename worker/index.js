@@ -637,12 +637,18 @@ const publicGenerationError = (error, fallbackMessage, context = {}) => {
   const details = context.details || {}
   const blocked = formatBlockedTextNote(details, error)
 
-  if (blocked) {
+  // Only blame the wording when specific text was flagged. A category alone (e.g. "sexual content")
+  // with a photo attached almost always means the photo tripped the filter.
+  if (blocked && findBlockedTextSnippets(details).length > 0) {
     return `The genie couldn't create that card. ${blocked} No card was created. Change that wording and try again.`
   }
 
   if (hasPhotos) {
     return photoRejectionMessage(error, context.photoCount || 1, details)
+  }
+
+  if (blocked) {
+    return `The genie couldn't create that card. ${blocked} No card was created. Try a different image style, or simplify the personal details.`
   }
 
   if (mentionsCopyrightedProperty(details)) {
