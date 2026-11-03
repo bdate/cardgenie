@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { assignLanding, creatorUrl, trackLanding } from './landingExperiment'
 import { trackFunnelConversion } from './adsConversions'
-import { buildOccasionSuggestions } from './occasions'
+import { buildOccasionSuggestions, homeOccasionLinks } from './occasions'
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://api.card-genie.com').replace(/\/$/, '')
 const handoffStorageKey = 'cardGenieWelcomeHandoff'
@@ -146,7 +146,7 @@ export default function Welcome() {
       <section className="welcome-hero" aria-labelledby="welcome-heading">
         <div className="welcome-intro">
           {variant !== 'c' && <p className="welcome-eyebrow"><span aria-hidden="true">✧</span> THEIR PEOPLE. THEIR PASSIONS. THEIR CARD.</p>}
-          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that<br />could only be<br /><em>for them.</em></> : variant === 'c' ? <>Who’s the card <em>for?</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
+          <h1 id="welcome-heading">{variant === 'a' ? <>Make a card that{' '}<br />could only be{' '}<br /><em>for them.</em></> : variant === 'c' ? <>Who’s the card <em>for?</em></> : <>Turn your photos and memories into a <em>one-of-a-kind greeting.</em></>}</h1>
           <p className="welcome-lede">{variant === 'a'
             ? 'Turn their favorite things, your shared memories, and optional photos into custom artwork and words that feel like you.'
             : variant === 'c'
@@ -201,7 +201,7 @@ export default function Welcome() {
       <div className="welcome-promise"><span>Made around <strong>your person</strong></span><span>Artwork + a <strong>personal message</strong></span><span>Send by <strong>email or text</strong></span><span>Or <strong>print & mail</strong></span></div>
 
       <section className="welcome-examples" id="examples" aria-labelledby="examples-heading">
-        <div className="welcome-section-heading"><div><p className="welcome-eyebrow">A LITTLE INSPIRATION</p><h2 id="examples-heading">Not just a card.<br />An <em>“oh, that’s so me.”</em></h2></div><p>See how a few personal details become something worth opening. Tap a card to see the cover and message.</p></div>
+        <div className="welcome-section-heading"><div><p className="welcome-eyebrow">A LITTLE INSPIRATION</p><h2 id="examples-heading">Not just a card.{' '}<br />An <em>“oh, that’s so me.”</em></h2></div><p>See how a few personal details become something worth opening. Tap a card to see the cover and message.</p></div>
         <div className="welcome-gallery">{samples.map(sample => <article key={sample.id}>
           <button className="welcome-gallery-art" onClick={() => openSample(sample)} aria-label={`Preview ${sample.title}`}><img src={sample.image} alt={sample.alt} width="528" height="736" loading="lazy" /><span className="welcome-open-label">Open sample ↗</span></button>
           <div className="welcome-sample-caption"><span>{sample.occasion} · {sample.style}</span><h3>{sample.title}</h3><button className="welcome-text-link" onClick={() => begin(sample.occasion)}>Make one for someone I love ↗</button></div>
@@ -209,11 +209,18 @@ export default function Welcome() {
         <p className="welcome-example-note">Illustrative examples made with Card Genie. Sample people and stories are fictional.</p>
       </section>
 
-      <section className="welcome-how" aria-labelledby="how-heading"><p className="welcome-eyebrow">YOU BRING THE THOUGHT. GENIE BRINGS THE MAGIC.</p><h2 id="how-heading">From “what should I say?”<br />to <em>“I made this for you.”</em></h2><ol><li><span>01</span><h3>Tell us about them</h3><p>A hobby, an inside joke, a memory. Add a photo if you’d like them in the artwork.</p></li><li><span>02</span><h3>Make it yours</h3><p>Genie creates the artwork and message. Preview your card and edit the words for free.</p></li><li><span>03</span><h3>Make their day</h3><p>Send by email or text, or have a printed card mailed. Most cards are ready in a few minutes.</p></li></ol></section>
+      <section className="welcome-how" aria-labelledby="how-heading"><p className="welcome-eyebrow">YOU BRING THE THOUGHT. GENIE BRINGS THE MAGIC.</p><h2 id="how-heading">From “what should I say?”{' '}<br />to <em>“I made this for you.”</em></h2><ol><li><span>01</span><h3>Tell us about them</h3><p>A hobby, an inside joke, a memory. Add a photo if you’d like them in the artwork.</p></li><li><span>02</span><h3>Make it yours</h3><p>Genie creates the artwork and message. Preview your card and edit the words for free.</p></li><li><span>03</span><h3>Make their day</h3><p>Send by email or text, or have a printed card mailed. Most cards are ready in a few minutes.</p></li></ol></section>
 
-      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => begin()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
+      <section className="welcome-bottom" aria-labelledby="bottom-heading"><p className="welcome-eyebrow">SOMEONE COME TO MIND?</p><h2 id="bottom-heading">Make them feel{' '}<br /><em>one of a kind.</em></h2><button className="welcome-primary" onClick={() => begin()}>Create My Card <span aria-hidden="true">↗</span></button><p>Creating and previewing a card is free, and so is your first send. For current prices on sending and printed cards, see our FAQ.</p><a href="/faq/">See pricing & frequently asked questions ↗</a></section>
+      <section className="welcome-about" aria-labelledby="welcome-about-heading">
+        <h2 id="welcome-about-heading">About Card Genie</h2>
+        <p>Card Genie creates one-of-a-kind digital greeting cards. Each card gets a custom image inspired by their hobbies, personality, and your relationship, plus a personal message written for the occasion. Send it by email or text, or have it printed on cardstock and mailed.</p>
+        <h3>Popular occasions</h3>
+        <nav className="welcome-about-links" aria-label="Popular occasions">{homeOccasionLinks.map(([href, label]) => <a key={href} href={href}>{label}</a>)}</nav>
+        <p className="welcome-about-more"><a href="/styles/">See all 15 art styles</a></p>
+      </section>
     </main>
-    <footer className="welcome-footer"><a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
+    <footer className="welcome-footer"><a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/occasions/">Occasions</a><a href="/styles/">Art styles</a><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
 
     <dialog ref={dialog} className="welcome-dialog" aria-labelledby="sample-heading" onCancel={() => previousFocus.current?.focus()} onClick={event => { if (event.target === dialog.current) closeSample() }}>
       <button className="welcome-close" onClick={closeSample} aria-label="Close sample">×</button>

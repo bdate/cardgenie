@@ -154,3 +154,18 @@ export const buildOccasionSuggestions = (typed: string, popular: { label: string
     .slice(0, MAX_OCCASION_SUGGESTIONS)
     .map((entry) => entry.label)
 }
+
+// Popular occasion pages linked from the homepage card form and the welcome pages.
+export const homeOccasionLinks: [string, string][] = [
+  ['/birthday-cards/', 'Birthday cards'],
+  ['/thank-you-cards/', 'Thank you cards'],
+  ['/anniversary-cards/', 'Anniversary cards'],
+  ['/get-well-cards/', 'Get well cards'],
+  ['/sympathy-cards/', 'Sympathy cards'],
+  ['/wedding-cards/', 'Wedding cards'],
+  ['/new-baby-cards/', 'New baby cards'],
+  ['/graduation-cards/', 'Graduation cards'],
+  ['/christmas-cards/', 'Christmas cards'],
+  ['/invitations/', 'Invitations'],
+  ['/occasions/', 'All occasions'],
+]

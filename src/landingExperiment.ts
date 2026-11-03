@@ -72,8 +72,11 @@ export function assignLanding(): LandingAssignment {
   return assignment
 }
 
+// Search crawlers still see the welcome page; they just aren't counted as test visitors.
+const isCrawler = () => /bot\b|crawl|spider|slurp|google-inspectiontool|lighthouse/i.test(navigator.userAgent || '')
+
 export function trackLanding(event: LandingEvent, assignment = readLandingAssignment()) {
-  if (!assignment || /^\/gcu\//i.test(location.pathname)) return
+  if (!assignment || /^\/gcu\//i.test(location.pathname) || isCrawler()) return
   const key = `${assignment.visitor}:${event}`
   if (sent.has(key)) return
   sent.add(key)

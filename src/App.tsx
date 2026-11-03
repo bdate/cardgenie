@@ -3,7 +3,7 @@ import './Welcome.css'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { buildOccasionSuggestions } from './occasions'
+import { buildOccasionSuggestions, homeOccasionLinks } from './occasions'
 import {
   clearConversionCheckPending,
   hasConversionCheckPending,
@@ -1034,19 +1034,6 @@ const contactTopics = [
 
 const invitationOccasionPattern = /\binvit(?:e|es|ation|ations)\b|\bsave[\s-]+the[\s-]+date\b/i
 
-const homeOccasionLinks: [string, string][] = [
-  ['/birthday-cards/', 'Birthday cards'],
-  ['/thank-you-cards/', 'Thank you cards'],
-  ['/anniversary-cards/', 'Anniversary cards'],
-  ['/get-well-cards/', 'Get well cards'],
-  ['/sympathy-cards/', 'Sympathy cards'],
-  ['/wedding-cards/', 'Wedding cards'],
-  ['/new-baby-cards/', 'New baby cards'],
-  ['/graduation-cards/', 'Graduation cards'],
-  ['/christmas-cards/', 'Christmas cards'],
-  ['/invitations/', 'Invitations'],
-  ['/occasions/', 'All occasions'],
-]
 
 const defaultKeyDetailsExample =
   'Example: Thank our neighbor Linda for watching our dog Biscuit all week. Show Biscuit napping on her porch swing.'
