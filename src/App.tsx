@@ -13007,6 +13007,20 @@ function App() {
                   {reviewThanks.review.rating ? ` · ${reviewThanks.review.rating}-star review` : ''}. Edit anything
                   before sending. Replies go to support@card-genie.com.
                 </p>
+                <figure className="review-thanks-original">
+                  <figcaption>
+                    {reviewThanks.review.rating ? (
+                      <span className="review-thanks-stars" aria-label={`${reviewThanks.review.rating} out of 5 stars`}>
+                        {'★'.repeat(reviewThanks.review.rating)}
+                        {'☆'.repeat(Math.max(0, 5 - reviewThanks.review.rating))}
+                      </span>
+                    ) : null}
+                    <span>
+                      {reviewThanks.review.name?.trim() || 'Anonymous'} · {formatAccountDate(reviewThanks.review.createdAt)}
+                    </span>
+                  </figcaption>
+                  <blockquote>{reviewThanks.review.comment}</blockquote>
+                </figure>
                 <label>
                   Subject
                   <input

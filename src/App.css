@@ -7067,3 +7067,34 @@ select.is-placeholder option {
   font-size: 0.82rem;
   color: var(--gcu-grey);
 }
+
+.review-thanks-original {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--gcu-orange, #f59e33);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 0.84rem;
+  color: var(--gcu-grey);
+}
+
+.review-thanks-original figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+}
+
+.review-thanks-stars {
+  color: var(--gcu-orange, #f59e33);
+  letter-spacing: 1px;
+}
+
+.review-thanks-original blockquote {
+  margin: 0;
+  font-style: italic;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
