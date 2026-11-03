@@ -7104,3 +7104,33 @@ select.is-placeholder option {
   min-height: 32px;
   font-size: 0.86rem;
 }
+
+.admin-review-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.admin-review-meta .review-stars,
+.admin-review-meta .review-stars span {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.admin-review-meta .review-stars {
+  color: var(--gcu-orange);
+}
+
+.admin-review-meta .review-stars span {
+  color: rgba(125, 125, 125, 0.3);
+}
+
+.admin-review-no-rating {
+  font-size: 0.8rem;
+  color: var(--gcu-grey);
+}
+
+.review-thanks-original .review-stars {
+  font-size: 0.9rem;
+}

@@ -13033,9 +13033,9 @@ function App() {
                 <figure className="review-thanks-original">
                   <figcaption>
                     {reviewThanks.review.rating ? (
-                      <span className="review-thanks-stars" aria-label={`${reviewThanks.review.rating} out of 5 stars`}>
+                      <span className="review-stars review-thanks-stars" aria-label={`${reviewThanks.review.rating} out of 5 stars`}>
                         {'★'.repeat(reviewThanks.review.rating)}
-                        {'☆'.repeat(Math.max(0, 5 - reviewThanks.review.rating))}
+                        <span aria-hidden="true">{'★'.repeat(Math.max(0, 5 - reviewThanks.review.rating))}</span>
                       </span>
                     ) : null}
                     <span>
@@ -13100,9 +13100,18 @@ function App() {
                 {pendingReviews.map((review) => (
                   <div className="admin-review-card" key={review.id}>
                     <div className="admin-review-meta">
-                      <strong>{review.name?.trim() || 'Anonymous'}</strong>
+                      <div className="admin-review-who">
+                        <strong>{review.name?.trim() || 'Anonymous'}</strong>
+                        {review.rating ? (
+                          <span className="review-stars" aria-label={`${review.rating} out of 5 stars`}>
+                            {'★'.repeat(review.rating)}
+                            <span aria-hidden="true">{'★'.repeat(Math.max(0, 5 - review.rating))}</span>
+                          </span>
+                        ) : (
+                          <span className="admin-review-no-rating">No star rating</span>
+                        )}
+                      </div>
                       <span>
-                        {review.rating ? `${review.rating}/5 · ` : ''}
                         {formatAccountDate(review.createdAt)}
                         {review.source ? ` · ${review.source}` : ''}
                       </span>
@@ -13110,7 +13119,7 @@ function App() {
                     <p>{review.comment}</p>
                     <p className="review-thanks-status">
                       {review.thankedAt
-                        ? `✓ Thank-you email sent ${formatAccountDate(review.thankedAt)}`
+                        ? `✓ Thank-you email sent ${new Date(review.thankedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
                         : review.email
                           ? `Email on file: ${review.email}`
                           : 'No email on file'}
