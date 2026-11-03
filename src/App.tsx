@@ -15160,8 +15160,9 @@ function App() {
                       onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
                     />
                     <span>
-                      OK to text {plannedRecipientCount > 1 ? 'each of them' : 'them'} this card — one message, no
-                      marketing. Msg & data rates may apply. Reply STOP to opt out, HELP for help.{' '}
+                      I confirm I have {plannedRecipientCount > 1 ? 'each recipient’s' : 'their'} permission for Card
+                      Genie to text them this card. One text per card, no marketing. Msg & data rates may apply. Reply
+                      STOP to opt out, HELP for help.{' '}
                       <button
                         className="sms-consent-more"
                         type="button"
@@ -15175,7 +15176,7 @@ function App() {
                       </button>{' '}
                       {showSmsConsentDetails && (
                         <>
-                          Message frequency is one message per card delivery request. SMS consent is optional and is
+                          Card Genie sends one text per card you choose to deliver by text. Texting is optional and is
                           not required to create a card or use email delivery.{' '}
                         </>
                       )}
