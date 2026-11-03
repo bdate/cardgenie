@@ -7098,3 +7098,9 @@ select.is-placeholder option {
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+.review-thanks-panel .review-thanks-back {
+  justify-self: start;
+  min-height: 32px;
+  font-size: 0.86rem;
+}

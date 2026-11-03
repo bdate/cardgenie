@@ -7710,6 +7710,14 @@ function App() {
     }
   }
 
+  const openReviewThanks = (review: AdminReview) => {
+    setReviewThanks({ review, ...reviewThanksDraft(review) })
+    window.setTimeout(
+      () => document.querySelector('.review-thanks-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      50,
+    )
+  }
+
   const sendReviewThanks = async () => {
     if (!accountSession?.token || !reviewThanks) return
     setIsSendingReviewThanks(true)
@@ -7770,7 +7778,7 @@ function App() {
         status === 'approved' ? 'Review approved.' : status === 'rejected' ? 'Review hidden.' : 'Review moved to pending.'
       setPendingReviewNotice(notice)
       if (status === 'approved' && changedReview?.email && !changedReview.thankedAt) {
-        setReviewThanks({ review: changedReview, ...reviewThanksDraft(changedReview) })
+        openReviewThanks(changedReview)
       }
       void loadAdminMetrics(accountSession.token)
     } catch (caughtError) {
@@ -12999,6 +13007,21 @@ function App() {
             {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
             {reviewThanks && (
               <div className="review-thanks-panel" role="region" aria-label="Send a thank-you email">
+                <button
+                  className="text-action-link review-thanks-back"
+                  type="button"
+                  disabled={isSendingReviewThanks}
+                  onClick={() => {
+                    setReviewThanks(null)
+                    setPendingReviewNotice('No email sent.')
+                    window.setTimeout(
+                      () => document.querySelector('.admin-review-filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                      50,
+                    )
+                  }}
+                >
+                  ← Back to reviews
+                </button>
                 <h3>
                   Send a thank-you email to {reviewThanks.review.name?.trim() || 'this reviewer'}?
                 </h3>
@@ -13098,7 +13121,7 @@ function App() {
                           className="secondary-button"
                           type="button"
                           disabled={updatingReviewId === review.id || isSendingReviewThanks}
-                          onClick={() => setReviewThanks({ review, ...reviewThanksDraft(review) })}
+                          onClick={() => openReviewThanks(review)}
                         >
                           Send thank-you email
                         </button>
