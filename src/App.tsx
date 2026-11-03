@@ -453,6 +453,56 @@ const phoneVerifyBonusCredits = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
 const welcomeHandoffStorageKey = 'cardGenieWelcomeHandoff'
+
+type AdminReview = {
+  id: string
+  createdAt: string
+  name?: string
+  rating?: number | null
+  comment: string
+  source?: string
+  status?: string
+  email?: string
+  preferredName?: string
+  thankedAt?: string
+}
+
+/** Default thank-you email for an approved review, tuned to its star rating; the admin edits it before sending. */
+const reviewThanksDraft = (review: AdminReview) => {
+  const firstName = String(review.preferredName || review.name || '').trim().split(/\s+/)[0] || 'there'
+  const suggestionsLink = 'https://www.card-genie.com/?contact=suggestions'
+  const supportLink = 'https://www.card-genie.com/?contact=general'
+  const signOff = 'Nasser\nCard Genie'
+  const rating = Number(review.rating) || 0
+  if (rating >= 5) {
+    return {
+      subject: 'Thank you for your 5-star review!',
+      message: `Hi ${firstName},\n\nThank you so much for your 5-star review of Card Genie. It truly made our day.\n\nWe're still in the early launch phase, so your ideas mean a lot to us. If anything could be easier, or there's an occasion, art style, or feature you'd love to see, we'd really appreciate your suggestions:\n${suggestionsLink}\n\nThanks again for being one of our first customers.\n\n${signOff}`,
+    }
+  }
+  if (rating === 4) {
+    return {
+      subject: 'Thank you for your review!',
+      message: `Hi ${firstName},\n\nThank you for your 4-star review of Card Genie. We're glad you enjoyed it.\n\nWe're still in the early launch phase, and we'd love to know what would have made it a 5. Any ideas or suggestions are welcome:\n${suggestionsLink}\n\nThanks again for trying Card Genie.\n\n${signOff}`,
+    }
+  }
+  if (rating === 3) {
+    return {
+      subject: 'Thank you for your honest review',
+      message: `Hi ${firstName},\n\nThank you for taking the time to review Card Genie. Honest feedback like yours is exactly what helps us improve.\n\nWe're still in the early launch phase, so we'd really like to hear what fell short and what we could do better:\n${suggestionsLink}\n\nThanks again,\n\n${signOff}`,
+    }
+  }
+  if (rating >= 1) {
+    return {
+      subject: "We're sorry Card Genie fell short",
+      message: `Hi ${firstName},\n\nThank you for your review, and I'm sorry Card Genie didn't live up to what you expected.\n\nWe're still in the early launch phase and want to get this right. Could you tell us what went wrong? If it involved a card, credits, or a charge, we'll make it right:\n${supportLink}\n\nThank you for giving us a chance,\n\n${signOff}`,
+    }
+  }
+  return {
+    subject: 'Thank you for your feedback',
+    message: `Hi ${firstName},\n\nThank you for sharing your thoughts about Card Genie.\n\nWe're still in the early launch phase, so any ideas or suggestions are very welcome:\n${suggestionsLink}\n\nThanks again,\n\n${signOff}`,
+  }
+}
 // Matches the server's photo rejection message prefix (photoRejectionMessage in worker/index.js).
 const isPhotoRejection = (message: string) => /^(This photo|One of the photos) could not be used\./.test(message)
 const formDraftMaxAgeMs = 7 * 24 * 60 * 60 * 1000
@@ -3514,17 +3564,11 @@ function App() {
   const [adminMetricsError, setAdminMetricsError] = useState('')
   const [isBackfillingThumbs, setIsBackfillingThumbs] = useState(false)
   const [thumbBackfillNotice, setThumbBackfillNotice] = useState('')
-  const [pendingReviews, setPendingReviews] = useState<
-    Array<{
-      id: string
-      createdAt: string
-      name?: string
-      rating?: number | null
-      comment: string
-      source?: string
-      status?: string
-    }>
-  >([])
+  const [pendingReviews, setPendingReviews] = useState<AdminReview[]>([])
+  const [reviewThanks, setReviewThanks] = useState<{ review: AdminReview; subject: string; message: string } | null>(
+    null,
+  )
+  const [isSendingReviewThanks, setIsSendingReviewThanks] = useState(false)
   const [adminReviewStatus, setAdminReviewStatus] = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [isLoadingPendingReviews, setIsLoadingPendingReviews] = useState(false)
   const [pendingReviewNotice, setPendingReviewNotice] = useState('')
@@ -7666,6 +7710,33 @@ function App() {
     }
   }
 
+  const sendReviewThanks = async () => {
+    if (!accountSession?.token || !reviewThanks) return
+    setIsSendingReviewThanks(true)
+    setPendingReviewNotice('')
+    try {
+      const response = await fetch(apiUrl(`/api/admin/testimonials/${encodeURIComponent(reviewThanks.review.id)}/email`), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accountSession.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: reviewThanks.subject, message: reviewThanks.message }),
+      })
+      const data = await getApiJson(response, 'Unable to send that email.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to send that email.')
+      }
+      const thankedAt = String(data.thankedAt || new Date().toISOString())
+      setPendingReviews((current) =>
+        current.map((review) => (review.id === reviewThanks.review.id ? { ...review, thankedAt } : review)),
+      )
+      setPendingReviewNotice(`Thank-you email sent to ${String(data.sentTo || reviewThanks.review.email || 'the reviewer')}.`)
+      setReviewThanks(null)
+    } catch (caughtError) {
+      setPendingReviewNotice(caughtError instanceof Error ? caughtError.message : 'Unable to send that email.')
+    } finally {
+      setIsSendingReviewThanks(false)
+    }
+  }
+
   const selectAdminReviewStatus = async (status: 'pending' | 'approved' | 'rejected') => {
     setAdminReviewStatus(status)
     if (!accountSession?.token) {
@@ -7693,10 +7764,14 @@ function App() {
       if (!response.ok) {
         throw new Error(data.error || 'Unable to update that review.')
       }
+      const changedReview = pendingReviews.find((review) => review.id === id)
       setPendingReviews((current) => current.filter((review) => review.id !== id))
       const notice =
         status === 'approved' ? 'Review approved.' : status === 'rejected' ? 'Review hidden.' : 'Review moved to pending.'
       setPendingReviewNotice(notice)
+      if (status === 'approved' && changedReview?.email && !changedReview.thankedAt) {
+        setReviewThanks({ review: changedReview, ...reviewThanksDraft(changedReview) })
+      }
       void loadAdminMetrics(accountSession.token)
     } catch (caughtError) {
       setPendingReviewNotice(caughtError instanceof Error ? caughtError.message : 'Unable to update that review.')
@@ -12922,6 +12997,57 @@ function App() {
           </div>
           <div className="account-block admin-reviews">
             {pendingReviewNotice && <div className="field-notice">{pendingReviewNotice}</div>}
+            {reviewThanks && (
+              <div className="review-thanks-panel" role="region" aria-label="Send a thank-you email">
+                <h3>
+                  Send a thank-you email to {reviewThanks.review.name?.trim() || 'this reviewer'}?
+                </h3>
+                <p className="field-help">
+                  To {reviewThanks.review.email}
+                  {reviewThanks.review.rating ? ` · ${reviewThanks.review.rating}-star review` : ''}. Edit anything
+                  before sending. Replies go to support@card-genie.com.
+                </p>
+                <label>
+                  Subject
+                  <input
+                    value={reviewThanks.subject}
+                    maxLength={150}
+                    onChange={(event) => setReviewThanks((current) => (current ? { ...current, subject: event.target.value } : current))}
+                  />
+                </label>
+                <label>
+                  Message
+                  <textarea
+                    rows={12}
+                    value={reviewThanks.message}
+                    maxLength={4000}
+                    onChange={(event) => setReviewThanks((current) => (current ? { ...current, message: event.target.value } : current))}
+                  />
+                </label>
+                <div className="feedback-actions">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={isSendingReviewThanks || !reviewThanks.subject.trim() || !reviewThanks.message.trim()}
+                    aria-busy={isSendingReviewThanks}
+                    onClick={() => void sendReviewThanks()}
+                  >
+                    {isSendingReviewThanks ? 'Sending…' : 'Send email'}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={isSendingReviewThanks}
+                    onClick={() => {
+                      setReviewThanks(null)
+                      setPendingReviewNotice('No email sent.')
+                    }}
+                  >
+                    Skip
+                  </button>
+                </div>
+              </div>
+            )}
             {isLoadingPendingReviews && pendingReviews.length === 0 ? (
               <p>Loading reviews...</p>
             ) : pendingReviews.length === 0 ? (
@@ -12945,7 +13071,24 @@ function App() {
                       </span>
                     </div>
                     <p>{review.comment}</p>
+                    <p className="review-thanks-status">
+                      {review.thankedAt
+                        ? `✓ Thank-you email sent ${formatAccountDate(review.thankedAt)}`
+                        : review.email
+                          ? `Email on file: ${review.email}`
+                          : 'No email on file'}
+                    </p>
                     <div className="feedback-actions">
+                      {review.email && !review.thankedAt && adminReviewStatus === 'approved' && (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={updatingReviewId === review.id || isSendingReviewThanks}
+                          onClick={() => setReviewThanks({ review, ...reviewThanksDraft(review) })}
+                        >
+                          Send thank-you email
+                        </button>
+                      )}
                       {adminReviewStatus !== 'approved' && (
                         <button
                           className="primary-button"

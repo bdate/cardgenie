@@ -7030,3 +7030,40 @@ select.is-placeholder option {
   gap: 10px 16px;
   margin-top: 10px;
 }
+
+.review-thanks-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(63, 155, 145, 0.3);
+  border-radius: 18px;
+  background: rgba(233, 244, 242, 0.6);
+}
+
+.review-thanks-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--gcu-ink);
+}
+
+.review-thanks-panel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 0.86rem;
+  color: var(--gcu-ink);
+}
+
+.review-thanks-panel textarea {
+  min-height: 240px;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.review-thanks-status {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--gcu-grey);
+}

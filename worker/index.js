@@ -47,6 +47,9 @@ import {
   saveAccountMailingAddress,
   updateAccountProfile,
   updateTestimonialStatus,
+  getTestimonialContact,
+  markTestimonialThanked,
+  clearTestimonialThanked,
   upsertUserOnLogin,
   createGiftAccount,
   queueAdConversion,
@@ -4431,8 +4434,66 @@ const handleListAdminTestimonials = async (request, env) => {
 
   const url = new URL(request.url)
   const status = url.searchParams.get('status') || 'pending'
-  const testimonials = await listTestimonials(env, { status, limit: 50 })
+  const testimonials = await listTestimonials(env, { status, limit: 50, includeContact: true })
   return jsonResponse(request, env, { ok: true, status, testimonials })
+}
+
+const REVIEW_THANKS_REPLY_TO = 'support@card-genie.com'
+
+const reviewThanksHtml = (message) =>
+  `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#2d4b48;max-width:560px;">${String(message)
+    .trim()
+    .split(/\n{2,}/)
+    .map(
+      (paragraph) =>
+        `<p style="margin:0 0 14px;">${escapeHtml(paragraph)
+          .replace(/\n/g, '<br />')
+          .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#3f9b91;font-weight:bold;">$1</a>')}</p>`,
+    )
+    .join('')}</div>`
+
+const handleSendReviewThanks = async (request, env, testimonialId) => {
+  if (!(await isAdminRequest(request, env))) {
+    return jsonResponse(request, env, { error: 'Not found.' }, 404)
+  }
+
+  const body = (await readJson(request)) || {}
+  const subject = String(body.subject || '').trim().slice(0, 150)
+  const message = String(body.message || '').trim().slice(0, 4000)
+  if (!subject || !message) {
+    return jsonResponse(request, env, { error: 'Add a subject and a message.' }, 400)
+  }
+
+  const contact = await getTestimonialContact(env, testimonialId)
+  if (!contact) {
+    return jsonResponse(request, env, { error: 'That review no longer exists.' }, 404)
+  }
+  if (!contact.email) {
+    return jsonResponse(request, env, { error: 'This reviewer has no email address on file.' }, 400)
+  }
+  if (!(await markTestimonialThanked(env, testimonialId))) {
+    return jsonResponse(request, env, { error: 'A thank-you email was already sent for this review.' }, 409)
+  }
+
+  try {
+    await sendEmailDelivery({
+      env,
+      to: contact.email,
+      copy: {
+        subject,
+        text: message,
+        html: reviewThanksHtml(message),
+        replyTo: REVIEW_THANKS_REPLY_TO,
+        replyToName: 'Card Genie',
+      },
+    })
+  } catch (error) {
+    await clearTestimonialThanked(env, testimonialId)
+    console.error('Review thank-you email failed.', error)
+    return jsonResponse(request, env, { error: 'The email could not be sent. Please try again.' }, 502)
+  }
+
+  return jsonResponse(request, env, { ok: true, thankedAt: new Date().toISOString(), sentTo: contact.email })
 }
 
 const handleUpdateAdminTestimonial = async (request, env, testimonialId) => {
@@ -8398,6 +8459,11 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/admin/testimonials') {
     return handleListAdminTestimonials(request, env)
+  }
+
+  const reviewThanksMatch = url.pathname.match(/^\/api\/admin\/testimonials\/([^/]+)\/email$/)
+  if (request.method === 'POST' && reviewThanksMatch) {
+    return handleSendReviewThanks(request, env, decodeURIComponent(reviewThanksMatch[1]))
   }
 
   if (request.method === 'POST' && url.pathname.startsWith('/api/admin/testimonials/')) {

@@ -1534,7 +1534,11 @@ export const getAdminMetrics = async (env, { period = '7d' } = {}) => {
   }
 }
 
-export const listTestimonials = async (env, { status = 'pending', limit = 50 } = {}) => {
+const ensureTestimonialThankedColumn = async (db) => {
+  await db.prepare('ALTER TABLE testimonials ADD COLUMN thanked_at TEXT').run().catch(() => {})
+}
+
+export const listTestimonials = async (env, { status = 'pending', limit = 50, includeContact = false } = {}) => {
   if (!env.ACCOUNT_DB) {
     return []
   }
@@ -1544,12 +1548,20 @@ export const listTestimonials = async (env, { status = 'pending', limit = 50 } =
   const cleanLimit = Math.min(Math.max(Number(limit) || 50, 1), 100)
 
   try {
+    if (includeContact) await ensureTestimonialThankedColumn(env.ACCOUNT_DB)
     const result = await env.ACCOUNT_DB.prepare(
-      `SELECT id, created_at, name, rating, comment, status, source, phone_e164
-       FROM testimonials
-       WHERE status = ?
-       ORDER BY created_at DESC
-       LIMIT ?`,
+      includeContact
+        ? `SELECT t.id, t.created_at, t.name, t.rating, t.comment, t.status, t.source, t.phone_e164, t.thanked_at,
+                  u.email, u.preferred_name
+           FROM testimonials t LEFT JOIN users u ON u.id = t.user_id
+           WHERE t.status = ?
+           ORDER BY t.created_at DESC
+           LIMIT ?`
+        : `SELECT id, created_at, name, rating, comment, status, source, phone_e164
+           FROM testimonials
+           WHERE status = ?
+           ORDER BY created_at DESC
+           LIMIT ?`,
     )
       .bind(cleanStatus, cleanLimit)
       .all()
@@ -1563,10 +1575,52 @@ export const listTestimonials = async (env, { status = 'pending', limit = 50 } =
       status: row.status,
       source: row.source || '',
       phoneE164: row.phone_e164 || '',
+      ...(includeContact
+        ? { email: row.email || '', preferredName: row.preferred_name || '', thankedAt: row.thanked_at || '' }
+        : {}),
     }))
   } catch {
     return []
   }
+}
+
+/** Reviewer contact for an admin thank-you email; the address always comes from the account record. */
+export const getTestimonialContact = async (env, id) => {
+  if (!env.ACCOUNT_DB || !id) return null
+  await ensureTestimonialThankedColumn(env.ACCOUNT_DB)
+  const row = await env.ACCOUNT_DB.prepare(
+    `SELECT t.id, t.name, t.rating, t.thanked_at, u.email, u.preferred_name
+     FROM testimonials t LEFT JOIN users u ON u.id = t.user_id
+     WHERE t.id = ?`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name || '',
+    rating: row.rating == null ? null : Number(row.rating),
+    email: row.email || '',
+    preferredName: row.preferred_name || '',
+    thankedAt: row.thanked_at || '',
+  }
+}
+
+/** Returns false if the review was already thanked, so a thank-you is only ever sent once. */
+export const markTestimonialThanked = async (env, id) => {
+  if (!env.ACCOUNT_DB || !id) return false
+  await ensureTestimonialThankedColumn(env.ACCOUNT_DB)
+  const result = await env.ACCOUNT_DB.prepare(
+    'UPDATE testimonials SET thanked_at = ? WHERE id = ? AND thanked_at IS NULL',
+  )
+    .bind(isoNow(), id)
+    .run()
+  return Number(result?.meta?.changes || 0) > 0
+}
+
+export const clearTestimonialThanked = async (env, id) => {
+  if (!env.ACCOUNT_DB || !id) return
+  await env.ACCOUNT_DB.prepare('UPDATE testimonials SET thanked_at = NULL WHERE id = ?').bind(id).run()
 }
 
 export const updateTestimonialStatus = async (env, { id, status }) => {
