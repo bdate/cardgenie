@@ -477,7 +477,7 @@ const reviewThanksDraft = (review: AdminReview) => {
   if (rating >= 5) {
     return {
       subject: 'Thank you for your 5-star review!',
-      message: `Hi ${firstName},\n\nThank you so much for your 5-star review of Card Genie. It truly made our day.\n\nWe're still in the early launch phase, so your ideas mean a lot to us. If any improvements or features you'd love to see, we'd really appreciate your suggestions:\n${suggestionsLink}\n\nThanks again for being one of our first customers.\n\n${signOff}`,
+      message: `Hi ${firstName},\n\nThank you so much for your 5-star review of Card Genie. It truly made our day.\n\nWe're still in the early launch phase, so your ideas mean a lot to us. If there are any improvements or features you'd love to see, we'd really appreciate your suggestions:\n${suggestionsLink}\n\nThanks again for being one of our first customers.\n\n${signOff}`,
     }
   }
   if (rating === 4) {
