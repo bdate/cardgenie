@@ -472,12 +472,12 @@ const reviewThanksDraft = (review: AdminReview) => {
   const firstName = String(review.preferredName || review.name || '').trim().split(/\s+/)[0] || 'there'
   const suggestionsLink = 'https://www.card-genie.com/?contact=suggestions'
   const supportLink = 'https://www.card-genie.com/?contact=general'
-  const signOff = 'Nasser\nCard Genie'
+  const signOff = 'Victor\nCard Genie'
   const rating = Number(review.rating) || 0
   if (rating >= 5) {
     return {
       subject: 'Thank you for your 5-star review!',
-      message: `Hi ${firstName},\n\nThank you so much for your 5-star review of Card Genie. It truly made our day.\n\nWe're still in the early launch phase, so your ideas mean a lot to us. If anything could be easier, or there's an occasion, art style, or feature you'd love to see, we'd really appreciate your suggestions:\n${suggestionsLink}\n\nThanks again for being one of our first customers.\n\n${signOff}`,
+      message: `Hi ${firstName},\n\nThank you so much for your 5-star review of Card Genie. It truly made our day.\n\nWe're still in the early launch phase, so your ideas mean a lot to us. If any improvements or features you'd love to see, we'd really appreciate your suggestions:\n${suggestionsLink}\n\nThanks again for being one of our first customers.\n\n${signOff}`,
     }
   }
   if (rating === 4) {

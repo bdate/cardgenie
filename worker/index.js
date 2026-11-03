@@ -1730,10 +1730,14 @@ const sendSendGridEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
     throw new Error('Email delivery is not configured. Add SENDGRID_API_KEY and EMAIL_FROM.')
   }
 
+  const bcc = (copy.bcc || []).filter(
+    (email) => email && email.toLowerCase() !== String(to).toLowerCase(),
+  )
   const payload = {
     personalizations: [
       {
         to: [{ email: to }],
+        ...(bcc.length ? { bcc: bcc.map((email) => ({ email })) } : {}),
         subject: copy.subject,
       },
     ],
@@ -1789,6 +1793,7 @@ const sendPostmarkEmailDelivery = async ({ env, to, copy, attachments = [] }) =>
   const payload = {
     From: copy.fromName ? `${copy.fromName} <${parseEmailSender(env.EMAIL_FROM).email}>` : env.EMAIL_FROM,
     To: to,
+    ...(copy.bcc?.length ? { Bcc: copy.bcc.join(',') } : {}),
     ...(copy.replyTo ? { ReplyTo: copy.replyTo } : {}),
     Subject: copy.subject,
     TextBody: copy.text,
@@ -4439,6 +4444,7 @@ const handleListAdminTestimonials = async (request, env) => {
 }
 
 const REVIEW_THANKS_REPLY_TO = 'support@card-genie.com'
+const REVIEW_THANKS_BCC = 'cards@card-genie.com'
 
 const reviewThanksHtml = (message) =>
   `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#2d4b48;max-width:560px;">${String(message)
@@ -4485,6 +4491,7 @@ const handleSendReviewThanks = async (request, env, testimonialId) => {
         html: reviewThanksHtml(message),
         replyTo: REVIEW_THANKS_REPLY_TO,
         replyToName: 'Card Genie',
+        bcc: [REVIEW_THANKS_BCC],
       },
     })
   } catch (error) {
