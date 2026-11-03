@@ -15180,13 +15180,15 @@ function App() {
                           not required to create a card or use email delivery.{' '}
                         </>
                       )}
-                      <a href="/privacy/index.html" target="_blank" rel="noreferrer">
-                        Privacy
-                      </a>
-                      {' · '}
-                      <a href="/terms/index.html" target="_blank" rel="noreferrer">
-                        Terms
-                      </a>
+                      <span className="sms-consent-links">
+                        <a href="/privacy/index.html" target="_blank" rel="noreferrer">
+                          Privacy
+                        </a>
+                        {' · '}
+                        <a href="/terms/index.html" target="_blank" rel="noreferrer">
+                          Terms
+                        </a>
+                      </span>
                     </span>
                   </label>
                 )}

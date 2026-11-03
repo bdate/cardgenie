@@ -3655,6 +3655,11 @@ textarea:focus {
   font-weight: 900;
 }
 
+.sms-consent .sms-consent-links {
+  display: block;
+  margin-top: 4px;
+}
+
 .sms-consent .sms-consent-more {
   display: inline;
   width: auto;
