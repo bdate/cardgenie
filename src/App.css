@@ -3660,6 +3660,10 @@ textarea:focus {
   margin-top: 4px;
 }
 
+.sms-consent .sms-consent-links a {
+  font-weight: 500;
+}
+
 .sms-consent .sms-consent-more {
   display: inline;
   width: auto;
