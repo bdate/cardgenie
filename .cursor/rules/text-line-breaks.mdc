@@ -1,0 +1,28 @@
+---
+description: Shopper-facing text should not leave one or two orphaned words or links on the last line; add a deliberate line break instead
+alwaysApply: true
+---
+
+# Natural line breaks in UI text
+
+Keep shopper-facing text short first. But when a block of text (help text, checkbox labels, notices, captions, button-adjacent copy) ends with one or two words or links wrapping onto their own line, add a deliberate break at a natural boundary instead of leaving an orphan.
+
+- Break between distinct parts: the main sentence vs. supporting links, legal links, "more" toggles, prices, or footnotes.
+- Put grouped links (Privacy · Terms, FAQ · Contact) together on their own line rather than splitting them across lines.
+- Check on a 390px phone and on desktop. If the break only helps one size, apply it only there (CSS media query).
+- Prefer a block-level span with a small top margin over `<br />` in React, so spacing stays consistent.
+- When a heading uses `<br />` for layout, keep a space before it (`{' '}<br />`) so search engines and screen readers don't run words together.
+
+Example (SMS consent checkbox):
+
+```tsx
+// ❌ Links wrap mid-line: "...HELP for help. more  Privacy ·" / "Terms"
+<span>...Reply STOP to opt out, HELP for help. {more} <a>Privacy</a> · <a>Terms</a></span>
+
+// ✅ Links grouped on their own line
+<span>
+  ...Reply STOP to opt out, HELP for help. {more}
+  <span className="sms-consent-links"><a>Privacy</a> · <a>Terms</a></span>
+</span>
+// .sms-consent-links { display: block; margin-top: 4px; }
+```
