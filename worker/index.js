@@ -2421,8 +2421,11 @@ const twilioSenderFields = (env) => {
 // Carrier/RCS compliance: every program text names Card Genie and carries the standard disclosures.
 const SMS_DISCLOSURE = 'Msg & data rates may apply. Msg frequency varies. Reply HELP for help, STOP to opt out.'
 
-// The first card text a number ever receives doubles as the program's welcome / opt-in confirmation.
+// The first card text a number ever receives doubles as the program's welcome / opt-in confirmation,
+// which carriers require to also list customer care contact.
 const SMS_WELCOME_PREFIX = 'Welcome to Card Genie card texts!'
+const SMS_WELCOME_DISCLOSURE =
+  'Msg & data rates may apply. Msg frequency varies. Questions? support@card-genie.com. Reply HELP for help, STOP to opt out.'
 
 const hasReceivedCardText = async (env, phoneE164) => {
   if (!env.ACCOUNT_DB || !phoneE164) return false
@@ -2441,17 +2444,17 @@ const hasReceivedCardText = async (env, phoneE164) => {
   }
 }
 
-const formatSmsBody = (text) => {
+const formatSmsBody = (text, { welcome = false } = {}) => {
   const body = String(text || '').trim()
   const branded = /card genie/i.test(body) ? body : `Card Genie: ${body}`
-  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${SMS_DISCLOSURE}`
+  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${welcome ? SMS_WELCOME_DISCLOSURE : SMS_DISCLOSURE}`
 }
 
 const sendTextDelivery = async ({ env, to, copy }) => {
   const sender = twilioSenderFields(env)
   const twilioAuth = getTwilioAuthCredentials(env)
   const normalizedTo = normalizePhoneNumber(to)
-  const body = formatSmsBody(copy.text)
+  const body = formatSmsBody(copy.text, { welcome: Boolean(copy.welcome) })
 
   const form = new URLSearchParams({
     ...sender,
@@ -5001,7 +5004,7 @@ const runCardDelivery = async (request, env, { session, record, method, destinat
       const openToken = createDeliveryOpenToken()
       let copy = buildDeliveryCopy(record, withOpenToken(shareUrl, openToken), coverUrl)
       if (method === 'text' && !(await hasReceivedCardText(env, normalizedDestination))) {
-        copy = { ...copy, text: `${SMS_WELCOME_PREFIX} ${copy.text}` }
+        copy = { ...copy, text: `${SMS_WELCOME_PREFIX} ${copy.text}`, welcome: true }
       }
       const deliveredTo =
         method === 'email'
