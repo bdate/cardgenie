@@ -10951,6 +10951,7 @@ function App() {
           ? 'Enter the recipient email address.'
           : 'Enter the recipient cellphone number.',
       )
+      focusFieldAfterRender('.delivery-recipient-field input')
       return
     }
 
