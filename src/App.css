@@ -3662,22 +3662,33 @@ textarea:focus {
 
 .sms-consent .sms-consent-links a {
   font-weight: 500;
+  white-space: nowrap;
 }
 
-.sms-consent .sms-consent-more {
-  display: inline;
-  width: auto;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--gcu-dark-teal);
-  margin-right: 0.6em;
-  font: inherit;
-  font-weight: inherit;
-  text-decoration: underline;
-  cursor: pointer;
+.sms-sender-name .field-help {
+  margin: 2px 0 0;
+}
+
+.sms-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.sms-preview .field-help {
+  margin: 0;
+}
+
+.delivery-panel .sms-preview-bubble {
+  justify-self: start;
+  max-width: 34em;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 18px 18px 18px 6px;
+  background: #ececf0;
+  color: #1f2227;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .share-link {

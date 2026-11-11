@@ -2419,13 +2419,18 @@ const twilioSenderFields = (env) => {
 }
 
 // Carrier/RCS compliance: every program text names Card Genie and carries the standard disclosures.
-const SMS_DISCLOSURE = 'Msg & data rates may apply. Msg frequency varies. Reply HELP for help, STOP to opt out.'
-
-// The first card text a number ever receives doubles as the program's welcome / opt-in confirmation,
-// which carriers require to also list customer care contact.
-const SMS_WELCOME_PREFIX = 'Welcome to Card Genie card texts!'
-const SMS_WELCOME_DISCLOSURE =
+// Kept in sync with the send-form preview in src/App.tsx (smsPreviewText).
+const SMS_DISCLOSURE =
   'Msg & data rates may apply. Msg frequency varies. Questions? support@card-genie.com. Reply HELP for help, STOP to opt out.'
+
+// The first card text a number ever receives doubles as the program's welcome / opt-in confirmation.
+const SMS_WELCOME_PREFIX = 'Welcome to Card Genie card texts!'
+
+// Carriers require text recipients to see who sent the card; the card's signature name is that sender.
+const textSenderName = (record) => {
+  const name = String(record?.signature || record?.details?.senderName || '').trim()
+  return /^your name$/i.test(name) ? '' : name
+}
 
 const hasReceivedCardText = async (env, phoneE164) => {
   if (!env.ACCOUNT_DB || !phoneE164) return false
@@ -2444,17 +2449,17 @@ const hasReceivedCardText = async (env, phoneE164) => {
   }
 }
 
-const formatSmsBody = (text, { welcome = false } = {}) => {
+const formatSmsBody = (text) => {
   const body = String(text || '').trim()
   const branded = /card genie/i.test(body) ? body : `Card Genie: ${body}`
-  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${welcome ? SMS_WELCOME_DISCLOSURE : SMS_DISCLOSURE}`
+  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${SMS_DISCLOSURE}`
 }
 
 const sendTextDelivery = async ({ env, to, copy }) => {
   const sender = twilioSenderFields(env)
   const twilioAuth = getTwilioAuthCredentials(env)
   const normalizedTo = normalizePhoneNumber(to)
-  const body = formatSmsBody(copy.text, { welcome: Boolean(copy.welcome) })
+  const body = formatSmsBody(copy.text)
 
   const form = new URLSearchParams({
     ...sender,
@@ -4981,6 +4986,10 @@ const handleDeliverCard = async (request, env) => {
     )
   }
 
+  if (method === 'text' && !textSenderName(record)) {
+    return jsonResponse(request, env, { error: 'Add your name so they know who sent the card.' }, 400)
+  }
+
   const plannedCost = getSendCreditCost(new Set(destinationList.map((entry) => String(entry).trim().toLowerCase())).size)
   const startingBalance = await readSessionCreditBalance(env, session)
   if (startingBalance < plannedCost) {
@@ -5083,7 +5092,7 @@ const runCardDelivery = async (request, env, { session, record, method, destinat
       const openToken = createDeliveryOpenToken()
       let copy = buildDeliveryCopy(record, withOpenToken(shareUrl, openToken), coverUrl)
       if (method === 'text' && !(await hasReceivedCardText(env, normalizedDestination))) {
-        copy = { ...copy, text: `${SMS_WELCOME_PREFIX} ${copy.text}`, welcome: true }
+        copy = { ...copy, text: `${SMS_WELCOME_PREFIX} ${copy.text}` }
       }
       const deliveredTo =
         method === 'email'
@@ -5292,6 +5301,9 @@ const handleCreateScheduledSend = async (request, env) => {
     }
     if (method === 'text' && recipientConsentConfirmed !== true) {
       return jsonResponse(request, env, { error: 'Check the box to send this card by text.' }, 400)
+    }
+    if (method === 'text' && !textSenderName(record)) {
+      return jsonResponse(request, env, { error: 'Add your name so they know who sent the card.' }, 400)
     }
     const destinations = []
     for (const raw of rawList) {

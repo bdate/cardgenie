@@ -106,7 +106,7 @@
       </header>
       <div class="card">
         <h1>SMS Opt-In for Card Genie</h1>
-        <p>Last updated: November 2, 2026</p>
+        <p>Last updated: November 10, 2026</p>
 
         <p>
           Card Genie by Greeting Card Universe lets users create personalized digital greeting cards and choose whether
@@ -121,32 +121,35 @@
         <h2>How SMS Consent Works</h2>
         <p>
           A user starts at <a href="https://www.card-genie.com/">https://www.card-genie.com/</a>, creates a digital
-          greeting card, and then chooses a delivery method. If the user selects Text delivery, they enter the
-          recipient's cellphone number and must actively check an SMS consent checkbox before the card can be sent.
+          greeting card, and then chooses a delivery method. If the user selects Text delivery, the send form shows:
         </p>
+        <ul>
+          <li>the recipient's cellphone number field;</li>
+          <li>a required "Your name" field, so the recipient knows who sent the card;</li>
+          <li>a live preview of the exact text the recipient will receive;</li>
+          <li>an SMS authorization checkbox, unchecked by default, with all disclosures visible.</li>
+        </ul>
         <p>
-          The sender cannot consent on the recipient’s behalf. Instead, the sender confirms they have the recipient’s
-          permission for Card Genie to text them, and the recipient’s first text is a welcome / opt-in confirmation
-          with STOP and HELP instructions. The SMS consent checkbox is unchecked by default. The Send button is disabled until the checkbox is checked.
-          SMS consent is optional and is not required to create a card or use email delivery.
+          The "Send by text" button stays disabled until the checkbox is checked. Each authorization covers one card
+          notification to the numbers entered. The recipient's first text is a welcome message with STOP and HELP
+          instructions and customer care contact, and STOP is honored at any time. Texting is optional and is not
+          required to create a card or use email delivery.
         </p>
 
-        <h2>Consent Checkbox Language</h2>
+        <h2>Authorization Checkbox Language</h2>
         <div class="consent-box">
-          <input type="checkbox" aria-label="Example SMS consent checkbox" />
+          <input type="checkbox" aria-label="Example SMS authorization checkbox" />
           <span>
-            I confirm I have their permission for Card Genie to text them this card. One text per card, no marketing. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help. more<br />
-            <a href="/privacy/index.html">Privacy</a> · <a href="/terms/index.html">Terms</a>
+            I authorize Card Genie to deliver this one-time card notification on my behalf to the number provided.
+            Message frequency: 1 msg/card. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help.<br />
+            <a href="/privacy/index.html">Privacy Policy</a> · <a href="/terms/index.html">Terms of Service</a>
           </span>
         </div>
-        <p>Screenshot of the send form, showing the recipient phone number field the user fills in and the opt-in
-          checkbox (unchecked by default; "Send by text" stays disabled until it is checked):</p>
+        <p>Screenshot of the send form with Text selected, showing the recipient phone number, the sender name, the
+          message preview, and the authorization checkbox (unchecked by default; "Send by text" stays disabled until it
+          is checked):</p>
         <p>
-          <img src="/sms-opt-in/opt-in-form.png?v=4" width="480" alt="Card Genie send form with Text selected: the recipient phone number field filled in with (925) 555-0142, and the unchecked SMS consent checkbox reading: I confirm I have their permission for Card Genie to text them this card. One text per card, no marketing. Msg and data rates may apply. Reply STOP to opt out, HELP for help." style="max-width:100%;height:auto;border:1px solid #d9e8e5;border-radius:12px" />
-        </p>
-        <p>
-          Tapping "more" next to the checkbox shows: "Card Genie sends one text per card you choose to deliver by text.
-          Texting is optional and is not required to create a card or use email delivery."
+          <img src="/sms-opt-in/opt-in-form.png?v=5" width="480" alt="Card Genie send form with Text selected: recipient phone number (925) 555-0142, Your name: Nasser, a text preview reading Card Genie: Rob, open your personalized card from Nasser, followed by the link and disclosures, and the unchecked checkbox reading: I authorize Card Genie to deliver this one-time card notification on my behalf to the number provided. Message frequency: 1 msg/card. Msg and data rates may apply. Reply STOP to cancel, HELP for help." style="max-width:100%;height:auto;border:1px solid #d9e8e5;border-radius:12px" />
         </p>
 
         <h2>Program and Message Frequency</h2>
@@ -170,7 +173,8 @@
         <p>
           <code>
             Card Genie: Rob, open your personalized card from Nasser. https://api.card-genie.com/c/[card-id] Msg &amp; data
-            rates may apply. Msg frequency varies. Reply HELP for help, STOP to opt out.
+            rates may apply. Msg frequency varies. Questions? <!--email_off-->support@card-genie.com<!--/email_off-->.
+            Reply HELP for help, STOP to opt out.
           </code>
         </p>
         <p>HELP response:</p>

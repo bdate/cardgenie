@@ -3329,7 +3329,6 @@ function App() {
   const [showAllCardActivity, setShowAllCardActivity] = useState(false)
   const [showAllPrintOrders, setShowAllPrintOrders] = useState(false)
   const [expandCardActivity, setExpandCardActivity] = useState(false)
-  const [showSmsConsentDetails, setShowSmsConsentDetails] = useState(false)
   const pendingCreatedSaveRef = useRef(false)
   const replaceCreatedCardIdRef = useRef('')
   const [openingAccountCardId, setOpeningAccountCardId] = useState('')
@@ -3736,6 +3735,12 @@ function App() {
   const defaultGreeting = ''
   const insideGreeting = cardGreeting ?? defaultGreeting
   const cardSignatureLabel = cardSignature ?? senderLabel
+  const textSenderName = /^your name$/i.test(cardSignatureLabel.trim()) ? '' : cardSignatureLabel
+  // Mirrors buildDeliveryCopy + formatSmsBody in worker/index.js.
+  const smsPreviewText = `Card Genie: ${(() => {
+    const firstName = details.recipientName.trim().split(/\s+/).filter(Boolean)[0] || ''
+    return firstName ? `${firstName}, open` : 'Open'
+  })()} your personalized card from ${textSenderName.trim() || '[your name]'}. https://api.card-genie.com/c/… Msg & data rates may apply. Msg frequency varies. Questions? support@card-genie.com. Reply HELP for help, STOP to opt out.`
   const cardMessage = card?.message ?? ''
   const cardClosing = card?.closing ?? 'With love,'
   const messageParagraphs = useMemo(() => splitIntoParagraphs(cardMessage), [cardMessage])
@@ -10994,6 +10999,12 @@ function App() {
 
     setDeliveryDestinations(validatedDestinations.map((entry) => entry.display))
 
+    if (deliveryMethod === 'text' && !textSenderName.trim()) {
+      setDeliveryNotice('Add your name so they know who sent the card.')
+      focusFieldAfterRender('.sms-sender-name input')
+      return
+    }
+
     if (deliveryMethod === 'text' && !smsConsentConfirmed) {
       setDeliveryNotice('Check the box to send this card by text.')
       return
@@ -15342,44 +15353,50 @@ function App() {
                   </label>
                 )}
                 {deliveryMethod === 'text' && (
-                  <label className="sms-consent">
-                    <input
-                      type="checkbox"
-                      checked={smsConsentConfirmed}
-                      onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
-                    />
-                    <span>
-                      I confirm I have {plannedRecipientCount > 1 ? 'each recipient’s' : 'their'} permission for Card
-                      Genie to text them this card. One text per card, no marketing. Msg & data rates may apply. Reply
-                      STOP to opt out, HELP for help.{' '}
-                      <button
-                        className="sms-consent-more"
-                        type="button"
-                        aria-expanded={showSmsConsentDetails}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setShowSmsConsentDetails((current) => !current)
+                  <>
+                    <label className="sms-sender-name">
+                      Your name
+                      <input
+                        value={textSenderName}
+                        onChange={(event) => {
+                          setCardSignature(event.target.value)
+                          setDeliveryNotice('')
                         }}
-                      >
-                        {showSmsConsentDetails ? 'less' : 'more'}
-                      </button>{' '}
-                      {showSmsConsentDetails && (
-                        <>
-                          Card Genie sends one text per card you choose to deliver by text. Texting is optional and is
-                          not required to create a card or use email delivery.{' '}
-                        </>
-                      )}
-                      <span className="sms-consent-links">
-                        <a href="/privacy/index.html" target="_blank" rel="noreferrer">
-                          Privacy
-                        </a>
-                        {' · '}
-                        <a href="/terms/index.html" target="_blank" rel="noreferrer">
-                          Terms
-                        </a>
+                        autoComplete="given-name"
+                        maxLength={40}
+                        placeholder="Your first name"
+                      />
+                      <span className="field-help">Shown in the text and signed on the card.</span>
+                    </label>
+                    <div className="sms-preview">
+                      <span className="field-title">Text preview</span>
+                      <p className="sms-preview-bubble">{smsPreviewText}</p>
+                      <p className="field-help">
+                        A first text from Card Genie starts with “Welcome to Card Genie card texts!”
+                      </p>
+                    </div>
+                    <label className="sms-consent">
+                      <input
+                        type="checkbox"
+                        checked={smsConsentConfirmed}
+                        onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
+                      />
+                      <span>
+                        I authorize Card Genie to deliver this one-time card notification on my behalf to the{' '}
+                        {plannedRecipientCount > 1 ? 'numbers' : 'number'} provided. Message frequency: 1 msg/card. Msg
+                        & data rates may apply. Reply STOP to cancel, HELP for help.
+                        <span className="sms-consent-links">
+                          <a href="/privacy/index.html" target="_blank" rel="noreferrer">
+                            Privacy Policy
+                          </a>
+                          {' · '}
+                          <a href="/terms/index.html" target="_blank" rel="noreferrer">
+                            Terms of Service
+                          </a>
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                  </>
                 )}
                 <div className="send-timing">
                   <div className="mode-toggle choice-radios send-timing-toggle" role="radiogroup" aria-label="When to send">
