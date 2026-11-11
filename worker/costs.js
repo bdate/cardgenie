@@ -10,6 +10,7 @@ export const COST_UNIT_PRICES = {
   transcriptionPerMinute: 0.006,
   transcriptionPerUse: 0.003,
   smsPerSegment: 0.012,
+  verifyPerCode: 0.05,
   mmsPerMessage: 0.03,
   emailPerMessage: 0.0005,
   printedCardMaterialsAndPostage: 2,
@@ -31,6 +32,7 @@ export const USAGE_KINDS = {
   realtimeSeconds: 'realtime_seconds',
   smsCard: 'sms_card',
   smsAccount: 'sms_account',
+  verifyCode: 'verify_code',
   mms: 'mms',
   email: 'email',
 }
@@ -186,6 +188,7 @@ const priceDay = (bucket) => {
     bucket.textDeliveries,
   )
   const mmsMessages = usageOf(bucket, USAGE_KINDS.mms).events
+  const verifyCodes = usageOf(bucket, USAGE_KINDS.verifyCode).events
   const emails = Math.max(usageOf(bucket, USAGE_KINDS.email).events, bucket.emailDeliveries)
   const textCalls = Math.max(
     usageOf(bucket, USAGE_KINDS.textModel).events,
@@ -208,7 +211,10 @@ const priceDay = (bucket) => {
           : transcriptionUses * p.transcriptionPerUse),
       units: realtimeMinutes,
     },
-    texts: { cost: smsSegments * p.smsPerSegment + mmsMessages * p.mmsPerMessage, units: smsSegments },
+    texts: {
+      cost: smsSegments * p.smsPerSegment + mmsMessages * p.mmsPerMessage + verifyCodes * p.verifyPerCode,
+      units: smsSegments + verifyCodes,
+    },
     emails: { cost: emails * p.emailPerMessage, units: emails },
     printing: { cost: bucket.printOrders * p.printedCardMaterialsAndPostage, units: bucket.printOrders },
     stripe: { cost: stripeFees, units: bucket.payments.length },

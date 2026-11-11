@@ -3268,6 +3268,60 @@ const sendAccountSms = async ({ env, to, body }) => {
   await recordUsage(env, USAGE_KINDS.smsAccount, { units: smsSegmentCount(body) })
 }
 
+// Sign-in codes go through Twilio Verify when a Verify service exists, so they never depend on our 10DLC number.
+const TWILIO_VERIFY_SID_KEY = 'twilio:verify-service-sid'
+
+const getVerifyServiceSid = async (env) =>
+  String(env.TWILIO_VERIFY_SERVICE_SID || (env.CARD_STORE ? await env.CARD_STORE.get(TWILIO_VERIFY_SID_KEY) : '') || '').trim()
+
+const twilioVerifyRequest = async (env, path, params) => {
+  const twilioAuth = getTwilioAuthCredentials(env)
+  const response = await fetch(`https://verify.twilio.com/v2/${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${twilioAuth.username}:${twilioAuth.password}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(params),
+  })
+  const data = await response.json().catch(() => ({}))
+  return { ok: response.ok, status: response.status, data }
+}
+
+const startVerifyCode = async (env, serviceSid, to) => {
+  const result = await twilioVerifyRequest(env, `Services/${serviceSid}/Verifications`, { To: to, Channel: 'sms' })
+  if (!result.ok) {
+    throw new Error(`Twilio could not send the sign-in code. ${result.data?.message || result.status}`)
+  }
+}
+
+// Twilio answers 404 once a verification has expired, been approved, or run out of attempts.
+const checkVerifyCode = async (env, serviceSid, to, code) => {
+  const result = await twilioVerifyRequest(env, `Services/${serviceSid}/VerificationCheck`, { To: to, Code: code })
+  if (result.ok) {
+    if (result.data?.status !== 'approved') return 'wrong'
+    await recordUsage(env, USAGE_KINDS.verifyCode)
+    return 'approved'
+  }
+  if (result.status === 404) return 'expired'
+  throw new Error('We could not check that code. Please try again.')
+}
+
+const handleAdminSetupVerify = async (request, env) => {
+  const denied = await requireDeployOrAdminSecret(request, env)
+  if (denied) return denied
+  const existing = await getVerifyServiceSid(env)
+  if (existing) {
+    return jsonResponse(request, env, { ok: true, created: false, serviceSid: existing })
+  }
+  const result = await twilioVerifyRequest(env, 'Services', { FriendlyName: 'Card Genie', CodeLength: '6' })
+  if (!result.ok || !result.data?.sid) {
+    return jsonResponse(request, env, { error: result.data?.message || 'Twilio did not create the Verify service.' }, 502)
+  }
+  await env.CARD_STORE.put(TWILIO_VERIFY_SID_KEY, result.data.sid)
+  return jsonResponse(request, env, { ok: true, created: true, serviceSid: result.data.sid })
+}
+
 const readAccountToken = (request) => {
   const header = request.headers.get('Authorization') || ''
   const match = header.match(/^Bearer\s+(.+)$/i)
@@ -3331,6 +3385,17 @@ const handleStartAccountOtp = async (request, env) => {
       return jsonResponse(request, env, { ok: true, phoneE164, message: 'We texted you a 6-digit code.' })
     }
 
+    const verifyServiceSid = await getVerifyServiceSid(env)
+    if (verifyServiceSid) {
+      await startVerifyCode(env, verifyServiceSid, phoneE164)
+      await env.CARD_STORE.put(
+        `otp:${phoneE164}`,
+        JSON.stringify({ verifyServiceSid, attempts: 0, sentAt: Date.now() }),
+        { expirationTtl: otpTtlSeconds },
+      )
+      return jsonResponse(request, env, { ok: true, phoneE164, message: 'We texted you a 6-digit code.' })
+    }
+
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
     await env.CARD_STORE.put(
       `otp:${phoneE164}`,
@@ -3381,7 +3446,21 @@ const handleVerifyAccountOtp = async (request, env) => {
       return jsonResponse(request, env, { error: 'Too many tries. Request a new code.' }, 400)
     }
 
-    if ((await hashSecret(cleanCode)) !== challenge.codeHash) {
+    if (challenge.verifyServiceSid) {
+      const outcome = await checkVerifyCode(env, challenge.verifyServiceSid, phoneE164, cleanCode)
+      if (outcome === 'expired') {
+        await env.CARD_STORE.delete(`otp:${phoneE164}`)
+        return jsonResponse(request, env, { error: 'That code expired. Request a new one.' }, 400)
+      }
+      if (outcome !== 'approved') {
+        await env.CARD_STORE.put(
+          `otp:${phoneE164}`,
+          JSON.stringify({ ...challenge, attempts: (challenge.attempts || 0) + 1 }),
+          { expirationTtl: otpTtlSeconds },
+        )
+        return jsonResponse(request, env, { error: 'That code does not match. Try again.' }, 400)
+      }
+    } else if ((await hashSecret(cleanCode)) !== challenge.codeHash) {
       await env.CARD_STORE.put(
         `otp:${phoneE164}`,
         JSON.stringify({ ...challenge, attempts: (challenge.attempts || 0) + 1 }),
@@ -8382,6 +8461,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'POST' && url.pathname === '/api/admin/deploy-summary') {
     return handleAdminDeploySummary(request, env)
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/admin/twilio-verify-setup') {
+    return handleAdminSetupVerify(request, env)
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/resend-card-email') {
