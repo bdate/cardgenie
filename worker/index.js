@@ -2407,9 +2407,10 @@ const normalizeEmailAddress = (email = '') => {
 }
 
 // A Messaging Service holds the branded RCS sender plus the SMS number Twilio falls back to.
-const twilioSenderFields = (env) => {
+// GCU texts pass plainSms so they always come from the number and never show the Card Genie RCS sender.
+const twilioSenderFields = (env, { plainSms = false } = {}) => {
   const messagingServiceSid = String(env.TWILIO_MESSAGING_SERVICE_SID || '').trim()
-  if (messagingServiceSid) {
+  if (messagingServiceSid && !(plainSms && env.TWILIO_FROM_NUMBER)) {
     return { MessagingServiceSid: messagingServiceSid }
   }
   if (!env.TWILIO_FROM_NUMBER) {
@@ -2418,10 +2419,14 @@ const twilioSenderFields = (env) => {
   return { From: env.TWILIO_FROM_NUMBER }
 }
 
-// Carrier/RCS compliance: every program text names Card Genie and carries the standard disclosures.
-// Kept in sync with the send-form preview in src/App.tsx (smsPreviewText).
-const SMS_DISCLOSURE =
-  'Msg & data rates may apply. Msg frequency varies. Questions? support@card-genie.com. Reply HELP for help, STOP to opt out.'
+// Carrier/RCS compliance: every program text names its brand and carries the standard disclosures.
+// The Card Genie wording is kept in sync with the send-form preview in src/App.tsx (smsPreviewText).
+const SMS_BRANDS = {
+  cardGenie: { name: 'Card Genie', contact: 'Questions? support@card-genie.com.' },
+  gcu: { name: 'Greeting Card Universe', contact: 'Questions? Call 877-347-6784.' },
+}
+const smsDisclosure = (brand) =>
+  `Msg & data rates may apply. Msg frequency varies. ${brand.contact} Reply HELP for help, STOP to opt out.`
 
 // The first card text a number ever receives doubles as the program's welcome / opt-in confirmation.
 const SMS_WELCOME_PREFIX = 'Welcome to Card Genie card texts!'
@@ -2449,17 +2454,18 @@ const hasReceivedCardText = async (env, phoneE164) => {
   }
 }
 
-const formatSmsBody = (text) => {
+const formatSmsBody = (text, brand = SMS_BRANDS.cardGenie) => {
   const body = String(text || '').trim()
-  const branded = /card genie/i.test(body) ? body : `Card Genie: ${body}`
-  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${SMS_DISCLOSURE}`
+  const branded = body.toLowerCase().includes(brand.name.toLowerCase()) ? body : `${brand.name}: ${body}`
+  return `${branded}${branded.includes('\n') ? '\n\n' : ' '}${smsDisclosure(brand)}`
 }
 
 const sendTextDelivery = async ({ env, to, copy }) => {
-  const sender = twilioSenderFields(env)
+  const isGcu = copy.smsBrand === 'gcu'
+  const sender = twilioSenderFields(env, { plainSms: isGcu })
   const twilioAuth = getTwilioAuthCredentials(env)
   const normalizedTo = normalizePhoneNumber(to)
-  const body = formatSmsBody(copy.text)
+  const body = formatSmsBody(copy.text, isGcu ? SMS_BRANDS.gcu : SMS_BRANDS.cardGenie)
 
   const form = new URLSearchParams({
     ...sender,
@@ -3293,8 +3299,13 @@ const twilioVerifyRequest = async (env, path, params) => {
   return { ok: response.ok, status: response.status, data }
 }
 
-const startVerifyCode = async (env, serviceSid, to) => {
-  const result = await twilioVerifyRequest(env, `Services/${serviceSid}/Verifications`, { To: to, Channel: 'sms' })
+const startVerifyCode = async (env, serviceSid, to, brandName) => {
+  const send = (params) => twilioVerifyRequest(env, `Services/${serviceSid}/Verifications`, { To: to, Channel: 'sms', ...params })
+  let result = await send(brandName ? { CustomFriendlyName: brandName } : {})
+  if (!result.ok && brandName && result.status === 400) {
+    console.error('Verify rejected the custom name; sending the standard code text.', result.data?.message)
+    result = await send({})
+  }
   if (!result.ok) {
     throw new Error(`Twilio could not send the sign-in code. ${result.data?.message || result.status}`)
   }
@@ -3366,8 +3377,9 @@ const retireTestLoginAccount = async (env) => {
 
 const handleStartAccountOtp = async (request, env) => {
   try {
-    const { phone } = (await readJson(request)) || {}
+    const { phone, source } = (await readJson(request)) || {}
     const phoneE164 = normalizePhoneNumber(phone)
+    const brandName = source === 'gcu' ? SMS_BRANDS.gcu.name : ''
 
     if (!env.CARD_STORE) {
       return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
@@ -3392,7 +3404,7 @@ const handleStartAccountOtp = async (request, env) => {
 
     const verifyServiceSid = await getVerifyServiceSid(env)
     if (verifyServiceSid) {
-      await startVerifyCode(env, verifyServiceSid, phoneE164)
+      await startVerifyCode(env, verifyServiceSid, phoneE164, brandName)
       await env.CARD_STORE.put(
         `otp:${phoneE164}`,
         JSON.stringify({ verifyServiceSid, attempts: 0, sentAt: Date.now() }),
@@ -3414,7 +3426,7 @@ const handleStartAccountOtp = async (request, env) => {
     await sendAccountSms({
       env,
       to: phoneE164,
-      body: `Your Card Genie code is ${code}. It expires in 10 minutes.`,
+      body: `Your ${brandName || 'Card Genie'} code is ${code}. It expires in 10 minutes.`,
     })
 
     return jsonResponse(request, env, {

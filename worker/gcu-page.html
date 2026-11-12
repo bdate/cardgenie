@@ -2081,7 +2081,7 @@ function showSendForm() {
     if (phoneDigits(form.phone).length !== 10) return notice("Enter your 10-digit mobile number, like (925) 555-1234.");
     form.busy = "start"; renderAccount(); notice("");
     try {
-      const { res, data } = await postJson("/api/auth/otp/start", { phone: form.phone });
+      const { res, data } = await postJson("/api/auth/otp/start", { phone: form.phone, source: "gcu" });
       if (!res.ok) throw new Error(data.error || "Couldn’t send a code. Try again.");
       form.codeSent = true; notice(data.message || "We texted you a 6-digit code.", true);
     } catch (err) { notice(err.message); }

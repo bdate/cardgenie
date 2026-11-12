@@ -560,6 +560,7 @@ const giftCopy = ({ fromName, toName, shareUrl, imageUrl, title, escapeHtml }) =
   const openLine = toFirst ? `${toFirst}, open the card ${fromName} sent you.` : `Open the card ${fromName} sent you.`
   return {
     fromName: 'Greeting Card Universe',
+    smsBrand: 'gcu',
     subject: `${fromName} sent you a card`,
     text: `${openLine} ${shareUrl}`,
     html: `
