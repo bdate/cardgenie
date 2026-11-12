@@ -3282,8 +3282,16 @@ const sendAccountSms = async ({ env, to, body }) => {
 // Sign-in codes go through Twilio Verify when a Verify service exists, so they never depend on our 10DLC number.
 const TWILIO_VERIFY_SID_KEY = 'twilio:verify-service-sid'
 
-const getVerifyServiceSid = async (env) =>
-  String(env.TWILIO_VERIFY_SERVICE_SID || (env.CARD_STORE ? await env.CARD_STORE.get(TWILIO_VERIFY_SID_KEY) : '') || '').trim()
+// GCU sign-ins use their own Verify service so the code text says Greeting Card Universe
+// (Twilio does not allow a custom name per code on this account).
+const VERIFY_SERVICE_NAMES = { cardGenie: 'Card Genie', gcu: 'Greeting Card Universe' }
+const verifySidKey = (brand) => (brand === 'gcu' ? `${TWILIO_VERIFY_SID_KEY}:gcu` : TWILIO_VERIFY_SID_KEY)
+
+const getVerifyServiceSid = async (env, brand = 'cardGenie') => {
+  const main = String(env.TWILIO_VERIFY_SERVICE_SID || (env.CARD_STORE ? await env.CARD_STORE.get(TWILIO_VERIFY_SID_KEY) : '') || '').trim()
+  if (brand !== 'gcu' || !env.CARD_STORE) return main
+  return String((await env.CARD_STORE.get(verifySidKey('gcu'))) || main).trim()
+}
 
 const twilioVerifyRequest = async (env, path, params) => {
   const twilioAuth = getTwilioAuthCredentials(env)
@@ -3299,15 +3307,11 @@ const twilioVerifyRequest = async (env, path, params) => {
   return { ok: response.ok, status: response.status, data }
 }
 
-const startVerifyCode = async (env, serviceSid, to, brandName) => {
-  const send = (params) => twilioVerifyRequest(env, `Services/${serviceSid}/Verifications`, { To: to, Channel: 'sms', ...params })
-  let result = await send(brandName ? { CustomFriendlyName: brandName } : {})
-  if (!result.ok && brandName && result.status === 400) {
-    console.error('Verify rejected the custom name; sending the standard code text.', result.data?.message)
-    result = await send({})
-  }
+const startVerifyCode = async (env, serviceSid, to) => {
+  const result = await twilioVerifyRequest(env, `Services/${serviceSid}/Verifications`, { To: to, Channel: 'sms' })
   if (!result.ok) {
-    throw new Error(`Twilio could not send the sign-in code. ${result.data?.message || result.status}`)
+    console.error('Twilio Verify could not send the sign-in code.', result.status, result.data?.message)
+    throw new Error('We couldn’t text you a code right now. Please try again in a minute.')
   }
 }
 
@@ -3326,15 +3330,16 @@ const checkVerifyCode = async (env, serviceSid, to, code) => {
 const handleAdminSetupVerify = async (request, env) => {
   const denied = await requireDeployOrAdminSecret(request, env)
   if (denied) return denied
-  const existing = await getVerifyServiceSid(env)
+  const brand = new URL(request.url).searchParams.get('brand') === 'gcu' ? 'gcu' : 'cardGenie'
+  const existing = await env.CARD_STORE.get(verifySidKey(brand))
   if (existing) {
     return jsonResponse(request, env, { ok: true, created: false, serviceSid: existing })
   }
-  const result = await twilioVerifyRequest(env, 'Services', { FriendlyName: 'Card Genie', CodeLength: '6' })
+  const result = await twilioVerifyRequest(env, 'Services', { FriendlyName: VERIFY_SERVICE_NAMES[brand], CodeLength: '6' })
   if (!result.ok || !result.data?.sid) {
     return jsonResponse(request, env, { error: result.data?.message || 'Twilio did not create the Verify service.' }, 502)
   }
-  await env.CARD_STORE.put(TWILIO_VERIFY_SID_KEY, result.data.sid)
+  await env.CARD_STORE.put(verifySidKey(brand), result.data.sid)
   return jsonResponse(request, env, { ok: true, created: true, serviceSid: result.data.sid })
 }
 
@@ -3402,9 +3407,9 @@ const handleStartAccountOtp = async (request, env) => {
       return jsonResponse(request, env, { ok: true, phoneE164, message: 'We texted you a 6-digit code.' })
     }
 
-    const verifyServiceSid = await getVerifyServiceSid(env)
+    const verifyServiceSid = await getVerifyServiceSid(env, source === 'gcu' ? 'gcu' : 'cardGenie')
     if (verifyServiceSid) {
-      await startVerifyCode(env, verifyServiceSid, phoneE164, brandName)
+      await startVerifyCode(env, verifyServiceSid, phoneE164)
       await env.CARD_STORE.put(
         `otp:${phoneE164}`,
         JSON.stringify({ verifyServiceSid, attempts: 0, sentAt: Date.now() }),
