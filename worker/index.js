@@ -1306,6 +1306,9 @@ const saveCardRecord = async (
   record,
   { coverThumbDataUrl, revisionSource = 'save', refinement = '', replaceThumb = false } = {},
 ) => {
+  if (!isCardId(record?.id)) {
+    throw new Error('Invalid card id.')
+  }
   if (env.CARD_STORE) {
     await env.CARD_STORE.put(record.id, JSON.stringify(record), { expirationTtl: cardRecordTtlSeconds(record) })
   } else {
@@ -1374,7 +1377,14 @@ const updateCardCoverImage = async (
   return next
 }
 
+// Cards share CARD_STORE with sessions, sign-in codes and account records, so only card-shaped
+// ids (crypto.randomUUID) may be read or written through the card routes.
+const isCardId = (value) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
 const getCardRecord = async (env, cardId) => {
+  if (!isCardId(cardId)) {
+    return null
+  }
   if (env.CARD_STORE) {
     const record = await env.CARD_STORE.get(cardId, 'json')
     return record || null
