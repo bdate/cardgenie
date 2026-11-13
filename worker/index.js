@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import Stripe from 'stripe'
 import { migrateAssetsToR2 } from './assets.js'
 import { currentQuarter, getArtistPayouts, handleGcuRequest, matchGcuPath } from './gcu.js'
+import { addHit, checkRateLimits, cleanupRateLimits, countHit, nowSeconds, peekCount } from './rate-limits.js'
 import {
   accountDbReady,
   applyCreditChange,
@@ -33,6 +34,7 @@ import {
   claimDueScheduledSends,
   finishScheduledSend,
   recordThankYou,
+  clearThankYou,
   createPrintOrder,
   getPrintOrder,
   getShopperById,
@@ -2346,6 +2348,14 @@ const getTwilioAuthCredentials = (env) => {
   throw new Error('Text delivery is not configured. Add TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.')
 }
 
+// +1 also covers Caribbean countries, which are common targets for SMS-pumping fraud.
+const NANP_CARIBBEAN_AREA_CODES = new Set([
+  '242', '246', '264', '268', '284', '345', '441', '473', '649', '658', '664', '721',
+  '758', '767', '784', '809', '829', '849', '868', '869', '876',
+])
+const isUsOrCanadaNumber = (phoneE164) =>
+  /^\+1\d{10}$/.test(phoneE164 || '') && !NANP_CARIBBEAN_AREA_CODES.has(phoneE164.slice(2, 5))
+
 const normalizePhoneNumber = (phoneNumber) => {
   const trimmed = phoneNumber?.trim() || ''
 
@@ -3071,20 +3081,19 @@ const handleSendThankYou = async (request, env, cardId) => {
     message,
   })
 
+  const method = sender.phoneE164 ? 'text' : sender.email ? 'email' : ''
+  if (!method) {
+    return jsonResponse(request, env, { error: 'The sender has no contact method on file.' }, 400)
+  }
+
+  const thankYouLimited = await checkRateLimits(env, `thank-you:${clientIp(request)}`, THANK_YOU_LIMITS)
+  if (thankYouLimited) {
+    return rateLimitedResponse(request, env, thankYouLimited)
+  }
+
   try {
-    let method = 'text'
-    let destination = sender.phoneE164
-
-    if (sender.phoneE164) {
-      destination = await sendTextDelivery({ env, to: sender.phoneE164, copy })
-      method = 'text'
-    } else if (sender.email) {
-      destination = await sendEmailDelivery({ env, to: normalizeEmailAddress(sender.email), copy })
-      method = 'email'
-    } else {
-      return jsonResponse(request, env, { error: 'The sender has no contact method on file.' }, 400)
-    }
-
+    const destination = method === 'text' ? sender.phoneE164 : normalizeEmailAddress(sender.email)
+    // Claim the card's single thank-you before sending, so parallel requests can't each send one.
     await recordThankYou(env, {
       cardId,
       userId: sender.userId,
@@ -3094,6 +3103,16 @@ const handleSendThankYou = async (request, env, cardId) => {
       destination,
       recipientName,
     })
+    try {
+      if (method === 'text') {
+        await sendTextDelivery({ env, to: destination, copy })
+      } else {
+        await sendEmailDelivery({ env, to: destination, copy })
+      }
+    } catch (sendError) {
+      await clearThankYou(env, cardId).catch((clearError) => console.error('Unable to release thank-you.', clearError))
+      throw sendError
+    }
 
     return jsonResponse(request, env, {
       ok: true,
@@ -3400,9 +3419,36 @@ const handleStartAccountOtp = async (request, env) => {
       return jsonResponse(request, env, { error: 'Account storage is not configured.' }, 500)
     }
 
+    if (!isUsOrCanadaNumber(phoneE164)) {
+      return jsonResponse(request, env, { error: 'Sign-in works with US and Canadian mobile numbers.' }, 400)
+    }
+
     const existing = (await env.CARD_STORE.get(`otp:${phoneE164}`, 'json')) || null
     if (existing?.sentAt && Date.now() - existing.sentAt < 30 * 1000) {
       return jsonResponse(request, env, { error: 'Please wait a moment before requesting another code.' }, 429)
+    }
+
+    // The fictional test number never sends a text, so only real numbers count toward these limits.
+    if (phoneE164 !== TEST_LOGIN_PHONE) {
+      const ipLimited = await checkRateLimits(env, `otp-ip:${clientIp(request)}`, OTP_IP_LIMITS)
+      const phoneLimited = ipLimited ? null : await checkRateLimits(env, `otp-phone:${phoneE164}`, OTP_PHONE_LIMITS)
+      if (ipLimited || phoneLimited) {
+        return rateLimitedResponse(
+          request,
+          env,
+          ipLimited || phoneLimited,
+          'You’ve asked for several codes in a short time. Please wait a little while, then try again.',
+        )
+      }
+      const volume = await trackDailyVolume(env, 'otp')
+      if (volume.paused) {
+        return jsonResponse(
+          request,
+          env,
+          { error: 'We can’t send sign-in codes right now. Please try again later, or email support@card-genie.com.', code: 'busy' },
+          503,
+        )
+      }
     }
 
     if (phoneE164 === TEST_LOGIN_PHONE) {
@@ -3469,6 +3515,17 @@ const handleVerifyAccountOtp = async (request, env) => {
       return jsonResponse(request, env, { error: 'Enter the 6-digit code from the text message.' }, 400)
     }
 
+    // Wrong tries are also counted per phone per day, since requesting a new code resets the per-code count.
+    const failedKey = `otp-fail:${phoneE164}`
+    if ((await peekCount(env, failedKey, DAY)) >= OTP_FAILED_TRIES_PER_DAY) {
+      return jsonResponse(
+        request,
+        env,
+        { error: 'Too many wrong codes today. Please try again tomorrow, or email support@card-genie.com.', code: 'rate_limited' },
+        429,
+      )
+    }
+
     const challenge = await env.CARD_STORE.get(`otp:${phoneE164}`, 'json')
     if (!challenge) {
       return jsonResponse(request, env, { error: 'That code expired. Request a new one.' }, 400)
@@ -3485,6 +3542,7 @@ const handleVerifyAccountOtp = async (request, env) => {
         return jsonResponse(request, env, { error: 'That code expired. Request a new one.' }, 400)
       }
       if (outcome !== 'approved') {
+        await addHit(env, failedKey, DAY)
         await env.CARD_STORE.put(
           `otp:${phoneE164}`,
           JSON.stringify({ ...challenge, attempts: (challenge.attempts || 0) + 1 }),
@@ -3493,6 +3551,7 @@ const handleVerifyAccountOtp = async (request, env) => {
         return jsonResponse(request, env, { error: 'That code does not match. Try again.' }, 400)
       }
     } else if ((await hashSecret(cleanCode)) !== challenge.codeHash) {
+      await addHit(env, failedKey, DAY)
       await env.CARD_STORE.put(
         `otp:${phoneE164}`,
         JSON.stringify({ ...challenge, attempts: (challenge.attempts || 0) + 1 }),
@@ -3586,11 +3645,115 @@ const notEnoughCreditsResponse = (request, env, { cost, balance, action }) =>
     402,
   )
 
+// Per-visitor limits for routes that cost money. Signed-in shoppers are counted by account, others by IP,
+// so shared networks (offices, mobile carriers) only matter for signed-out visitors.
+const MINUTE = 60
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+const GENERATE_LIMITS = {
+  signedIn: [{ max: 6, seconds: MINUTE }, { max: 100, seconds: DAY }],
+  anon: [{ max: 6, seconds: MINUTE }, { max: 40, seconds: DAY }],
+}
+const REVISION_BURST_LIMITS = [{ max: 6, seconds: MINUTE }]
+const ANON_REVISION_DAILY_LIMITS = [{ max: 5, seconds: DAY }]
+const REALTIME_LIMITS = [{ max: 3, seconds: 10 * MINUTE }, { max: 15, seconds: DAY }]
+const INTERVIEW_LIMITS = [{ max: 40, seconds: 10 * MINUTE }, { max: 300, seconds: DAY }]
+const SEND_RATE_LIMITS = [{ max: 20, seconds: HOUR }, { max: 100, seconds: DAY }]
+const OTP_IP_LIMITS = [{ max: 5, seconds: HOUR }, { max: 20, seconds: DAY }]
+const OTP_PHONE_LIMITS = [{ max: 3, seconds: HOUR }, { max: 8, seconds: DAY }]
+const OTP_FAILED_TRIES_PER_DAY = 10
+const THANK_YOU_LIMITS = [{ max: 5, seconds: HOUR }]
+const TESTIMONIAL_LIMITS = [{ max: 5, seconds: HOUR }, { max: 20, seconds: DAY }]
+// Normal days: under ~20 covers and ~15 sign-in codes in total.
+const DAILY_VOLUME_ALERTS = {
+  generate: { label: 'card covers created', alertAt: 100, pauseAt: 300 },
+  otp: { label: 'sign-in codes requested', alertAt: 50, pauseAt: 200 },
+}
+const SAFETY_ALERT_EMAIL = 'cardgenie@gcuniverse.com'
+const ANON_REVISION_LIMIT_MESSAGE =
+  'You’ve used today’s free changes. Confirm your mobile number to keep editing. It only takes a moment.'
+
+const clientIp = (request) => request.headers.get('CF-Connecting-IP') || 'unknown'
+const visitorKey = (request, session) => (session?.userId ? `u:${session.userId}` : `ip:${clientIp(request)}`)
+
+const rateLimitedResponse = (request, env, limit, message) =>
+  jsonResponse(
+    request,
+    env,
+    {
+      error:
+        message ||
+        (limit?.seconds >= DAY
+          ? 'You’ve reached today’s limit for this. Please try again tomorrow.'
+          : 'You’re going a little fast. Please wait a minute and try again.'),
+      code: 'rate_limited',
+      retryAfter: limit?.retryAfter,
+    },
+    429,
+  )
+
+const checkRevisionLimits = async (env, request, session) => {
+  const key = visitorKey(request, session)
+  const burst = await checkRateLimits(env, `revise:${key}`, REVISION_BURST_LIMITS)
+  if (burst) return rateLimitedResponse(request, env, burst)
+  if (!session) {
+    const daily = await checkRateLimits(env, `revise-free:${key}`, ANON_REVISION_DAILY_LIMITS)
+    if (daily) return rateLimitedResponse(request, env, daily, ANON_REVISION_LIMIT_MESSAGE)
+  }
+  return null
+}
+
+const sendSafetyAlert = async (env, { label, count, paused }) => {
+  const day = pacificNow().day
+  const text = paused
+    ? `Card Genie has had ${count} ${label} today (${day}, Pacific). That is far above normal, so it is now paused for people who are not signed in until midnight Pacific. Signed-in shoppers are not affected.\n\nCheck Admin > Costs and Cloudflare for unusual traffic.`
+    : `Card Genie has had ${count} ${label} today (${day}, Pacific). That is well above a normal day, so this is an early warning. Nothing has been paused.\n\nCheck Admin > Costs and Cloudflare for unusual traffic.`
+  try {
+    await sendEmailDelivery({
+      env,
+      to: SAFETY_ALERT_EMAIL,
+      copy: {
+        subject: `Card Genie alert: ${count} ${label} today${paused ? ' (paused for signed-out visitors)' : ''}`,
+        text,
+        html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#2d4b48;">${escapeHtml(text).replace(/\n/g, '<br />')}</div>`,
+        fromName: 'Card Genie',
+      },
+    })
+  } catch (error) {
+    console.error('Safety alert email failed.', error)
+  }
+}
+
+/** Counts today's (Pacific) volume for a paid action and emails an alert at the warning and pause levels. */
+const trackDailyVolume = async (env, name) => {
+  const settings = DAILY_VOLUME_ALERTS[name]
+  try {
+    const count = await countHit(env, `global:${name}:${pacificNow().day}`, nowSeconds() + 2 * DAY)
+    if (count === settings.alertAt || count === settings.pauseAt) {
+      await sendSafetyAlert(env, { label: settings.label, count, paused: count === settings.pauseAt })
+    }
+    return { count, paused: count >= settings.pauseAt }
+  } catch (error) {
+    console.error('Daily volume tracking failed.', error)
+    return { count: 0, paused: false }
+  }
+}
+
+/** Returns the new balance, or null when the balance doesn't cover the cost (nothing is charged). */
 const spendSessionCredits = (env, session, cost, reason) =>
   applyCreditChange(env, {
     userId: session.userId,
     phoneE164: session.phoneE164,
     delta: -Math.max(0, Math.floor(cost)),
+    reason,
+    kind: 'adjustment',
+  })
+
+const refundSessionCredits = (env, session, credits, reason) =>
+  applyCreditChange(env, {
+    userId: session.userId,
+    phoneE164: session.phoneE164,
+    delta: Math.max(0, Math.floor(credits)),
     reason,
     kind: 'adjustment',
   })
@@ -4869,6 +5032,11 @@ const handleCreateTestimonial = async (request, env) => {
     return jsonResponse(request, env, { error: 'Feedback storage is not available right now.' }, 503)
   }
 
+  const reviewLimited = await checkRateLimits(env, `testimonial:${clientIp(request)}`, TESTIMONIAL_LIMITS)
+  if (reviewLimited) {
+    return rateLimitedResponse(request, env, reviewLimited)
+  }
+
   try {
     const body = (await readJson(request)) || {}
     const name = String(body.name || '')
@@ -5017,25 +5185,44 @@ const handleDeliverCard = async (request, env) => {
     return jsonResponse(request, env, { error: 'Add your name so they know who sent the card.' }, 400)
   }
 
-  const plannedCost = getSendCreditCost(new Set(destinationList.map((entry) => String(entry).trim().toLowerCase())).size)
-  const startingBalance = await readSessionCreditBalance(env, session)
-  if (startingBalance < plannedCost) {
-    return notEnoughCreditsResponse(request, env, { cost: plannedCost, balance: startingBalance, action: 'send this card' })
+  const sendLimit = await checkRateLimits(env, `send:u:${session.userId}`, SEND_RATE_LIMITS)
+  if (sendLimit) {
+    return rateLimitedResponse(request, env, sendLimit, 'You’ve sent a lot of cards in a short time. Please try again a little later.')
   }
 
-  const { results, senderCopyDeliveredTo, shareUrl } = await runCardDelivery(request, env, {
-    session,
-    record,
-    method,
-    destinationList,
-    senderCopyEmail,
-    recipientPhotos: pendingRecipientPhotos,
-  })
+  // Credits are taken before anything is sent and the unused part is refunded, so parallel
+  // requests can't send more than the balance covers.
+  const plannedCost = getSendCreditCost(new Set(destinationList.map((entry) => String(entry).trim().toLowerCase())).size)
+  const chargedBalance = plannedCost ? await spendSessionCredits(env, session, plannedCost, 'card_send') : null
+  if (plannedCost && chargedBalance === null) {
+    const balance = await readSessionCreditBalance(env, session)
+    return notEnoughCreditsResponse(request, env, { cost: plannedCost, balance, action: 'send this card' })
+  }
+  const refundUnused = (usedCost) =>
+    plannedCost > usedCost
+      ? refundSessionCredits(env, session, plannedCost - usedCost, 'card_send_refund')
+      : Promise.resolve(chargedBalance)
+
+  let delivery
+  try {
+    delivery = await runCardDelivery(request, env, {
+      session,
+      record,
+      method,
+      destinationList,
+      senderCopyEmail,
+      recipientPhotos: pendingRecipientPhotos,
+    })
+  } catch (error) {
+    await refundUnused(0)
+    throw error
+  }
+  const { results, senderCopyDeliveredTo, shareUrl } = delivery
 
   const sent = results.filter((entry) => entry.status === 'sent')
   const failed = results.filter((entry) => entry.status === 'failed')
   const creditCost = sent.length ? getSendCreditCost(sent.length) : 0
-  const creditBalance = creditCost ? await spendSessionCredits(env, session, creditCost, 'card_send') : startingBalance
+  const creditBalance = (await refundUnused(creditCost)) ?? chargedBalance
 
   if (!sent.length) {
     return jsonResponse(
@@ -5332,6 +5519,10 @@ const handleCreateScheduledSend = async (request, env) => {
     if (method === 'text' && !textSenderName(record)) {
       return jsonResponse(request, env, { error: 'Add your name so they know who sent the card.' }, 400)
     }
+    const scheduleLimited = await checkRateLimits(env, `send:u:${session.userId}`, SEND_RATE_LIMITS)
+    if (scheduleLimited) {
+      return rateLimitedResponse(request, env, scheduleLimited, 'You’ve sent a lot of cards in a short time. Please try again a little later.')
+    }
     const destinations = []
     for (const raw of rawList) {
       try {
@@ -5590,23 +5781,28 @@ const handleOrderPrintCard = async (request, env) => {
       ? parseDataUrlImage(insideThumbImage, 'inside thumbnail')
       : { type: inside.type || 'image/png', content: inside.content }
     const shareUrl = getShareUrl(request, env, record.id)
-    const startingBalance = await readSessionCreditBalance(env, session)
-    if (startingBalance < PRINT_CARD_CREDIT_COST) {
+    const creditBalance = await spendSessionCredits(env, session, PRINT_CARD_CREDIT_COST, 'print_card_order')
+    if (creditBalance === null) {
       return notEnoughCreditsResponse(request, env, {
         cost: PRINT_CARD_CREDIT_COST,
-        balance: startingBalance,
+        balance: await readSessionCreditBalance(env, session),
         action: 'mail a printed card',
       })
     }
-    const savedOrder = await createPrintOrder(env, {
-      userId: session.userId,
-      cardId: record.id,
-      mailFrom,
-      shipTo,
-      shopperEmail,
-      creditCost: PRINT_CARD_CREDIT_COST,
-    })
-    const creditBalance = await spendSessionCredits(env, session, PRINT_CARD_CREDIT_COST, 'print_card_order')
+    let savedOrder
+    try {
+      savedOrder = await createPrintOrder(env, {
+        userId: session.userId,
+        cardId: record.id,
+        mailFrom,
+        shipTo,
+        shopperEmail,
+        creditCost: PRINT_CARD_CREDIT_COST,
+      })
+    } catch (orderError) {
+      await refundSessionCredits(env, session, PRINT_CARD_CREDIT_COST, 'print_card_order_refund')
+      throw orderError
+    }
     await saveAccountEmail(env, { userId: session.userId, email: shopperEmail })
     if (!isDefaultPrintMailFrom(mailFrom)) {
       await saveAccountMailingAddress(env, { userId: session.userId, mailingAddress: mailFrom })
@@ -5765,6 +5961,30 @@ const handleGenerateCard = async (request, env, ctx) => {
     return jsonResponse(request, env, { error: missingFieldsMessage(missingFields) }, 400)
   }
 
+  const session = await getAccountSession(env, readAccountToken(request))
+  const generateLimited = await checkRateLimits(
+    env,
+    `generate:${visitorKey(request, session)}`,
+    session ? GENERATE_LIMITS.signedIn : GENERATE_LIMITS.anon,
+  )
+  if (generateLimited) {
+    return rateLimitedResponse(
+      request,
+      env,
+      generateLimited,
+      generateLimited.seconds >= DAY ? 'You’ve made a lot of cards today. Please come back tomorrow to make more.' : undefined,
+    )
+  }
+  const volume = await trackDailyVolume(env, 'generate')
+  if (volume.paused && !session) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Card Genie is very busy right now. Confirm your mobile number to keep creating, or try again later.', code: 'busy' },
+      503,
+    )
+  }
+
   let job
 
   try {
@@ -5878,11 +6098,14 @@ const handleRefineImage = async (request, env) => {
   }
 
   const session = await getAccountSession(env, readAccountToken(request))
-  if (session) {
+  const revisionLimited = await checkRevisionLimits(env, request, session)
+  if (revisionLimited) {
+    return revisionLimited
+  }
+  const chargedBalance = session ? await spendSessionCredits(env, session, COVER_REVISION_CREDIT_COST, 'cover_revise') : undefined
+  if (chargedBalance === null) {
     const balance = await readSessionCreditBalance(env, session)
-    if (balance < COVER_REVISION_CREDIT_COST) {
-      return notEnoughCreditsResponse(request, env, { cost: COVER_REVISION_CREDIT_COST, balance, action: 'change the cover' })
-    }
+    return notEnoughCreditsResponse(request, env, { cost: COVER_REVISION_CREDIT_COST, balance, action: 'change the cover' })
   }
 
   try {
@@ -5903,9 +6126,7 @@ const handleRefineImage = async (request, env) => {
           )
 
     const revisionSource = imageMode === 'new' ? 'new' : 'revise'
-    const creditBalance = session
-      ? await spendSessionCredits(env, session, COVER_REVISION_CREDIT_COST, 'cover_revise')
-      : undefined
+    const creditBalance = chargedBalance
     let responseCardId = typeof cardId === 'string' ? cardId.trim() : ''
     let revisionId = ''
 
@@ -5964,6 +6185,11 @@ const handleRefineImage = async (request, env) => {
     })
   } catch (error) {
     console.error(error)
+    if (session) {
+      await refundSessionCredits(env, session, COVER_REVISION_CREDIT_COST, 'cover_revise_refund').catch((refundError) =>
+        console.error('Cover revision refund failed.', refundError),
+      )
+    }
     return jsonResponse(
       request,
       env,
@@ -5999,11 +6225,14 @@ const handleRefineCopy = async (request, env) => {
   }
 
   const session = await getAccountSession(env, readAccountToken(request))
-  if (session) {
+  const revisionLimited = await checkRevisionLimits(env, request, session)
+  if (revisionLimited) {
+    return revisionLimited
+  }
+  const chargedBalance = session ? await spendSessionCredits(env, session, AI_COPY_CREDIT_COST, 'ai_copy') : undefined
+  if (chargedBalance === null) {
     const balance = await readSessionCreditBalance(env, session)
-    if (balance < AI_COPY_CREDIT_COST) {
-      return notEnoughCreditsResponse(request, env, { cost: AI_COPY_CREDIT_COST, balance, action: 'rewrite the message' })
-    }
+    return notEnoughCreditsResponse(request, env, { cost: AI_COPY_CREDIT_COST, balance, action: 'rewrite the message' })
   }
 
   try {
@@ -6021,7 +6250,7 @@ const handleRefineCopy = async (request, env) => {
       likenessBrief,
     )
     if (session) {
-      copy.creditBalance = await spendSessionCredits(env, session, AI_COPY_CREDIT_COST, 'ai_copy')
+      copy.creditBalance = chargedBalance
     }
 
     await recordCardHistory(env, {
@@ -6036,6 +6265,11 @@ const handleRefineCopy = async (request, env) => {
     return jsonResponse(request, env, copy)
   } catch (error) {
     console.error(error)
+    if (session) {
+      await refundSessionCredits(env, session, AI_COPY_CREDIT_COST, 'ai_copy_refund').catch((refundError) =>
+        console.error('Message rewrite refund failed.', refundError),
+      )
+    }
     return jsonResponse(
       request,
       env,
@@ -6806,10 +7040,20 @@ const parseInterviewModelJson = (text) => {
   return null
 }
 
+const limitInterviewRoute = async (request, env, name) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  const limited = await checkRateLimits(env, `${name}:${visitorKey(request, session)}`, INTERVIEW_LIMITS)
+  return limited ? rateLimitedResponse(request, env, limited) : null
+}
+
 const handleCardInterview = async (request, env) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
   if (missingKeyResponse) {
     return missingKeyResponse
+  }
+  const interviewLimited = await limitInterviewRoute(request, env, 'interview')
+  if (interviewLimited) {
+    return interviewLimited
   }
 
   const body = (await readJson(request)) || {}
@@ -6925,6 +7169,10 @@ const handleCardInterviewSpeak = async (request, env) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
   if (missingKeyResponse) {
     return missingKeyResponse
+  }
+  const speakLimited = await limitInterviewRoute(request, env, 'speak')
+  if (speakLimited) {
+    return speakLimited
   }
 
   const body = (await readJson(request)) || {}
@@ -7121,6 +7369,16 @@ const handleRealtimeSession = async (request, env) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
   if (missingKeyResponse) {
     return missingKeyResponse
+  }
+  const voiceSession = await getAccountSession(env, readAccountToken(request))
+  const voiceLimited = await checkRateLimits(env, `realtime:${visitorKey(request, voiceSession)}`, REALTIME_LIMITS)
+  if (voiceLimited) {
+    return rateLimitedResponse(
+      request,
+      env,
+      voiceLimited,
+      'Genie needs a short break from voice chats. Please type to Genie, or try voice again a little later.',
+    )
   }
 
   const body = (await readJson(request)) || {}
@@ -8258,6 +8516,10 @@ const handleCardInterviewTranscribe = async (request, env) => {
   if (missingKeyResponse) {
     return missingKeyResponse
   }
+  const transcribeLimited = await limitInterviewRoute(request, env, 'transcribe')
+  if (transcribeLimited) {
+    return transcribeLimited
+  }
 
   const body = (await readJson(request)) || {}
   const audioBase64 = String(body.audioBase64 || body.audio || '').replace(/\s+/g, '')
@@ -8805,6 +9067,7 @@ export default {
     }
     if (event?.cron === DAILY_REPORT_CRON) {
       ctx.waitUntil(maybeSendDailyReport(env).catch((error) => console.error('daily report failed', error)))
+      ctx.waitUntil(cleanupRateLimits(env))
       return
     }
     ctx.waitUntil(sendScheduledShipmentEmails(env))

@@ -708,6 +708,14 @@ export const recordThankYou = async (
   return { cardId, createdAt: now }
 }
 
+/** Releases a card's thank-you when sending it failed, so the recipient can try again. */
+export const clearThankYou = async (env, cardId) => {
+  if (!env.ACCOUNT_DB || !cardId) {
+    return
+  }
+  await env.ACCOUNT_DB.prepare('DELETE FROM thank_yous WHERE card_id = ?').bind(cardId).run()
+}
+
 export const getAccountForSession = async (env, userId) => {
   if (!env.ACCOUNT_DB || !userId) {
     return null
@@ -938,38 +946,42 @@ export const applyCreditChange = async (
     return null
   }
 
+  const isAbsolute = Number.isFinite(balance)
   const current = Number(user.credit_balance) || 0
-  const nextBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : current + Math.floor(delta || 0)
-  const creditsDelta = nextBalance - current
+  const creditsDelta = isAbsolute ? Math.max(0, Math.floor(balance)) - current : Math.floor(delta || 0)
   const now = isoNow()
   const eventKind = kind || (creditsDelta >= 0 ? 'grant' : 'adjustment')
   const paidCents = Number.isFinite(Number(amountPaidCents)) ? Math.max(0, Math.floor(Number(amountPaidCents))) : 0
   const isPurchase = eventKind === 'purchase' || reason === 'stripe_purchase' || reason === 'balance_sync'
+  const isRefund = creditsDelta > 0 && /_refund$/.test(reason || '')
   const markPurchase = isPurchase && creditsDelta > 0 ? 1 : 0
   const paidAdded = (eventKind === 'purchase' || reason === 'stripe_purchase') && creditsDelta > 0 ? creditsDelta : 0
 
-  await env.ACCOUNT_DB.batch([
-    env.ACCOUNT_DB.prepare(
-      // Free credits are used up first, so purchased credits only drop once the balance falls below them.
-      `UPDATE users
-       SET paid_credit_balance = MIN(MIN(paid_credit_balance, credit_balance) + ?, ?),
-           credit_balance = ?,
-           credits_granted = credits_granted + ?,
-           credits_purchased = credits_purchased + ?,
-           credits_spent = credits_spent + ?,
-           amount_paid_cents = amount_paid_cents + ?,
-           first_purchase_at = CASE WHEN ? = 1 THEN COALESCE(first_purchase_at, ?) ELSE first_purchase_at END,
-           last_purchase_at = CASE WHEN ? = 1 THEN ? ELSE last_purchase_at END,
-           last_used_at = ?,
-           updated_at = ?
-       WHERE id = ?`,
-    ).bind(
+  // Delta changes are applied relative to the stored balance in one statement, and a spend that would
+  // take the balance below zero changes nothing (returns null), so parallel requests can't overspend.
+  const updated = await env.ACCOUNT_DB.prepare(
+    // Free credits are used up first, so purchased credits only drop once the balance falls below them.
+    `UPDATE users
+     SET paid_credit_balance = MIN(MIN(paid_credit_balance, credit_balance) + ?, credit_balance + ?),
+         credit_balance = credit_balance + ?,
+         credits_granted = credits_granted + ?,
+         credits_purchased = credits_purchased + ?,
+         credits_spent = MAX(0, credits_spent + ?),
+         amount_paid_cents = amount_paid_cents + ?,
+         first_purchase_at = CASE WHEN ? = 1 THEN COALESCE(first_purchase_at, ?) ELSE first_purchase_at END,
+         last_purchase_at = CASE WHEN ? = 1 THEN ? ELSE last_purchase_at END,
+         last_used_at = ?,
+         updated_at = ?
+     WHERE id = ? AND (? = 1 OR ? >= 0 OR credit_balance + ? >= 0)
+     RETURNING credit_balance`,
+  )
+    .bind(
       paidAdded,
-      nextBalance,
-      nextBalance,
-      creditsDelta > 0 && !isPurchase ? creditsDelta : 0,
+      creditsDelta,
+      creditsDelta,
+      creditsDelta > 0 && !isPurchase && !isRefund ? creditsDelta : 0,
       creditsDelta > 0 && isPurchase ? creditsDelta : 0,
-      creditsDelta < 0 ? Math.abs(creditsDelta) : 0,
+      creditsDelta < 0 ? Math.abs(creditsDelta) : isRefund ? -creditsDelta : 0,
       markPurchase ? paidCents : 0,
       markPurchase,
       now,
@@ -978,23 +990,24 @@ export const applyCreditChange = async (
       now,
       now,
       userId,
-    ),
-    env.ACCOUNT_DB.prepare(
-      `INSERT INTO credit_events (
-        id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, payment_id, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?, ?)`,
-    ).bind(
-      crypto.randomUUID(),
-      userId,
-      now,
-      eventKind,
-      reason || 'adjustment',
+      isAbsolute ? 1 : 0,
       creditsDelta,
-      nextBalance,
-      paymentId || null,
-      note || '',
-    ),
-  ])
+      creditsDelta,
+    )
+    .first()
+  if (!updated) {
+    return null
+  }
+  const nextBalance = Number(updated.credit_balance) || 0
+
+  await env.ACCOUNT_DB.prepare(
+    `INSERT INTO credit_events (
+      id, user_id, created_at, kind, reason, credits_delta, balance_after, actor_type, payment_id, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?, ?)`,
+  )
+    .bind(crypto.randomUUID(), userId, now, eventKind, reason || 'adjustment', creditsDelta, nextBalance, paymentId || null, note || '')
+    .run()
+    .catch((error) => console.error('Unable to record credit event.', error))
 
   return nextBalance
 }
@@ -2288,6 +2301,10 @@ export const createScheduledSend = async (
     reason: 'card_send_scheduled',
     kind: 'adjustment',
   })
+  if (creditBalance === null) {
+    const latest = Number((await getUserById(db, userId))?.credit_balance) || 0
+    return { error: `You need ${creditCost} credits to schedule this card. You currently have ${latest}.`, code: 'credits' }
+  }
   const id = crypto.randomUUID()
   const now = isoNow()
   try {
