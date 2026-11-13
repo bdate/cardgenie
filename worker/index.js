@@ -5,6 +5,15 @@ import { migrateAssetsToR2 } from './assets.js'
 import { currentQuarter, getArtistPayouts, handleGcuRequest, matchGcuPath } from './gcu.js'
 import { addHit, checkRateLimits, cleanupRateLimits, countHit, nowSeconds, peekCount } from './rate-limits.js'
 import {
+  MAX_COVER_IMAGE_BYTES,
+  MAX_PHOTO_IMAGE_BYTES,
+  MAX_PRINT_IMAGE_BYTES,
+  MAX_THUMB_IMAGE_BYTES,
+  checkDataImage,
+  isOwnAssetUrl,
+  safeImageContentType,
+} from './image-safety.js'
+import {
   accountDbReady,
   applyCreditChange,
   createTestimonial,
@@ -686,9 +695,7 @@ const normalizeReferenceImages = (value) => {
     return []
   }
 
-  return value
-    .filter((item) => typeof item === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(item))
-    .slice(0, maxReferenceImages)
+  return value.filter((item) => checkDataImage(item, MAX_PHOTO_IMAGE_BYTES)).slice(0, maxReferenceImages)
 }
 
 const isAiChoosesImageStyle = (imageStyle = '') => {
@@ -1251,6 +1258,10 @@ const buildCardRecord = (payload) => {
     throw new Error('Missing card image or message.')
   }
 
+  if (!checkDataImage(imageUrl, MAX_COVER_IMAGE_BYTES) && !isOwnAssetUrl(imageUrl)) {
+    throw new Error('The card cover must be a JPEG, PNG or WebP image.')
+  }
+
   const existingId = typeof payload?.cardId === 'string' ? payload.cardId.trim() : ''
 
   return {
@@ -1382,6 +1393,34 @@ const updateCardCoverImage = async (
 // Cards share CARD_STORE with sessions, sign-in codes and account records, so only card-shaped
 // ids (crypto.randomUUID) may be read or written through the card routes.
 const isCardId = (value) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
+// The browser that first saves a card gets a private edit key (only its hash is stored). Changing,
+// sending or printing a card needs that key, or the signed-in owner (or an admin) session.
+const newCardEditKey = () =>
+  [...crypto.getRandomValues(new Uint8Array(24))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+const hashCardEditKey = (key) => hashSecret(`card-edit:${key}`)
+
+const canEditCard = async (env, record, { editKey, session } = {}) => {
+  if (!record) return false
+  const key = typeof editKey === 'string' ? editKey.trim() : ''
+  if (key && record.editKeyHash && (await hashCardEditKey(key)) === record.editKeyHash) return true
+  if (!session?.userId) return false
+  if (record.ownerUserId === session.userId || isAdminPhone(session.phoneE164)) return true
+  // Cards saved before edit keys existed fall back to the account history.
+  return (
+    !record.ownerUserId &&
+    !record.editKeyHash &&
+    userCanAccessCard(env, { userId: session.userId, phoneE164: session.phoneE164, cardId: record.id })
+  )
+}
+
+const cardOwnershipError = (request, env) =>
+  jsonResponse(
+    request,
+    env,
+    { error: 'Only the person who made this card can send or change it. Open it from My account, or make a new card.', code: 'not_owner' },
+    403,
+  )
 
 const getCardRecord = async (env, cardId) => {
   if (!isCardId(cardId)) {
@@ -1626,7 +1665,15 @@ const processGenerateJob = async (env, jobInput) => {
 }
 
 const getCardSummary = (record, request, env) => {
-  const { editor: _editor, coverVideoKey, coverVideoVersion, coverVideoJob: _coverVideoJob, ...publicRecord } = record
+  const {
+    editor: _editor,
+    coverVideoKey,
+    coverVideoVersion,
+    coverVideoJob: _coverVideoJob,
+    editKeyHash: _editKeyHash,
+    ownerUserId: _ownerUserId,
+    ...publicRecord
+  } = record
   return {
     ...publicRecord,
     shareUrl: getShareUrl(request, env, record.id),
@@ -2065,14 +2112,14 @@ const US_STATE_CODES = new Set([
 ])
 
 const parseDataUrlImage = (value, label) => {
-  const match = String(value || '').match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/)
-  if (!match) {
+  const image = checkDataImage(value, MAX_PRINT_IMAGE_BYTES)
+  if (!image) {
     throw new Error(`Provide a valid ${label} print image.`)
   }
 
   return {
-    type: match[1],
-    content: match[2],
+    type: image.type,
+    content: image.base64,
   }
 }
 
@@ -2745,7 +2792,7 @@ const imageUrlToFile = async (imageUrl, fileName = 'current-cover.png') => {
     return new File([base64ToUint8Array(imageBase64)], fileName, { type: mimeType })
   }
 
-  if (/^https?:\/\//.test(imageUrl || '')) {
+  if (isOwnAssetUrl(imageUrl)) {
     const response = await fetch(imageUrl)
 
     if (!response.ok) {
@@ -2848,12 +2895,19 @@ const handleSaveCard = async (request, env) => {
   try {
     const payload = await readJson(request)
     const requestedId = typeof payload?.cardId === 'string' ? payload.cardId.trim() : ''
-    const existing = requestedId ? await getCardRecord(env, requestedId) : null
+    const found = requestedId ? await getCardRecord(env, requestedId) : null
+    const session = await getAccountSession(env, readAccountToken(request))
+    const editKey = typeof payload?.editKey === 'string' ? payload.editKey.trim() : ''
+    // Someone without the card's edit key or owner session gets a new card instead of overwriting this one.
+    const existing = found && (await canEditCard(env, found, { editKey, session })) ? found : null
     const record = buildCardRecord({
       ...payload,
-      // Only reuse an id that already exists — prevents spoofing new ids.
       cardId: existing ? requestedId : '',
     })
+    const keyStillValid = Boolean(existing?.editKeyHash && editKey && (await hashCardEditKey(editKey)) === existing.editKeyHash)
+    const issuedEditKey = keyStillValid ? '' : newCardEditKey()
+    record.editKeyHash = keyStillValid ? existing.editKeyHash : await hashCardEditKey(issuedEditKey)
+    record.ownerUserId = existing?.ownerUserId || session?.userId || null
     if (existing?.createdAt) {
       record.createdAt = existing.createdAt
       record.updatedAt = new Date().toISOString()
@@ -2902,7 +2956,12 @@ const handleSaveCard = async (request, env) => {
       message: record.card.message,
     })
 
-    return jsonResponse(request, env, getCardSummary(record, request, env), existing ? 200 : 201)
+    return jsonResponse(
+      request,
+      env,
+      { ...getCardSummary(record, request, env), ...(issuedEditKey ? { editKey: issuedEditKey } : {}) },
+      existing ? 200 : 201,
+    )
   } catch (error) {
     return jsonResponse(request, env, { error: error instanceof Error ? error.message : 'Unable to save the card.' }, 400)
   }
@@ -2919,6 +2978,11 @@ const handleGetCard = async (request, env, cardId) => {
 }
 
 const handleListCardCoverRevisions = async (request, env, cardId) => {
+  const session = await getAccountSession(env, readAccountToken(request))
+  const editKey = request.headers.get('X-Card-Edit-Key') || ''
+  if (!(await canEditCard(env, await getCardRecord(env, cardId), { editKey, session }))) {
+    return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+  }
   const revisions = await listCoverRevisions(env, cardId)
   const requestOrigin = new URL(request.url).origin
   return jsonResponse(request, env, {
@@ -2943,7 +3007,7 @@ const handleGetCardCoverRevisionImage = async (request, env, cardId, revisionId)
   return new Response(image.bytes, {
     status: 200,
     headers: {
-      'Content-Type': image.contentType || meta.contentType || 'image/jpeg',
+      'Content-Type': safeImageContentType(image.bytes),
       'Cache-Control': 'private, max-age=300',
       'Access-Control-Allow-Origin': '*',
       'X-Content-Type-Options': 'nosniff',
@@ -3185,7 +3249,7 @@ const handleShareCover = async (request, env, cardId) => {
     return new Response(parsed.bytes, {
       status: 200,
       headers: {
-        'Content-Type': parsed.mimeType,
+        'Content-Type': safeImageContentType(parsed.bytes),
         // Covers change on revise; avoid shipping a stale cached original after edits.
         'Cache-Control': 'public, max-age=60, must-revalidate',
         'Access-Control-Allow-Origin': '*',
@@ -3194,7 +3258,7 @@ const handleShareCover = async (request, env, cardId) => {
     })
   }
 
-  if (/^https?:\/\//.test(imageUrl)) {
+  if (isOwnAssetUrl(imageUrl)) {
     return Response.redirect(imageUrl, 302)
   }
 
@@ -3664,6 +3728,7 @@ const OTP_PHONE_LIMITS = [{ max: 3, seconds: HOUR }, { max: 8, seconds: DAY }]
 const OTP_FAILED_TRIES_PER_DAY = 10
 const THANK_YOU_LIMITS = [{ max: 5, seconds: HOUR }]
 const TESTIMONIAL_LIMITS = [{ max: 5, seconds: HOUR }, { max: 20, seconds: DAY }]
+const RECIPIENT_PRINT_LIMITS = [{ max: 10, seconds: HOUR }, { max: 30, seconds: DAY }]
 // Normal days: under ~20 covers and ~15 sign-in codes in total.
 const DAILY_VOLUME_ALERTS = {
   generate: { label: 'card covers created', alertAt: 100, pauseAt: 300 },
@@ -4015,6 +4080,11 @@ const handleRecipientPrintCheckout = async (request, env) => {
   const stripe = getStripe(env)
   if (!stripe || !env.CARD_STORE) {
     return jsonResponse(request, env, { error: 'Printed cards are not available right now.' }, 503)
+  }
+
+  const checkoutLimited = await checkRateLimits(env, `recipient-print:${clientIp(request)}`, RECIPIENT_PRINT_LIMITS)
+  if (checkoutLimited) {
+    return rateLimitedResponse(request, env, checkoutLimited)
   }
 
   try {
@@ -4426,7 +4496,8 @@ const handleGetRecipientPhoto = async (request, env) => {
   return new Response(parsed.bytes, {
     headers: {
       ...getCorsHeaders(request, env),
-      'Content-Type': parsed.mimeType,
+      'Content-Type': safeImageContentType(parsed.bytes),
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, no-store',
     },
   })
@@ -4474,7 +4545,7 @@ const handleGetCoverThumb = async (request, env, cardId) => {
     return new Response(stored.bytes, {
       status: 200,
       headers: {
-        'Content-Type': stored.contentType || 'image/jpeg',
+        'Content-Type': safeImageContentType(stored.bytes),
         'Cache-Control': 'public, max-age=604800',
         'Access-Control-Allow-Origin': '*',
         'X-Content-Type-Options': 'nosniff',
@@ -4491,7 +4562,7 @@ const handleGetCoverThumb = async (request, env, cardId) => {
         return new Response(created.bytes, {
           status: 200,
           headers: {
-            'Content-Type': created.contentType || 'image/jpeg',
+            'Content-Type': safeImageContentType(created.bytes),
             'Cache-Control': 'public, max-age=604800',
             'Access-Control-Allow-Origin': '*',
             'X-Content-Type-Options': 'nosniff',
@@ -5140,6 +5211,7 @@ const handleDeliverCard = async (request, env) => {
     recipientConsentConfirmed,
     senderCopyEmail: rawSenderCopyEmail,
     saveRecipientPhotos,
+    editKey,
   } = (await readJson(request)) || {}
   const pendingRecipientPhotos = Array.isArray(saveRecipientPhotos) ? saveRecipientPhotos : []
   const record = await getCardRecord(env, cardId)
@@ -5148,6 +5220,10 @@ const handleDeliverCard = async (request, env) => {
 
   if (!record) {
     return jsonResponse(request, env, { error: 'Save the card before delivering it.' }, 404)
+  }
+
+  if (!(await canEditCard(env, record, { editKey, session }))) {
+    return cardOwnershipError(request, env)
   }
 
   if (!['email', 'text'].includes(method)) {
@@ -5498,6 +5574,9 @@ const handleCreateScheduledSend = async (request, env) => {
     if (!record) {
       return jsonResponse(request, env, { error: 'Save the card before scheduling it.' }, 404)
     }
+    if (!(await canEditCard(env, record, { editKey: body.editKey, session }))) {
+      return cardOwnershipError(request, env)
+    }
     if (!['email', 'text'].includes(method)) {
       return jsonResponse(request, env, { error: 'Choose email or text delivery.' }, 400)
     }
@@ -5767,6 +5846,10 @@ const handleOrderPrintCard = async (request, env) => {
 
     if (!record) {
       return jsonResponse(request, env, { error: 'Save the card before ordering a print.' }, 404)
+    }
+
+    if (!(await canEditCard(env, record, { editKey: body.editKey, session }))) {
+      return cardOwnershipError(request, env)
     }
 
     const mailFrom = normalizeMailingAddress(rawMailFrom, 'mail-from')
@@ -6083,6 +6166,7 @@ const handleRefineImage = async (request, env) => {
     imageMode,
     currentImageUrl,
     cardId,
+    editKey,
     referenceImages: rawReferenceImages,
   } = (await readJson(request)) || {}
   const refinement = combineCoverRefinement(rawRefinement, previousDetails, details)
@@ -6102,6 +6186,12 @@ const handleRefineImage = async (request, env) => {
   if (revisionLimited) {
     return revisionLimited
   }
+  // A cover rewrite only updates a saved card its creator can edit; otherwise it returns a new image only.
+  const requestedCardId = typeof cardId === 'string' ? cardId.trim() : ''
+  const editableCardId =
+    requestedCardId && (await canEditCard(env, await getCardRecord(env, requestedCardId), { editKey, session }))
+      ? requestedCardId
+      : ''
   const chargedBalance = session ? await spendSessionCredits(env, session, COVER_REVISION_CREDIT_COST, 'cover_revise') : undefined
   if (chargedBalance === null) {
     const balance = await readSessionCreditBalance(env, session)
@@ -6122,12 +6212,12 @@ const handleRefineImage = async (request, env) => {
             currentImageUrl,
             referenceImages,
             likenessBrief,
-            typeof cardId === 'string' ? cardId.trim() : '',
+            editableCardId,
           )
 
     const revisionSource = imageMode === 'new' ? 'new' : 'revise'
     const creditBalance = chargedBalance
-    let responseCardId = typeof cardId === 'string' ? cardId.trim() : ''
+    let responseCardId = editableCardId
     let revisionId = ''
 
     await recordCardHistory(

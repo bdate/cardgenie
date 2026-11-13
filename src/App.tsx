@@ -1198,6 +1198,32 @@ const invitationDetailsTemplate = [
 
 const companyAddressLines = ['Card-Genie.com', '154 East Prospect Avenue', 'Suite B', 'Danville, CA 94526']
 const accountSessionStorageKey = 'cardGenieAccountSession'
+// Private per-card keys from the server; this browser needs them to change, send or print cards it made.
+const cardEditKeysStorageKey = 'cardGenieCardEditKeys'
+const maxStoredCardEditKeys = 100
+
+const readCardEditKeys = (): Record<string, string> => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(cardEditKeysStorageKey) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const cardEditKeyFor = (cardId?: string | null) => (cardId ? readCardEditKeys()[cardId] || '' : '')
+
+const rememberCardEditKey = (cardId: string, editKey: string) => {
+  try {
+    const keys = readCardEditKeys()
+    delete keys[cardId]
+    keys[cardId] = editKey
+    const recent = Object.entries(keys).slice(-maxStoredCardEditKeys)
+    window.localStorage.setItem(cardEditKeysStorageKey, JSON.stringify(Object.fromEntries(recent)))
+  } catch {
+    // Private browsing can block storage; the signed-in owner can still edit.
+  }
+}
 const preferredNamePromptStorageKey = (phoneE164: string) =>
   `cardGeniePreferredNamePrompt:${String(phoneE164 || '').trim()}`
 const feedbackDismissStorageKey = 'cardGenieFeedbackDismissed'
@@ -9377,6 +9403,7 @@ function App() {
         },
         body: JSON.stringify({
           cardId: shared.id,
+          editKey: cardEditKeyFor(shared.id) || undefined,
           mailFrom: mailFrom.value,
           shipTo: shipTo.value,
           shopperEmail: shopperEmail.value,
@@ -10048,7 +10075,7 @@ function App() {
           ...(coverRefinementMode === 'revise'
             ? {
                 ...(currentImageUrl ? { currentImageUrl } : {}),
-                ...(reviseCardId ? { cardId: reviseCardId } : {}),
+                ...(reviseCardId ? { cardId: reviseCardId, editKey: cardEditKeyFor(reviseCardId) || undefined } : {}),
               }
             : {}),
           referenceImages: referenceImagePayload,
@@ -10294,7 +10321,7 @@ function App() {
       },
       body: JSON.stringify({
         ...buildCurrentCardPayload(storedCover),
-        ...(sharedCard?.id ? { cardId: sharedCard.id } : {}),
+        ...(sharedCard?.id ? { cardId: sharedCard.id, editKey: cardEditKeyFor(sharedCard.id) || undefined } : {}),
         ...(replacesCardId ? { replacesCardId } : {}),
         ...(coverThumb ? { coverThumb } : {}),
         ...(isCoverStillAnimated ? { keepCoverVideo: true } : {}),
@@ -10306,7 +10333,10 @@ function App() {
       throw new Error(data.error || 'Unable to save the card for delivery.')
     }
 
-    const shared = data as SharedCard
+    const { editKey: issuedEditKey, ...shared } = data as SharedCard & { editKey?: string }
+    if (issuedEditKey && shared.id) {
+      rememberCardEditKey(shared.id, issuedEditKey)
+    }
     const normalized: SharedCard = isLocalApiDev
       ? { ...shared, shareUrl: localShareUrl(shared.id) }
       : shared
@@ -10890,6 +10920,7 @@ function App() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           cardId: shared.id,
+          editKey: cardEditKeyFor(shared.id) || undefined,
           method: deliveryMethod,
           destinations,
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,
@@ -11069,6 +11100,7 @@ function App() {
         },
         body: JSON.stringify({
           cardId: shared.id,
+          editKey: cardEditKeyFor(shared.id) || undefined,
           method: deliveryMethod,
           destinations: validatedDestinations.map((entry) => entry.value),
           recipientConsentConfirmed: deliveryMethod === 'text' ? smsConsentConfirmed : undefined,

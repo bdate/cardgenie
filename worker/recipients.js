@@ -1,4 +1,5 @@
 import { deleteAsset, getAsset, putAsset } from './assets.js'
+import { MAX_PHOTO_IMAGE_BYTES, checkDataImage } from './image-safety.js'
 
 const RECIPIENT_PHOTO_PREFIX = 'recipient-photo:'
 export const MAX_RECIPIENT_PHOTOS = 3
@@ -114,7 +115,7 @@ const getRecipientRow = async (db, userId, recipientId) =>
 
 const storeRecipientPhotos = async (env, recipientId, photos, previousCount) => {
   const valid = (Array.isArray(photos) ? photos : [])
-    .filter((photo) => typeof photo === 'string' && /^data:image\/[a-z+.-]+;base64,/i.test(photo))
+    .filter((photo) => checkDataImage(photo, MAX_PHOTO_IMAGE_BYTES))
     .slice(0, MAX_RECIPIENT_PHOTOS)
   if (!valid.length || !(env.CARD_ASSETS || env.CARD_STORE)) {
     return previousCount

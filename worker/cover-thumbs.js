@@ -1,6 +1,7 @@
 /** Durable cover thumbnails for account history hover previews. */
 
 import { getAsset, hasAsset, putAsset } from './assets.js'
+import { MAX_THUMB_IMAGE_BYTES, checkDataImage, isOwnAssetUrl } from './image-safety.js'
 
 export const COVER_THUMB_MAX_EDGE = 320
 export const COVER_THUMB_JPEG_QUALITY = 72
@@ -61,7 +62,7 @@ const loadImageBytes = async (imageUrl) => {
     return parsed.bytes
   }
 
-  if (/^https?:\/\//.test(imageUrl || '')) {
+  if (isOwnAssetUrl(imageUrl)) {
     const response = await fetch(imageUrl)
     if (!response.ok) {
       throw new Error(`Unable to fetch cover image (${response.status}).`)
@@ -124,10 +125,11 @@ export const ensureCoverThumbForRecord = async (env, record, { replace = false }
 }
 
 export const putCoverThumbFromDataUrl = async (env, cardId, thumbDataUrl) => {
-  const parsed = parseDataImage(thumbDataUrl)
+  const checked = checkDataImage(thumbDataUrl, MAX_THUMB_IMAGE_BYTES)
+  const parsed = checked && parseDataImage(thumbDataUrl)
   if (!parsed) {
     return false
   }
 
-  return putCoverThumbBytes(env, cardId, parsed.bytes, parsed.mimeType || 'image/jpeg')
+  return putCoverThumbBytes(env, cardId, parsed.bytes, checked.type)
 }
