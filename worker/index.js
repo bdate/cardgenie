@@ -44,6 +44,7 @@ import {
   finishScheduledSend,
   recordThankYou,
   clearThankYou,
+  applyStripeRefund,
   createPrintOrder,
   getPrintOrder,
   getShopperById,
@@ -2060,23 +2061,20 @@ const handleContact = async (request, env) => {
 }
 
 const handleAdminDeploySummary = async (request, env) => {
-  const expected = String(env.DEPLOY_NOTIFY_SECRET || env.ADMIN_SECRET || '').trim()
-  const headerToken = readAccountToken(request)
-  const querySecret = new URL(request.url).searchParams.get('secret') || ''
-  const body = await request.json().catch(() => ({}))
-  const bodySecret = String(body?.secret || '').trim()
-  const provided = String(headerToken || querySecret || bodySecret || '').trim()
-  const secretOk = Boolean(expected && provided && provided === expected)
-  if (!secretOk && !(await isAdminRequest(request, env))) {
+  if (!(await hasDeployNotifyKey(request, env)) && !(await isAdminRequest(request, env))) {
     return jsonResponse(request, env, { error: 'Not found.' }, 404)
   }
+  const body = await request.json().catch(() => ({}))
 
   const summary = String(body?.summary || body?.text || '').trim()
   if (!summary) {
     return jsonResponse(request, env, { error: 'Missing summary.' }, 400)
   }
 
-  const to = normalizeEmailAddress(String(body?.to || DEPLOY_SUMMARY_TO).trim() || DEPLOY_SUMMARY_TO)
+  const to = String(body?.to || DEPLOY_SUMMARY_TO).trim().toLowerCase()
+  if (!INTERNAL_EMAIL_RECIPIENTS.has(to)) {
+    return jsonResponse(request, env, { error: 'Deploy summaries only go to internal inboxes.' }, 400)
+  }
   const stamp = formatDeploySubjectStamp(new Date())
   const subject = String(body?.subject || '').trim() || `Card Genie latest code - ${stamp}`
 
@@ -3421,7 +3419,7 @@ const checkVerifyCode = async (env, serviceSid, to, code) => {
 }
 
 const handleAdminSetupVerify = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) return denied
   const brand = new URL(request.url).searchParams.get('brand') === 'gcu' ? 'gcu' : 'cardGenie'
   const existing = await env.CARD_STORE.get(verifySidKey(brand))
@@ -4299,6 +4297,15 @@ const handleStripeWebhook = async (request, env) => {
         }
       }
     }
+    if (event.type === 'charge.refunded') {
+      const charge = event.data.object
+      await applyStripeRefund(env, { paymentIntentId: charge.payment_intent, refundedCents: charge.amount_refunded })
+    }
+    // A chargeback pulls the whole payment back, so it is handled like a full refund.
+    if (event.type === 'charge.dispute.created') {
+      const dispute = event.data.object
+      await applyStripeRefund(env, { paymentIntentId: dispute.payment_intent, refundedCents: Number.MAX_SAFE_INTEGER })
+    }
   } catch (error) {
     console.error('Stripe webhook processing failed.', error)
     return jsonResponse(request, env, { error: 'Unable to process webhook.' }, 500)
@@ -4719,22 +4726,30 @@ const handleUpdateAccountProfile = async (request, env) => {
   }
 }
 
-const isAdminRequest = async (request, env) => {
-  const secret = String(env.ADMIN_SECRET || '').trim()
-  const token = readAccountToken(request)
-  if (secret && token && token === secret) {
-    return true
-  }
+// Compares hashes so the check takes the same time however much of the secret matches.
+const secretMatches = async (provided, expected) => {
+  const given = String(provided || '').trim()
+  const wanted = String(expected || '').trim()
+  if (!given || !wanted) return false
+  const [a, b] = await Promise.all([hashSecret(given), hashSecret(wanted)])
+  let diff = 0
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
 
-  const url = new URL(request.url)
-  const querySecret = url.searchParams.get('secret')
-  if (secret && querySecret && querySecret === secret) {
+/** Admin tools: the ADMIN_SECRET key (Authorization header only) or an admin phone session. */
+const isAdminRequest = async (request, env) => {
+  const token = readAccountToken(request)
+  if (await secretMatches(token, env.ADMIN_SECRET)) {
     return true
   }
 
   const session = await getAccountSession(env, token)
   return Boolean(session?.phoneE164 && isAdminPhone(session.phoneE164))
 }
+
+/** The deploy-email key only sends internal notices (deploy summaries, team texts, internal test emails). */
+const hasDeployNotifyKey = (request, env) => secretMatches(readAccountToken(request), env.DEPLOY_NOTIFY_SECRET)
 
 const handleGetAdminMetrics = async (request, env) => {
   if (!(await isAdminRequest(request, env))) {
@@ -4759,7 +4774,7 @@ const handleGetAdminMetrics = async (request, env) => {
 }
 
 const handleGetAdminCosts = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -4871,7 +4886,7 @@ const handleUpdateAdminTestimonial = async (request, env, testimonialId) => {
 }
 
 const handleAdminGrantCredits = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -5516,7 +5531,7 @@ const maybeSendDailyReport = async (env) => {
 }
 
 const handleAdminDailyReport = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) return denied
   const params = new URL(request.url).searchParams
   const requested = params.get('day') || ''
@@ -7765,20 +7780,11 @@ const recordCardHistory = async (env, entry = {}, imageUrl = '') => {
   }
 }
 
-const requireDeployOrAdminSecret = async (request, env) => {
-  const expected = String(env.DEPLOY_NOTIFY_SECRET || env.ADMIN_SECRET || '').trim()
-  const headerToken = readAccountToken(request)
-  const querySecret = new URL(request.url).searchParams.get('secret') || ''
-  const provided = String(headerToken || querySecret || '').trim()
-  const secretOk = Boolean(expected && provided && provided === expected)
-  if (secretOk || (await isAdminRequest(request, env))) {
-    return null
-  }
-  return jsonResponse(request, env, { error: 'Not found.' }, 404)
-}
+const requireAdminAccess = async (request, env) =>
+  (await isAdminRequest(request, env)) ? null : jsonResponse(request, env, { error: 'Not found.' }, 404)
 
 const handleMigrateAssets = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -7793,7 +7799,7 @@ const handleMigrateAssets = async (request, env) => {
 }
 
 const handleAdminLampSessions = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -7819,7 +7825,7 @@ const handleAdminLampSessions = async (request, env) => {
 }
 
 const handleAdminResendCardEmail = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8010,7 +8016,7 @@ const handleRemoveCoverAnimation = async (request, env, cardId) => {
 }
 
 const handleAdminCardCoverVideo = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8052,7 +8058,7 @@ const handleAdminCardCoverVideo = async (request, env) => {
 }
 
 const handleAdminShoppers = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8103,7 +8109,7 @@ const buildRecipientKeepsakeHistory = async (request, env) => {
 }
 
 const handleAdminShopperHistory = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8123,7 +8129,7 @@ const handleAdminShopperHistory = async (request, env) => {
 }
 
 const handleAdminBackfillRecipients = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8146,7 +8152,7 @@ const handleAdminBackfillRecipients = async (request, env) => {
 const SHIP_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 const handleAdminUpdatePrintOrderShipping = async (request, env, orderNumber) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8214,7 +8220,7 @@ const shipmentEmailSendTime = (shipDate, now = new Date()) => {
 }
 
 const handleAdminSendShipmentEmail = async (request, env, orderNumber) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -8372,9 +8378,7 @@ const handleReviewOptOut = async (request, env) => {
 }
 
 const handleAdminReviewFollowUpTest = async (request, env) => {
-  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
-  const provided = String(readAccountToken(request) || '').trim()
-  if (!expected || provided !== expected) {
+  if (!(await hasDeployNotifyKey(request, env))) {
     return jsonResponse(request, env, { error: 'Not found.' }, 404)
   }
   const body = (await readJson(request)) || {}
@@ -8390,9 +8394,7 @@ const handleAdminReviewFollowUpTest = async (request, env) => {
 
 // Texts only go to admin phones, so this can't be used to message shoppers.
 const handleAdminTeamText = async (request, env) => {
-  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
-  const provided = String(readAccountToken(request) || '').trim()
-  if (!expected || provided !== expected) {
+  if (!(await hasDeployNotifyKey(request, env))) {
     return jsonResponse(request, env, { error: 'Not found.' }, 404)
   }
   const body = (await readJson(request)) || {}
@@ -8415,9 +8417,7 @@ const handleAdminTeamText = async (request, env) => {
 const INTERNAL_EMAIL_RECIPIENTS = new Set([DEPLOY_SUMMARY_TO, 'support@card-genie.com', 'cards@card-genie.com'])
 
 const handleAdminInternalEmail = async (request, env) => {
-  const expected = String(env.DEPLOY_NOTIFY_SECRET || '').trim()
-  const provided = String(readAccountToken(request) || '').trim()
-  if (!expected || provided !== expected) {
+  if (!(await hasDeployNotifyKey(request, env))) {
     return jsonResponse(request, env, { error: 'Not found.' }, 404)
   }
   const body = (await readJson(request)) || {}
@@ -8503,7 +8503,7 @@ const deliverShipmentEmail = async (env, order) => {
 }
 
 const handleAdminCardHistory = async (request, env) => {
-  const denied = await requireDeployOrAdminSecret(request, env)
+  const denied = await requireAdminAccess(request, env)
   if (denied) {
     return denied
   }
@@ -9003,7 +9003,7 @@ const handleRequest = async (request, env, ctx) => {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/admin/scheduled-sends/run') {
-    const denied = await requireDeployOrAdminSecret(request, env)
+    const denied = await requireAdminAccess(request, env)
     if (denied) {
       return denied
     }

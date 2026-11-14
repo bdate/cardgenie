@@ -3,13 +3,13 @@
  * Pull the last 7 days of card history (inputs, messages, covers) for admin review.
  *
  * Usage:
- *   DEPLOY_NOTIFY_SECRET=$(cat .cursor/deploy-notify.secret) npm run card:history
- *   DEPLOY_NOTIFY_SECRET=… npm run card:history -- --kind generate --q birthday --phone 925 --images
- *   DEPLOY_NOTIFY_SECRET=… npm run card:history -- --id <historyId>
+ *   ADMIN_SECRET=… npm run card:history   (or keep the key in .cursor/admin.secret)
+ *   npm run card:history -- --kind generate --q birthday --phone 925 --images
+ *   npm run card:history -- --id <historyId>
  *
  * Kinds: generate, refine-image, refine-copy, save
  */
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,10 +17,12 @@ const apiBase = (process.env.DEPLOY_NOTIFY_API || 'https://cardgenie-api.autumn-
   /\/$/,
   '',
 )
-const secret = String(process.env.DEPLOY_NOTIFY_SECRET || '').trim()
+const adminKeyFile = join(dirname(fileURLToPath(import.meta.url)), '..', '.cursor', 'admin.secret')
+const secret = String(process.env.ADMIN_SECRET || (existsSync(adminKeyFile) ? readFileSync(adminKeyFile, 'utf8') : '')).trim()
+const auth = { headers: { Authorization: `Bearer ${secret}` } }
 
 if (!secret) {
-  console.error('Missing DEPLOY_NOTIFY_SECRET')
+  console.error('Missing ADMIN_SECRET (or .cursor/admin.secret)')
   process.exit(1)
 }
 
@@ -31,13 +33,13 @@ const flag = (name) => {
 }
 const withImages = args.includes('--images')
 
-const params = new URLSearchParams({ secret })
+const params = new URLSearchParams()
 for (const name of ['id', 'kind', 'q', 'phone', 'limit']) {
   const value = flag(name)
   if (value) params.set(name, value)
 }
 
-const response = await fetch(`${apiBase}/api/admin/card-history?${params}`)
+const response = await fetch(`${apiBase}/api/admin/card-history?${params}`, auth)
 const data = await response.json().catch(() => ({}))
 if (!response.ok) {
   console.error(data.error || `Request failed (${response.status})`)
@@ -54,7 +56,8 @@ if (withImages || data.entry) {
   mkdirSync(imageDir, { recursive: true })
   for (const entry of entries.filter((item) => item.hasImage)) {
     const imageResponse = await fetch(
-      `${apiBase}/api/admin/card-history?${new URLSearchParams({ secret, id: entry.id, image: '1' })}`,
+      `${apiBase}/api/admin/card-history?${new URLSearchParams({ id: entry.id, image: '1' })}`,
+      auth,
     )
     if (!imageResponse.ok) continue
     const ext = (imageResponse.headers.get('content-type') || 'image/png').includes('jpeg') ? 'jpg' : 'png'

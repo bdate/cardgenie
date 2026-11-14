@@ -954,15 +954,18 @@ export const applyCreditChange = async (
   const paidCents = Number.isFinite(Number(amountPaidCents)) ? Math.max(0, Math.floor(Number(amountPaidCents))) : 0
   const isPurchase = eventKind === 'purchase' || reason === 'stripe_purchase' || reason === 'balance_sync'
   const isRefund = creditsDelta > 0 && /_refund$/.test(reason || '')
+  // A refunded Stripe purchase takes back purchased credits; it is not spending.
+  const isStripeRefund = reason === 'stripe_refund' && creditsDelta < 0
   const markPurchase = isPurchase && creditsDelta > 0 ? 1 : 0
-  const paidAdded = (eventKind === 'purchase' || reason === 'stripe_purchase') && creditsDelta > 0 ? creditsDelta : 0
+  const paidAdded =
+    (eventKind === 'purchase' || reason === 'stripe_purchase') && creditsDelta > 0 ? creditsDelta : isStripeRefund ? creditsDelta : 0
 
   // Delta changes are applied relative to the stored balance in one statement, and a spend that would
   // take the balance below zero changes nothing (returns null), so parallel requests can't overspend.
   const updated = await env.ACCOUNT_DB.prepare(
     // Free credits are used up first, so purchased credits only drop once the balance falls below them.
     `UPDATE users
-     SET paid_credit_balance = MIN(MIN(paid_credit_balance, credit_balance) + ?, credit_balance + ?),
+     SET paid_credit_balance = MAX(0, MIN(MIN(paid_credit_balance, credit_balance) + ?, credit_balance + ?)),
          credit_balance = credit_balance + ?,
          credits_granted = credits_granted + ?,
          credits_purchased = credits_purchased + ?,
@@ -981,7 +984,7 @@ export const applyCreditChange = async (
       creditsDelta,
       creditsDelta > 0 && !isPurchase && !isRefund ? creditsDelta : 0,
       creditsDelta > 0 && isPurchase ? creditsDelta : 0,
-      creditsDelta < 0 ? Math.abs(creditsDelta) : isRefund ? -creditsDelta : 0,
+      creditsDelta < 0 && !isStripeRefund ? Math.abs(creditsDelta) : isRefund ? -creditsDelta : 0,
       markPurchase ? paidCents : 0,
       markPurchase,
       now,
@@ -1109,6 +1112,74 @@ export const recordStripeCreditPurchase = async (
   })
 
   return { alreadyProcessed: false, paymentId, creditBalance }
+}
+
+/**
+ * Takes back credits for a refunded or disputed Stripe credit purchase. `refundedCents` is the payment's
+ * total refunded so far; only the newly refunded part is processed, so repeated webhooks change nothing.
+ * Credits already spent can't be taken back, so at most the account's current balance is removed.
+ */
+export const applyStripeRefund = async (env, { paymentIntentId, refundedCents }) => {
+  if (!env.ACCOUNT_DB || !paymentIntentId) {
+    return null
+  }
+  const db = env.ACCOUNT_DB
+  const payment = await db
+    .prepare(
+      `SELECT id, user_id, credits_purchased, amount_cents, COALESCE(amount_refunded_cents, 0) AS refunded, currency
+       FROM payments WHERE stripe_payment_intent_id = ?`,
+    )
+    .bind(paymentIntentId)
+    .first()
+  if (!payment) {
+    return null
+  }
+
+  const totalRefunded = Math.min(Math.max(0, Math.floor(Number(refundedCents) || 0)), payment.amount_cents)
+  const newlyRefunded = totalRefunded - payment.refunded
+  if (newlyRefunded <= 0) {
+    return { alreadyProcessed: true }
+  }
+  const claimed = await db
+    .prepare(
+      `UPDATE payments
+       SET amount_refunded_cents = ?, status = CASE WHEN ? >= amount_cents THEN 'refunded' ELSE 'partially_refunded' END
+       WHERE id = ? AND COALESCE(amount_refunded_cents, 0) = ?`,
+    )
+    .bind(totalRefunded, totalRefunded, payment.id, payment.refunded)
+    .run()
+  if (!claimed.meta?.changes) {
+    return { alreadyProcessed: true }
+  }
+
+  const share = payment.amount_cents > 0 ? newlyRefunded / payment.amount_cents : 1
+  const creditsToRemove = Math.round(payment.credits_purchased * share)
+  const user = await getUserById(db, payment.user_id)
+  const creditsRemoved = Math.min(creditsToRemove, Math.max(0, Number(user?.credit_balance) || 0))
+  const dollars = (newlyRefunded / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: (payment.currency || 'usd').toUpperCase(),
+  })
+  if (creditsRemoved > 0) {
+    await applyCreditChange(env, {
+      userId: payment.user_id,
+      delta: -creditsRemoved,
+      reason: 'stripe_refund',
+      kind: 'adjustment',
+      note: `Refund · ${dollars}`,
+      paymentId: payment.id,
+    })
+  }
+  await db
+    .prepare(
+      `UPDATE users
+       SET credits_refunded = credits_refunded + ?, amount_refunded_cents = amount_refunded_cents + ?, last_refund_at = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(creditsRemoved, newlyRefunded, isoNow(), isoNow(), payment.user_id)
+    .run()
+
+  return { alreadyProcessed: false, userId: payment.user_id, creditsRemoved, creditsAlreadySpent: creditsToRemove - creditsRemoved }
 }
 
 const ensureAdConversionsTable = async (db) => {

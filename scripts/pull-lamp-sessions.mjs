@@ -3,12 +3,12 @@
  * Pull recent Lamp Genie / Ask Genie test session logs and print them.
  *
  * Usage:
- *   DEPLOY_NOTIFY_SECRET=$(cat .cursor/deploy-notify.secret) npm run lamp:sessions
- *   DEPLOY_NOTIFY_SECRET=… npm run lamp:sessions -- ask
- *   DEPLOY_NOTIFY_SECRET=… npm run lamp:sessions -- lamp
- *   DEPLOY_NOTIFY_SECRET=… npm run lamp:sessions -- <sessionId>
+ *   ADMIN_SECRET=… npm run lamp:sessions   (or keep the key in .cursor/admin.secret)
+ *   npm run lamp:sessions -- ask
+ *   npm run lamp:sessions -- lamp
+ *   npm run lamp:sessions -- <sessionId>
  */
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -16,11 +16,13 @@ const apiBase = (process.env.DEPLOY_NOTIFY_API || 'https://cardgenie-api.autumn-
   /\/$/,
   '',
 )
-const secret = String(process.env.DEPLOY_NOTIFY_SECRET || '').trim()
+const adminKeyFile = join(dirname(fileURLToPath(import.meta.url)), '..', '.cursor', 'admin.secret')
+const secret = String(process.env.ADMIN_SECRET || (existsSync(adminKeyFile) ? readFileSync(adminKeyFile, 'utf8') : '')).trim()
+const auth = { headers: { Authorization: `Bearer ${secret}` } }
 const arg = String(process.argv[2] || '').trim()
 
 if (!secret) {
-  console.error('Missing DEPLOY_NOTIFY_SECRET')
+  console.error('Missing ADMIN_SECRET (or .cursor/admin.secret)')
   process.exit(1)
 }
 
@@ -28,10 +30,10 @@ const isFilter = arg === 'ask' || arg === 'lamp'
 const sessionId = isFilter ? '' : arg
 
 const url = sessionId
-  ? `${apiBase}/api/admin/lamp-sessions?id=${encodeURIComponent(sessionId)}&secret=${encodeURIComponent(secret)}`
-  : `${apiBase}/api/admin/lamp-sessions?secret=${encodeURIComponent(secret)}`
+  ? `${apiBase}/api/admin/lamp-sessions?id=${encodeURIComponent(sessionId)}`
+  : `${apiBase}/api/admin/lamp-sessions`
 
-const response = await fetch(url)
+const response = await fetch(url, auth)
 const data = await response.json().catch(() => ({}))
 if (!response.ok) {
   console.error(data.error || `Request failed (${response.status})`)
