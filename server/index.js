@@ -35,7 +35,9 @@ const isLocalDevAuthRequest = (req) => {
   }
 
   const origin = req.headers.origin || ''
-  if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+  const localOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+  const lanOrigin = /^https?:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(origin)
+  if (origin && !localOrigin && !lanOrigin) {
     return false
   }
 

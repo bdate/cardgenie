@@ -45,6 +45,7 @@ type GeneratedCard = {
   messageVariants?: MessageVariants
   selectedLength?: MessageLengthId
   coverDetails?: Partial<CardDetails>
+  messageDetails?: Partial<CardDetails>
 }
 
 const coverDetailFields: Array<[keyof CardDetails, string]> = [
@@ -53,6 +54,13 @@ const coverDetailFields: Array<[keyof CardDetails, string]> = [
   ['occasion', 'Occasion'],
   ['tone', 'Tone'],
   ['imageStyle', 'Image style'],
+  ['keyDetails', 'What to say or show'],
+]
+const insideDetailFields: Array<[keyof CardDetails, string]> = [
+  ['recipientName', 'Recipient'],
+  ['recipientType', 'Who they are to you'],
+  ['occasion', 'Occasion'],
+  ['tone', 'Tone'],
   ['keyDetails', 'What to say or show'],
 ]
 const relationFieldLabel = 'Who are they to you?'
@@ -1403,6 +1411,8 @@ const slimCheckoutResumeCard = (card?: GeneratedCard | null): GeneratedCard | un
     closing: card.closing,
     messageVariants: card.messageVariants,
     selectedLength: card.selectedLength,
+    coverDetails: card.coverDetails,
+    messageDetails: card.messageDetails,
   }
 }
 
@@ -3268,6 +3278,7 @@ function App() {
   const [isRefiningCopy, setIsRefiningCopy] = useState(false)
   const [refinementNotice, setRefinementNotice] = useState('')
   const [showEditor, setShowEditor] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [editorHasChanges, setEditorHasChanges] = useState(false)
   const [hasAcceptedRevision, setHasAcceptedRevision] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>('front')
@@ -3956,6 +3967,7 @@ function App() {
     (accountProfileMailing.name.trim() || accountSession?.mailingAddress?.name?.trim() || '').split(/\s+/)[0] ||
     ''
   const senderNameClearedByShopperRef = useRef(false)
+  const signatureEditedByShopperRef = useRef(false)
   const [contactOpen, setContactOpen] = useState(false)
   const [contactFromLink, setContactFromLink] = useState<string | null>(null)
   const [contactForm, setContactForm] = useState({ name: '', email: '', topic: '', message: '', website: '' })
@@ -4228,6 +4240,15 @@ function App() {
         .filter(([field]) => (card.coverDetails?.[field] || '').trim() !== (details[field] || '').trim())
         .map(([, label]) => label)
     : []
+  const messageBaseline = card?.messageDetails || card?.coverDetails
+  const insideDetailChanges = messageBaseline
+    ? insideDetailFields
+        .filter(([field]) => (messageBaseline[field] || '').trim() !== (details[field] || '').trim())
+        .map(([, label]) => label)
+    : []
+  const insideUpdateRequest = insideDetailChanges.length
+    ? `Rewrite the inside so it matches these updated details: ${insideDetailChanges.join(', ')}. Keep the current warmth and length, and change only what those updates require.`
+    : ''
   const showCoverWatermark = !isRecipientView && Boolean(card) && !hasSentCurrentCard
   const coverPreviewClass = (baseClass = '') =>
     [baseClass, 'cover-preview', showCoverWatermark ? 'is-watermarked' : ''].filter(Boolean).join(' ')
@@ -6480,7 +6501,9 @@ function App() {
     setCard(null)
     setSharedCard(null)
     setCardGreeting(null)
+    signatureEditedByShopperRef.current = false
     setCardSignature(null)
+    setDetailsOpen(false)
     setStep('envelope')
     setHasViewedFront(false)
     setHasViewedInside(false)
@@ -8868,9 +8891,11 @@ function App() {
       messageVariants: variants,
       selectedLength: variants ? selectedLength : undefined,
       coverDetails: { ...details },
+      messageDetails: { ...details },
     })
     pendingCreatedSaveRef.current = true
     setCardGreeting('')
+    signatureEditedByShopperRef.current = false
     setCardSignature(signatureName)
     setStep('envelope')
     restoreSentAfterFailedGenerateRef.current = false
@@ -10428,6 +10453,7 @@ function App() {
       }
 
       setCard((current) => (current ? { ...current, imageUrl: data.imageUrl, coverDetails: { ...details } } : current))
+      setEditorTab('front')
       if (typeof data.cardId === 'string' && data.cardId.trim()) {
         const nextCardId = data.cardId.trim()
         setSharedCard((current) => {
@@ -10467,8 +10493,13 @@ function App() {
     }
   }
 
-  const refineCopy = async () => {
+  const refineCopy = async (refinementOverride?: string) => {
     if (!card) {
+      return
+    }
+
+    const refinement = (refinementOverride ?? copyRefinement).trim()
+    if (!refinement) {
       return
     }
 
@@ -10494,7 +10525,7 @@ function App() {
         },
         body: JSON.stringify({
           details,
-          refinement: copyRefinement,
+          refinement,
           currentMessage: cardMessage,
           currentClosing: cardClosing,
           referenceImages: referenceImagePayload,
@@ -10526,11 +10557,13 @@ function App() {
                       [current.selectedLength]: copy.message,
                     }
                   : current.messageVariants,
+              messageDetails: { ...details },
             }
           : current,
       )
       setCopyRefinement('')
       setShowPolishDialog(false)
+      setEditorTab('inside')
       setStep('inside')
       setEditorHasChanges(true)
       rememberChargedCredits(data.creditBalance, aiCopyCost)
@@ -14392,11 +14425,11 @@ function App() {
         </section>
       )}
 
-      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${showAccountPage || adminView ? 'is-hidden' : ''}`.trim()}>
+      <section className={`workspace ${isRecipientView ? 'recipient-workspace' : ''} ${showProofPanel ? '' : 'is-form-only'} ${card && !detailsOpen ? 'is-details-collapsed' : ''} ${card && detailsOpen ? 'is-details-open' : ''} ${showAccountPage || adminView ? 'is-hidden' : ''}`.trim()}>
         {!isRecipientView && (
           <form
             ref={createFormRef}
-            className={`card-panel form-panel${highlightInvalidFields ? ' is-validated' : ''}`}
+            className={`card-panel form-panel${highlightInvalidFields ? ' is-validated' : ''}${card && !detailsOpen ? ' is-collapsed' : ''}`}
             noValidate
             onSubmit={generateCard}
             onChange={() => trackLanding('form_start')}
@@ -14404,10 +14437,26 @@ function App() {
           <div className="panel-heading">
             <div>
               <h2>Tell us about the card</h2>
-              <p>
-                Fill in the fields below. Genie turns your ideas and optional photos into one-of-a-kind artwork and a
-                personal message.
-              </p>
+              {card ? (
+                <>
+                  <p className="detail-summary">
+                    {details.occasion.trim() || 'Card'} for {details.recipientName.trim() || 'them'}
+                    {details.senderName.trim() ? `, from ${details.senderName.trim()}` : ''}
+                  </p>
+                  <button
+                    className="text-action-link detail-edit-toggle"
+                    type="button"
+                    onClick={() => setDetailsOpen((current) => !current)}
+                  >
+                    {detailsOpen ? 'Hide details' : 'Edit details'}
+                  </button>
+                </>
+              ) : (
+                <p>
+                  Fill in the fields below. Genie turns your ideas and optional photos into one-of-a-kind artwork and a
+                  personal message.
+                </p>
+              )}
             </div>
           </div>
 
@@ -14694,6 +14743,9 @@ function App() {
                 onChange={(event) => {
                   senderNameClearedByShopperRef.current = !event.target.value.trim()
                   updateDetails('senderName', event.target.value)
+                  if (card && !signatureEditedByShopperRef.current) {
+                    setCardSignature(event.target.value.trim() || null)
+                  }
                 }}
                 placeholder="Example: your name"
               />
@@ -15076,6 +15128,47 @@ function App() {
           )}
           {isGenerating && (
             <p className="generate-scroll-hint">Your card is taking shape below.</p>
+          )}
+          {card && (coverDetailChanges.length > 0 || insideDetailChanges.length > 0) && (
+            <div className="detail-update-actions">
+              <p>These details changed after the card was made.</p>
+              {coverDetailChanges.length > 0 && (
+                <button
+                  className="primary-button cost-button"
+                  type="button"
+                  disabled={isRefiningImage}
+                  aria-busy={isRefiningImage}
+                  onClick={() => void refineImage()}
+                >
+                  {isRefiningImage ? (
+                    'Updating cover...'
+                  ) : (
+                    <>
+                      <span>Update cover</span>
+                      <span className="button-points">{coverRevisionCost} credit</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {insideDetailChanges.length > 0 && (
+                <button
+                  className="primary-button cost-button"
+                  type="button"
+                  disabled={isRefiningCopy}
+                  aria-busy={isRefiningCopy}
+                  onClick={() => void refineCopy(insideUpdateRequest)}
+                >
+                  {isRefiningCopy ? (
+                    'Updating inside...'
+                  ) : (
+                    <>
+                      <span>Update inside wording</span>
+                      <span className="button-points">{aiCopyCost} credit</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           )}
         </form>
         )}
@@ -16775,6 +16868,7 @@ function App() {
                             <input
                               value={cardSignatureLabel}
                               onChange={(event) => {
+                                signatureEditedByShopperRef.current = true
                                 setCardSignature(event.target.value)
                                 setEditorHasChanges(true)
                               }}
@@ -16811,7 +16905,7 @@ function App() {
                                   type="button"
                                   disabled={isRefiningCopy || !copyRefinement.trim()}
                                   aria-busy={isRefiningCopy}
-                                  onClick={refineCopy}
+                                  onClick={() => void refineCopy()}
                                 >
                                   {isRefiningCopy ? (
                                     'Rewriting inside...'
