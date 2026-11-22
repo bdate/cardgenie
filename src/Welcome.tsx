@@ -139,7 +139,7 @@ export default function Welcome() {
   return <div className={`welcome welcome-${variant}`}>
     <a className="welcome-skip" href="#welcome-main">Skip to content</a>
     <header className="welcome-header">
-      <a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="56" height="56" alt="" /><span>Card Genie</span></a>
+      <a className="welcome-brand" href={creatorUrl(undefined, preview)} aria-label="Card Genie home"><img src="/logo-mark.png" width="56" height="56" alt="" /><span>Card Genie</span></a>
       <nav aria-label="Welcome navigation">{variant !== 'c' && <a href="#examples">See examples</a>}<button onClick={() => location.assign(creatorUrl(undefined, preview) + '&account=1')}>Sign in</button></nav>
     </header>
     <main id="welcome-main">
@@ -220,7 +220,7 @@ export default function Welcome() {
         <p className="welcome-about-more"><a href="/styles/">See all 15 art styles</a></p>
       </section>
     </main>
-    <footer className="welcome-footer"><a className="welcome-brand" href="/" aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/occasions/">Occasions</a><a href="/styles/">Art styles</a><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
+    <footer className="welcome-footer"><a className="welcome-brand" href={creatorUrl(undefined, preview)} aria-label="Card Genie home"><img src="/logo-mark.png" width="38" height="38" alt="" /><span>Card Genie</span></a><p>A little thought. A little magic. A lot of you.</p><nav aria-label="Footer"><a href="/occasions/">Occasions</a><a href="/styles/">Art styles</a><a href="/faq/">FAQ</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav></footer>
 
     <dialog ref={dialog} className="welcome-dialog" aria-labelledby="sample-heading" onCancel={() => previousFocus.current?.focus()} onClick={event => { if (event.target === dialog.current) closeSample() }}>
       <button className="welcome-close" onClick={closeSample} aria-label="Close sample">×</button>

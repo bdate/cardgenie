@@ -2184,28 +2184,161 @@ const cardHasActivity = async (db, cardId) => {
   }
 }
 
-export const recordCreatedCard = async (env, { userId, phoneE164, record, replacesCardId }) => {
+const cardAnalyticsColumns = [
+  ['photo_used', 'INTEGER'],
+  ['photo_count', 'INTEGER NOT NULL DEFAULT 0'],
+  ['tone', 'TEXT'],
+  ['length', 'TEXT'],
+  ['image_style', 'TEXT'],
+  ['key_details', 'TEXT'],
+  ['traffic_channel', 'TEXT'],
+  ['traffic_source', 'TEXT'],
+  ['traffic_medium', 'TEXT'],
+  ['traffic_campaign', 'TEXT'],
+  ['traffic_term', 'TEXT'],
+  ['traffic_content', 'TEXT'],
+  ['referrer_host', 'TEXT'],
+  ['landing_path', 'TEXT'],
+  ['had_gclid', 'INTEGER NOT NULL DEFAULT 0'],
+]
+
+let cardAnalyticsColumnsReady = false
+
+export const ensureCardAnalyticsColumns = async (db) => {
+  if (!db || cardAnalyticsColumnsReady) {
+    return
+  }
+  for (const [name, type] of cardAnalyticsColumns) {
+    try {
+      await db.prepare(`ALTER TABLE cards ADD COLUMN ${name} ${type}`).run()
+    } catch {
+      // Column already exists.
+    }
+  }
+  cardAnalyticsColumnsReady = true
+}
+
+const clipAnalytics = (value, max = 160) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, max)
+
+export const normalizeCardAnalytics = (raw = {}, details = {}, photoCount = 0) => {
+  const attribution = raw?.attribution && typeof raw.attribution === 'object' ? raw.attribution : raw
+  const count = Math.max(0, Math.min(10, Math.floor(Number(photoCount ?? raw.photoCount) || 0)))
+  const channel = clipAnalytics(attribution?.channel || attribution?.trafficChannel, 40)
+  const allowedChannels = new Set([
+    'paid_search',
+    'organic_search',
+    'social',
+    'referral',
+    'email',
+    'gcu',
+    'direct',
+    'other',
+  ])
+  const lengthRaw = String(details.length || raw.length || '')
+    .trim()
+    .toLowerCase()
+  const length = /long/.test(lengthRaw) ? 'long' : /short/.test(lengthRaw) ? 'short' : /medium/.test(lengthRaw) ? 'medium' : ''
+
+  return {
+    photoUsed: count > 0 || raw.photoUsed === true,
+    photoCount: count,
+    tone: clipAnalytics(details.tone || raw.tone, 80),
+    length,
+    imageStyle: clipAnalytics(details.imageStyle || raw.imageStyle, 120),
+    keyDetails: clipAnalytics(details.keyDetails || raw.keyDetails, 2000),
+    trafficChannel: allowedChannels.has(channel) ? channel : '',
+    trafficSource: clipAnalytics(attribution?.source || attribution?.trafficSource),
+    trafficMedium: clipAnalytics(attribution?.medium || attribution?.trafficMedium),
+    trafficCampaign: clipAnalytics(attribution?.campaign || attribution?.trafficCampaign),
+    trafficTerm: clipAnalytics(attribution?.term || attribution?.trafficTerm),
+    trafficContent: clipAnalytics(attribution?.content || attribution?.trafficContent),
+    referrerHost: clipAnalytics(attribution?.referrerHost, 120),
+    landingPath: clipAnalytics(attribution?.landingPath, 240),
+    hadGclid: attribution?.gclid === true || attribution?.hadGclid === true || raw.hadGclid === true,
+  }
+}
+
+export const recordCreatedCard = async (env, { userId, phoneE164, record, replacesCardId, analytics }) => {
   if (!env.ACCOUNT_DB || !userId || !record?.id) {
     return
   }
 
   const db = env.ACCOUNT_DB
   await ensureAccountUser(env, { userId, phoneE164 })
+  await ensureCardAnalyticsColumns(db)
   const [ownerId] = await resolveAccountUserIds(db, { userId, phoneE164 })
   const now = isoNow()
   const details = record.details || {}
+  const stats = normalizeCardAnalytics(analytics || {}, details, analytics?.photoCount)
   const existing = await db.prepare('SELECT id, user_id FROM cards WHERE id = ?').bind(record.id).first()
 
   if (existing) {
     await db
-      .prepare('UPDATE cards SET updated_at = ?, recipient_name = ?, occasion = ?, sender_name = ? WHERE id = ?')
-      .bind(now, details.recipientName || '', details.occasion || '', details.senderName || record.signature || '', record.id)
+      .prepare(
+        `UPDATE cards
+         SET updated_at = ?, recipient_name = ?, occasion = ?, sender_name = ?,
+             photo_used = CASE WHEN ? = 1 OR COALESCE(photo_used, 0) = 1 THEN 1 ELSE COALESCE(photo_used, ?) END,
+             photo_count = MAX(COALESCE(photo_count, 0), ?),
+             tone = CASE WHEN ? != '' THEN ? ELSE tone END,
+             length = CASE WHEN ? != '' THEN ? ELSE length END,
+             image_style = CASE WHEN ? != '' THEN ? ELSE image_style END,
+             key_details = CASE WHEN ? != '' THEN ? ELSE key_details END,
+             traffic_channel = CASE WHEN COALESCE(traffic_channel, '') = '' AND ? != '' THEN ? ELSE traffic_channel END,
+             traffic_source = CASE WHEN COALESCE(traffic_source, '') = '' AND ? != '' THEN ? ELSE traffic_source END,
+             traffic_medium = CASE WHEN COALESCE(traffic_medium, '') = '' AND ? != '' THEN ? ELSE traffic_medium END,
+             traffic_campaign = CASE WHEN COALESCE(traffic_campaign, '') = '' AND ? != '' THEN ? ELSE traffic_campaign END,
+             traffic_term = CASE WHEN COALESCE(traffic_term, '') = '' AND ? != '' THEN ? ELSE traffic_term END,
+             traffic_content = CASE WHEN COALESCE(traffic_content, '') = '' AND ? != '' THEN ? ELSE traffic_content END,
+             referrer_host = CASE WHEN COALESCE(referrer_host, '') = '' AND ? != '' THEN ? ELSE referrer_host END,
+             landing_path = CASE WHEN COALESCE(landing_path, '') = '' AND ? != '' THEN ? ELSE landing_path END,
+             had_gclid = CASE WHEN ? = 1 OR COALESCE(had_gclid, 0) = 1 THEN 1 ELSE COALESCE(had_gclid, 0) END
+         WHERE id = ?`,
+      )
+      .bind(
+        now,
+        details.recipientName || '',
+        details.occasion || '',
+        details.senderName || record.signature || '',
+        stats.photoUsed ? 1 : 0,
+        stats.photoUsed ? 1 : 0,
+        stats.photoCount,
+        stats.tone,
+        stats.tone,
+        stats.length,
+        stats.length,
+        stats.imageStyle,
+        stats.imageStyle,
+        stats.keyDetails,
+        stats.keyDetails,
+        stats.trafficChannel,
+        stats.trafficChannel,
+        stats.trafficSource,
+        stats.trafficSource,
+        stats.trafficMedium,
+        stats.trafficMedium,
+        stats.trafficCampaign,
+        stats.trafficCampaign,
+        stats.trafficTerm,
+        stats.trafficTerm,
+        stats.trafficContent,
+        stats.trafficContent,
+        stats.referrerHost,
+        stats.referrerHost,
+        stats.landingPath,
+        stats.landingPath,
+        stats.hadGclid ? 1 : 0,
+        record.id,
+      )
       .run()
   } else {
     await db
       .prepare(
-        `INSERT INTO cards (id, user_id, created_at, updated_at, status, recipient_name, occasion, sender_name)
-         VALUES (?, ?, ?, ?, 'created', ?, ?, ?)`,
+        `INSERT INTO cards (
+          id, user_id, created_at, updated_at, status, recipient_name, occasion, sender_name,
+          photo_used, photo_count, tone, length, image_style, key_details,
+          traffic_channel, traffic_source, traffic_medium, traffic_campaign, traffic_term, traffic_content,
+          referrer_host, landing_path, had_gclid
+         ) VALUES (?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -2215,6 +2348,21 @@ export const recordCreatedCard = async (env, { userId, phoneE164, record, replac
         details.recipientName || '',
         details.occasion || '',
         details.senderName || record.signature || '',
+        stats.photoUsed ? 1 : 0,
+        stats.photoCount,
+        stats.tone || null,
+        stats.length || null,
+        stats.imageStyle || null,
+        stats.keyDetails || null,
+        stats.trafficChannel || null,
+        stats.trafficSource || null,
+        stats.trafficMedium || null,
+        stats.trafficCampaign || null,
+        stats.trafficTerm || null,
+        stats.trafficContent || null,
+        stats.referrerHost || null,
+        stats.landingPath || null,
+        stats.hadGclid ? 1 : 0,
       )
       .run()
   }

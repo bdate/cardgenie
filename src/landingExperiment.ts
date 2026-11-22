@@ -37,6 +37,26 @@ export function readLandingAssignment(): LandingAssignment | null {
   } catch { return null }
 }
 
+// Opening the card page from the logo saves a blank draft. That visit should not
+// hide the welcome page the next time someone types the plain address.
+const formDraftHasWork = (raw: string | null) => {
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw)
+    const details = parsed?.details
+    const named = details && ['recipientName', 'recipientType', 'senderName', 'occasion', 'keyDetails']
+      .some(key => String(details[key] || '').trim())
+    const photos = Array.isArray(parsed?.referencePhotos) && parsed.referencePhotos.length > 0
+    const card = Boolean(parsed?.card || parsed?.cardId || parsed?.shareUrl)
+    const viewed = Boolean(parsed?.hasViewedFront || parsed?.hasViewedInside || parsed?.hasSentCurrentCard || parsed?.hasPrintedCurrentCard)
+    const destinations = Array.isArray(parsed?.deliveryDestinations) &&
+      parsed.deliveryDestinations.some((item: unknown) => String(item || '').trim())
+    return Boolean(named || photos || card || viewed || destinations)
+  } catch {
+    return true
+  }
+}
+
 export function shouldShowWelcome(): boolean {
   if (location.pathname !== '/' && location.pathname !== '/index.html') return false
   const query = new URLSearchParams(location.search)
@@ -49,9 +69,11 @@ export function shouldShowWelcome(): boolean {
   })
   if (specialLink) return false
   try {
-    const keys = ['cardGenieAccountSession', 'cardGenieFormDraft', 'cardGenieInterviewSession',
+    const keys = ['cardGenieAccountSession', 'cardGenieInterviewSession',
       'cardgenie.generationJob', 'cardGenieCheckoutResume', 'cardGenieWelcomeStarted']
-    return !keys.some(key => localStorage.getItem(key) || sessionStorage.getItem(key))
+    if (keys.some(key => localStorage.getItem(key) || sessionStorage.getItem(key))) return false
+    const draft = localStorage.getItem('cardGenieFormDraft') || sessionStorage.getItem('cardGenieFormDraft')
+    return !formDraftHasWork(draft)
   } catch { return false }
 }
 

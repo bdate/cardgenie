@@ -27,6 +27,7 @@ import {
   isAdminPhone,
   listTestimonials,
   recordCreatedCard,
+  ensureCardAnalyticsColumns,
   recordFailedDelivery,
   hideAccountCards,
   userCanAccessCard,
@@ -2924,6 +2925,25 @@ const handleSaveCard = async (request, env) => {
       revisionSource: 'save',
     })
     const saveAccount = await getRequestAccount(request, env)
+    let savePhotoCount = Math.max(
+      0,
+      Number(payload?.analytics?.photoCount) ||
+        (Array.isArray(payload?.referenceImages) ? payload.referenceImages.length : 0) ||
+        0,
+    )
+    if (savePhotoCount === 0) {
+      const inferred = await findRecentPhotoUsageFromHistory(env, {
+        cardId: record.id,
+        userId: saveAccount.userId,
+        phone: saveAccount.phone,
+        recipientName: record.details?.recipientName || payload?.details?.recipientName,
+        occasion: record.details?.occasion || payload?.details?.occasion,
+        aroundAt: record.createdAt || record.updatedAt,
+      })
+      if (inferred?.photoUsed) {
+        savePhotoCount = inferred.photoCount
+      }
+    }
     if (saveAccount.userId) {
       try {
         await recordCreatedCard(env, {
@@ -2931,6 +2951,11 @@ const handleSaveCard = async (request, env) => {
           phoneE164: saveAccount.phone,
           record,
           replacesCardId: payload?.replacesCardId,
+          analytics: {
+            ...(payload?.analytics && typeof payload.analytics === 'object' ? payload.analytics : {}),
+            photoCount: savePhotoCount,
+            photoUsed: savePhotoCount > 0 || payload?.analytics?.photoUsed === true,
+          },
         })
       } catch (accountError) {
         console.error('Unable to record created card for account.', accountError)
@@ -2951,6 +2976,7 @@ const handleSaveCard = async (request, env) => {
       ...saveAccount,
       cardId: record.id,
       details: payload?.details,
+      photoCount: savePhotoCount,
       message: record.card.message,
     })
 
@@ -4658,6 +4684,257 @@ const handleBackfillCoverThumbs = async (request, env) => {
   })
 }
 
+/** Best-effort fill of durable card analytics from history, live KV records, and recipients. */
+const handleBackfillCardAnalytics = async (request, env) => {
+  const denied = await requireAdminAccess(request, env)
+  if (denied) {
+    return denied
+  }
+  if (!env.ACCOUNT_DB) {
+    return jsonResponse(request, env, { error: 'Account database unavailable.' }, 503)
+  }
+
+  await ensureCardAnalyticsColumns(env.ACCOUNT_DB)
+  const body = (await readJson(request).catch(() => null)) || {}
+  const historyLimit = Math.min(1000, Math.max(1, Number(body.historyLimit) || 500))
+  const liveLimit = Math.min(500, Math.max(0, Number(body.liveLimit) || 200))
+  const repairPhotos = body.repairPhotos !== false
+  const stats = {
+    historyScanned: 0,
+    historyMatched: 0,
+    photoHints: 0,
+    cardsRepaired: 0,
+    photoNoCleared: 0,
+    liveScanned: 0,
+    liveMatched: 0,
+    recipientPhotoHints: 0,
+    updated: 0,
+  }
+
+  const patchCard = async (cardId, patch) => {
+    if (!isCardId(cardId)) return false
+    const existing = await env.ACCOUNT_DB.prepare(
+      `SELECT id, photo_used, photo_count, tone, length, image_style, key_details, traffic_channel FROM cards WHERE id = ?`,
+    )
+      .bind(cardId)
+      .first()
+    if (!existing) return false
+
+    const photoUsed =
+      patch.photoUsed === true || existing.photo_used === 1
+        ? 1
+        : patch.photoUsed === false && existing.photo_used === null
+          ? 0
+          : existing.photo_used
+    const photoCount = Math.max(Number(existing.photo_count) || 0, Number(patch.photoCount) || 0)
+    const tone = String(existing.tone || patch.tone || '').trim()
+    const lengthRaw = String(existing.length || patch.length || '')
+      .trim()
+      .toLowerCase()
+    const length = /long/.test(lengthRaw) ? 'long' : /short/.test(lengthRaw) ? 'short' : /medium/.test(lengthRaw) ? 'medium' : ''
+    const imageStyle = String(existing.image_style || patch.imageStyle || '').trim()
+    const keyDetails = String(existing.key_details || patch.keyDetails || '').trim()
+    const trafficChannel = String(existing.traffic_channel || patch.trafficChannel || '').trim()
+
+    await env.ACCOUNT_DB.prepare(
+      `UPDATE cards
+       SET photo_used = ?, photo_count = ?, tone = ?, length = ?, image_style = ?, key_details = ?,
+           traffic_channel = CASE WHEN COALESCE(traffic_channel, '') = '' AND ? != '' THEN ? ELSE traffic_channel END
+       WHERE id = ?`,
+    )
+      .bind(
+        photoUsed,
+        photoCount,
+        tone || null,
+        length || null,
+        imageStyle || null,
+        keyDetails || null,
+        trafficChannel,
+        trafficChannel,
+        cardId,
+      )
+      .run()
+    stats.updated += 1
+    return true
+  }
+
+  if (env.CARD_STORE) {
+    const photoHints = []
+    let cursor
+    do {
+      const page = await env.CARD_STORE.list({ prefix: CARD_HISTORY_PREFIX, limit: 100, cursor })
+      for (const key of page.keys || []) {
+        if (stats.historyScanned >= historyLimit) break
+        stats.historyScanned += 1
+        const entry = await env.CARD_STORE.get(key.name, 'json')
+        if (!entry) continue
+        const details = entry.details || {}
+        const photoCount = Number(entry.photoCount) || 0
+        const fromPhotos = photoCount > 0 || entry.peopleOnCover === 'from-photos'
+        if (fromPhotos) {
+          photoHints.push({
+            at: entry.at,
+            userId: entry.userId || '',
+            phone: entry.phone || '',
+            recipientName: details.recipientName || '',
+            occasion: details.occasion || '',
+            photoCount: Math.max(1, photoCount),
+            cardId: entry.cardId || '',
+          })
+        }
+        if (!entry.cardId || !isCardId(entry.cardId)) continue
+        stats.historyMatched += 1
+        await patchCard(entry.cardId, {
+          photoUsed: fromPhotos,
+          photoCount,
+          tone: details.tone,
+          length: details.length,
+          imageStyle: details.imageStyle,
+          keyDetails: details.keyDetails,
+        })
+      }
+      cursor =
+        page.list_complete || stats.historyScanned >= historyLimit ? undefined : page.cursor
+    } while (cursor)
+
+    // Generate events often lack cardId; attach photo hints to nearby matching cards.
+    if (photoHints.length) {
+      stats.photoHints = photoHints.length
+      for (const hint of photoHints.slice(0, 400)) {
+        if (hint.cardId && isCardId(hint.cardId)) {
+          await patchCard(hint.cardId, { photoUsed: true, photoCount: hint.photoCount })
+          continue
+        }
+        const recipient = normalizeHistoryMatchValue(hint.recipientName)
+        const occasion = normalizeHistoryMatchValue(hint.occasion)
+        if (!recipient) continue
+        const aroundMs = Date.parse(hint.at || '')
+        if (!Number.isFinite(aroundMs)) continue
+        try {
+          const candidates = await env.ACCOUNT_DB.prepare(
+            `SELECT id, created_at, occasion, photo_used FROM cards
+             WHERE lower(trim(recipient_name)) = ?
+             ORDER BY created_at DESC
+             LIMIT 12`,
+          )
+            .bind(recipient)
+            .all()
+          let best = null
+          let bestDelta = Infinity
+          for (const row of candidates.results || []) {
+            if (row.photo_used === 1) continue
+            const createdMs = Date.parse(row.created_at || '')
+            if (!Number.isFinite(createdMs)) continue
+            const delta = Math.abs(createdMs - aroundMs)
+            // Prefer same occasion within 24h; otherwise allow 2h recipient-only match.
+            const sameOccasion =
+              !occasion || normalizeHistoryMatchValue(row.occasion) === occasion
+            const windowMs = sameOccasion ? 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000
+            if (delta > windowMs) continue
+            if (delta < bestDelta) {
+              best = row
+              bestDelta = delta
+            }
+          }
+          if (best) {
+            await patchCard(best.id, { photoUsed: true, photoCount: hint.photoCount })
+            stats.historyMatched += 1
+          }
+        } catch (error) {
+          console.error('photo hint card match failed', error)
+        }
+      }
+    }
+
+    // Walk every card still missing a photo-yes and try history inference.
+    if (repairPhotos) {
+      try {
+        const unresolved = await env.ACCOUNT_DB.prepare(
+          `SELECT id, user_id, recipient_name, occasion, created_at, updated_at, photo_used, photo_count
+           FROM cards
+           WHERE photo_used IS NULL OR photo_used = 0
+           ORDER BY created_at DESC
+           LIMIT 500`,
+        ).all()
+        for (const row of unresolved.results || []) {
+          const inferred = await findRecentPhotoUsageFromHistory(env, {
+            cardId: row.id,
+            userId: row.user_id || '',
+            recipientName: row.recipient_name || '',
+            occasion: row.occasion || '',
+            aroundAt: row.created_at || row.updated_at,
+            windowMs: 24 * 60 * 60 * 1000,
+          })
+          if (inferred?.photoUsed) {
+            await patchCard(row.id, {
+              photoUsed: true,
+              photoCount: Math.max(Number(row.photo_count) || 0, inferred.photoCount),
+            })
+            stats.cardsRepaired += 1
+            continue
+          }
+          // A hard “No” without evidence is often wrong (save recorded 0 after a photo generate).
+          // Prefer Unknown over a false No when history cannot confirm either way.
+          if (row.photo_used === 0) {
+            await env.ACCOUNT_DB.prepare(`UPDATE cards SET photo_used = NULL WHERE id = ? AND photo_used = 0`)
+              .bind(row.id)
+              .run()
+            stats.photoNoCleared += 1
+          }
+        }
+      } catch (error) {
+        console.error('card photo repair pass failed', error)
+      }
+    }
+
+    let liveCursor
+    do {
+      const page = await env.CARD_STORE.list({ limit: 100, cursor: liveCursor })
+      for (const key of page.keys || []) {
+        if (stats.liveScanned >= liveLimit) break
+        if (!isCardStoreRecordKey(key.name)) continue
+        stats.liveScanned += 1
+        const record = await env.CARD_STORE.get(key.name, 'json')
+        if (!record?.id || !record?.details) continue
+        stats.liveMatched += 1
+        const editorDetails = record.editor?.details || {}
+        await patchCard(record.id, {
+          tone: record.details.tone || editorDetails.tone,
+          length: editorDetails.length || record.card?.selectedLength,
+          imageStyle: record.details.imageStyle || editorDetails.imageStyle,
+          keyDetails: record.details.keyDetails || editorDetails.keyDetails,
+        })
+      }
+      liveCursor = page.list_complete || stats.liveScanned >= liveLimit ? undefined : page.cursor
+    } while (liveCursor)
+  }
+
+  try {
+    const recipients = await env.ACCOUNT_DB.prepare(
+      `SELECT last_card_id, photo_count, tone, image_style, key_details
+       FROM recipients
+       WHERE last_card_id IS NOT NULL AND last_card_id != ''
+         AND (photo_count > 0 OR COALESCE(key_details, '') != '')
+       LIMIT 400`,
+    ).all()
+    for (const row of recipients.results || []) {
+      if (!isCardId(row.last_card_id)) continue
+      stats.recipientPhotoHints += 1
+      await patchCard(row.last_card_id, {
+        photoUsed: Number(row.photo_count) > 0 ? true : undefined,
+        photoCount: Number(row.photo_count) || 0,
+        tone: row.tone,
+        imageStyle: row.image_style,
+        keyDetails: row.key_details,
+      })
+    }
+  } catch (error) {
+    console.error('recipient analytics backfill failed', error)
+  }
+
+  return jsonResponse(request, env, { ok: true, ...stats })
+}
+
 const handleGetAccount = async (request, env) => {
   const session = await getAccountSession(env, readAccountToken(request))
   if (!session) {
@@ -4983,6 +5260,7 @@ const handleAdminGrantCredits = async (request, env) => {
   })
 }
 
+const feedbackCommentMinLength = 40
 const feedbackCommentMaxLength = 280
 const feedbackNameMaxLength = 80
 const feedbackSources = new Set(['post_send', 'account', 'footer', 'email_copy', 'email_print', 'email_followup'])
@@ -5139,8 +5417,13 @@ const handleCreateTestimonial = async (request, env) => {
     }
     rating = parsed
 
-    if (!comment) {
-      return jsonResponse(request, env, { error: 'Write a short review before sending.' }, 400)
+    if (comment.length < feedbackCommentMinLength) {
+      return jsonResponse(
+        request,
+        env,
+        { error: `Write at least ${feedbackCommentMinLength} characters.` },
+        400,
+      )
     }
 
     if (comment.length > feedbackCommentMaxLength) {
@@ -7720,6 +8003,71 @@ const getRequestAccount = async (request, env) => {
   }
 }
 
+const normalizeHistoryMatchValue = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+
+/** Generate history often has photos but no cardId yet; match by shopper + recipient near a timestamp. */
+const findRecentPhotoUsageFromHistory = async (
+  env,
+  { cardId = '', userId = '', phone = '', recipientName = '', occasion = '', aroundAt = '', windowMs = 45 * 60 * 1000 } = {},
+) => {
+  if (!env.CARD_STORE) {
+    return null
+  }
+  const aroundMs = aroundAt ? Date.parse(aroundAt) : Date.now()
+  if (!Number.isFinite(aroundMs)) {
+    return null
+  }
+  const wantRecipient = normalizeHistoryMatchValue(recipientName)
+  const wantOccasion = normalizeHistoryMatchValue(occasion)
+  let cursor
+  let scanned = 0
+  try {
+    do {
+      const page = await env.CARD_STORE.list({ prefix: CARD_HISTORY_PREFIX, limit: 100, cursor })
+      for (const key of page.keys || []) {
+        scanned += 1
+        const entry = await env.CARD_STORE.get(key.name, 'json')
+        if (!entry) continue
+        const photoCount = Number(entry.photoCount) || 0
+        const fromPhotos = photoCount > 0 || entry.peopleOnCover === 'from-photos'
+        if (!fromPhotos) continue
+
+        if (cardId && entry.cardId === cardId) {
+          return { photoUsed: true, photoCount: Math.max(1, photoCount) }
+        }
+
+        const entryAt = Date.parse(entry.at || '')
+        if (!Number.isFinite(entryAt) || Math.abs(entryAt - aroundMs) > windowMs) continue
+
+        // If history recorded a shopper id/phone, require a match. Otherwise fall back to recipient/time.
+        const entryHasShopper = Boolean(entry.userId || entry.phone)
+        if (entryHasShopper) {
+          const sameShopper =
+            (userId && entry.userId && entry.userId === userId) ||
+            (phone && entry.phone && entry.phone === phone)
+          if (!sameShopper) continue
+        }
+
+        const entryRecipient = normalizeHistoryMatchValue(entry.details?.recipientName)
+        const entryOccasion = normalizeHistoryMatchValue(entry.details?.occasion)
+        if (wantRecipient && entryRecipient && entryRecipient === wantRecipient) {
+          if (!wantOccasion || !entryOccasion || entryOccasion === wantOccasion) {
+            return { photoUsed: true, photoCount: Math.max(1, photoCount) }
+          }
+        }
+      }
+      cursor = page.list_complete || scanned >= 400 ? undefined : page.cursor
+    } while (cursor)
+  } catch (error) {
+    console.error('photo history match failed', error)
+  }
+  return null
+}
+
 const recordCardHistory = async (env, entry = {}, imageUrl = '') => {
   if (!env.CARD_STORE) {
     return
@@ -8600,6 +8948,243 @@ const handleAdminCardHistory = async (request, env) => {
   return jsonResponse(request, env, { ok: true, retentionDays: 7, count: entries.length, entries })
 }
 
+/** Admin cover gallery: every D1 card, latest first, with durable thumbs + optional inside text. */
+const handleAdminCardGallery = async (request, env) => {
+  const denied = await requireAdminAccess(request, env)
+  if (denied) {
+    return denied
+  }
+  if (!env.ACCOUNT_DB) {
+    return jsonResponse(request, env, { error: 'Account database unavailable.' }, 503)
+  }
+
+  const url = new URL(request.url)
+  const cardId = String(url.searchParams.get('id') || '').trim()
+
+  if (cardId) {
+    if (!isCardId(cardId)) {
+      return jsonResponse(request, env, { error: 'Invalid card id.' }, 400)
+    }
+
+    await ensureCardAnalyticsColumns(env.ACCOUNT_DB)
+    const row = await env.ACCOUNT_DB.prepare(
+      `SELECT id, user_id, created_at, updated_at, status, recipient_name, occasion, sender_name, credits_spent,
+              photo_used, photo_count, tone, length, image_style, key_details,
+              traffic_channel, traffic_source, traffic_medium, traffic_campaign, traffic_term, traffic_content,
+              referrer_host, landing_path, had_gclid
+       FROM cards WHERE id = ?`,
+    )
+      .bind(cardId)
+      .first()
+    if (!row) {
+      return jsonResponse(request, env, { error: 'Card not found.' }, 404)
+    }
+
+    const record = await getCardRecord(env, cardId)
+    const hasThumb = await hasCoverThumb(env, cardId).catch(() => false)
+    const hasFullCover = Boolean(record?.card?.imageUrl)
+    let sent = row.status === 'sent'
+    let sentVia = []
+    let sentRecipientCount = 0
+    try {
+      const deliveryRows = await env.ACCOUNT_DB.prepare(
+        `SELECT method, status
+         FROM deliveries
+         WHERE card_id = ? AND COALESCE(is_sender_copy, 0) = 0
+         ORDER BY created_at`,
+      )
+        .bind(cardId)
+        .all()
+      const sentDeliveries = (deliveryRows.results || []).filter((delivery) => delivery.status === 'sent')
+      sentRecipientCount = sentDeliveries.length
+      if (sentDeliveries.length) {
+        sent = true
+      }
+      const methods = new Set()
+      for (const delivery of sentDeliveries) {
+        const method = String(delivery.method || '').trim().toLowerCase()
+        if (method === 'text' || method === 'sms') methods.add('text')
+        else if (method === 'email') methods.add('email')
+      }
+      sentVia = [...methods]
+    } catch (error) {
+      console.error('card gallery delivery lookup failed', error)
+    }
+
+    let photoUsed = row.photo_used === null || row.photo_used === undefined ? null : Boolean(row.photo_used)
+    let photoCount = Math.max(0, Number(row.photo_count) || 0)
+    if (photoUsed !== true) {
+      try {
+        const inferred = await findRecentPhotoUsageFromHistory(env, {
+          cardId,
+          userId: row.user_id || '',
+          recipientName: row.recipient_name || '',
+          occasion: row.occasion || '',
+          aroundAt: row.created_at || row.updated_at,
+        })
+        if (inferred?.photoUsed) {
+          photoUsed = true
+          photoCount = Math.max(photoCount, inferred.photoCount)
+          // Repair durable row when history proves photos were used.
+          await env.ACCOUNT_DB.prepare(
+            `UPDATE cards SET photo_used = 1, photo_count = MAX(COALESCE(photo_count, 0), ?) WHERE id = ?`,
+          )
+            .bind(inferred.photoCount, cardId)
+            .run()
+            .catch(() => {})
+        } else if (photoUsed === null) {
+          photoUsed = null
+        }
+      } catch (error) {
+        console.error('card gallery photo history lookup failed', error)
+      }
+    }
+
+    let creditsUsed = Math.max(0, Number(row.credits_spent) || 0)
+    let creditsPurchased = 0
+    try {
+      if (row.user_id) {
+        const shopper = await env.ACCOUNT_DB.prepare(
+          `SELECT credits_purchased FROM users WHERE id = ?`,
+        )
+          .bind(row.user_id)
+          .first()
+        creditsPurchased = Math.max(0, Number(shopper?.credits_purchased) || 0)
+      }
+
+      let printCredits = 0
+      try {
+        const printRow = await env.ACCOUNT_DB.prepare(
+          `SELECT COALESCE(SUM(credit_cost), 0) AS n FROM print_orders WHERE card_id = ?`,
+        )
+          .bind(cardId)
+          .first()
+        printCredits = Math.max(0, Number(printRow?.n) || 0)
+      } catch {
+        printCredits = 0
+      }
+
+      let pendingScheduledCredits = 0
+      try {
+        const scheduledRow = await env.ACCOUNT_DB.prepare(
+          `SELECT COALESCE(SUM(credits_charged), 0) AS n
+           FROM scheduled_sends
+           WHERE card_id = ? AND status IN ('scheduled', 'claimed')`,
+        )
+          .bind(cardId)
+          .first()
+        pendingScheduledCredits = Math.max(0, Number(scheduledRow?.n) || 0)
+      } catch {
+        pendingScheduledCredits = 0
+      }
+
+      if (!creditsUsed) {
+        if (sentRecipientCount > 0) {
+          creditsUsed += getSendCreditCost(sentRecipientCount)
+        } else if (pendingScheduledCredits > 0) {
+          creditsUsed += pendingScheduledCredits
+        }
+        creditsUsed += printCredits
+      }
+    } catch (error) {
+      console.error('card gallery credits lookup failed', error)
+    }
+
+    return jsonResponse(request, env, {
+      ok: true,
+      card: {
+        id: row.id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        status: row.status,
+        recipientName: row.recipient_name || '',
+        occasion: row.occasion || '',
+        senderName: row.sender_name || '',
+        sent,
+        sentVia,
+        photoUsed,
+        photoCount,
+        tone: String(row.tone || record?.details?.tone || record?.editor?.details?.tone || '').trim(),
+        length: (() => {
+          const lengthRaw = String(
+            row.length || record?.editor?.details?.length || record?.card?.selectedLength || '',
+          )
+            .trim()
+            .toLowerCase()
+          return /long/.test(lengthRaw)
+            ? 'long'
+            : /short/.test(lengthRaw)
+              ? 'short'
+              : /medium/.test(lengthRaw)
+                ? 'medium'
+                : ''
+        })(),
+        imageStyle: String(row.image_style || record?.editor?.details?.imageStyle || '').trim(),
+        keyDetails: String(
+          row.key_details || record?.details?.keyDetails || record?.editor?.details?.keyDetails || '',
+        ).trim(),
+        trafficChannel: String(row.traffic_channel || '').trim(),
+        trafficSource: String(row.traffic_source || '').trim(),
+        trafficMedium: String(row.traffic_medium || '').trim(),
+        trafficCampaign: String(row.traffic_campaign || '').trim(),
+        trafficTerm: String(row.traffic_term || '').trim(),
+        trafficContent: String(row.traffic_content || '').trim(),
+        referrerHost: String(row.referrer_host || '').trim(),
+        landingPath: String(row.landing_path || '').trim(),
+        hadGclid: Boolean(row.had_gclid),
+        creditsUsed,
+        creditsPurchased,
+        coverThumbUrl: hasThumb ? getCoverThumbUrl(request, env, cardId) : '',
+        coverUrl: hasFullCover ? getEmailCoverUrl(request, env, cardId) : '',
+        hasFullCover,
+        recordAvailable: Boolean(record),
+        greeting: String(record?.greeting || '').trim(),
+        message: String(record?.card?.message || '').trim(),
+        closing: String(record?.card?.closing || '').trim(),
+        signature: String(record?.signature || '').trim(),
+        eventDetails: String(record?.card?.eventDetails || '').trim(),
+      },
+    })
+  }
+
+  const limit = Math.min(300, Math.max(1, Number(url.searchParams.get('limit')) || 200))
+  const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0)
+  const countRow = await env.ACCOUNT_DB.prepare(`SELECT COUNT(*) AS n FROM cards`).first()
+  const rows = await env.ACCOUNT_DB.prepare(
+    `SELECT id, created_at, status, recipient_name, occasion, sender_name
+     FROM cards
+     ORDER BY created_at DESC
+     LIMIT ? OFFSET ?`,
+  )
+    .bind(limit, offset)
+    .all()
+
+  const list = rows.results || []
+  const cards = []
+  for (let index = 0; index < list.length; index += 40) {
+    const batch = list.slice(index, index + 40)
+    const thumbs = await Promise.all(batch.map((row) => hasCoverThumb(env, row.id).catch(() => false)))
+    batch.forEach((row, thumbIndex) => {
+      cards.push({
+        id: row.id,
+        createdAt: row.created_at,
+        status: row.status,
+        recipientName: row.recipient_name || '',
+        occasion: row.occasion || '',
+        senderName: row.sender_name || '',
+        coverThumbUrl: thumbs[thumbIndex] ? getCoverThumbUrl(request, env, row.id) : '',
+      })
+    })
+  }
+
+  return jsonResponse(request, env, {
+    ok: true,
+    total: Number(countRow?.n) || cards.length,
+    count: cards.length,
+    cards,
+  })
+}
+
 /** Durable Chrome mic path: MediaRecorder chunks → Whisper (no SpeechRecognition restart). */
 const handleCardInterviewTranscribe = async (request, env) => {
   const missingKeyResponse = requireOpenAIKey(request, env)
@@ -8933,6 +9518,10 @@ const handleRequest = async (request, env, ctx) => {
     return handleBackfillCoverThumbs(request, env)
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/admin/backfill-card-analytics') {
+    return handleBackfillCardAnalytics(request, env)
+  }
+
   if (request.method === 'GET' && url.pathname === '/api/admin/metrics') {
     return handleGetAdminMetrics(request, env)
   }
@@ -9061,6 +9650,10 @@ const handleRequest = async (request, env, ctx) => {
 
   if (request.method === 'GET' && url.pathname === '/api/admin/card-history') {
     return handleAdminCardHistory(request, env)
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/card-gallery') {
+    return handleAdminCardGallery(request, env)
   }
 
   return jsonResponse(request, env, { error: 'Not found' }, 404)

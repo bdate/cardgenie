@@ -104,7 +104,7 @@ const faqPage = (faqs) => ({
   })),
 })
 
-const makeHref = (page) => `/?occasion=${encodeURIComponent(page.occasion)}`
+const makeHref = (page) => `/?create=1&occasion=${encodeURIComponent(page.occasion)}`
 const pageLabel = (page) => page.label || `${page.name} cards`
 
 const renderTypeGroups = (page) =>
@@ -118,7 +118,7 @@ ${page.typeGroups
     (group) => `        <div class="type-group">
           <h3>${esc(group.heading)}</h3>
           <div class="more">
-${group.types.map((type) => `            <a href="/?occasion=${encodeURIComponent(type)}">${esc(type)}</a>`).join('\n')}
+${group.types.map((type) => `            <a href="/?create=1&occasion=${encodeURIComponent(type)}">${esc(type)}</a>`).join('\n')}
           </div>
         </div>`,
   )
@@ -290,7 +290,7 @@ const renderHub = () => {
           Pick an occasion to see cards Card Genie has made, ideas for what to write, and answers to common questions.
           Don’t see yours? Card Genie makes a card for anything — just type the occasion when you start.
         </p>
-        <a class="cta" href="/">Make a card</a>
+        <a class="cta" href="/?create=1">Make a card</a>
       </section>
 
       <div class="hub">

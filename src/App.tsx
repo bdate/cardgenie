@@ -1,7 +1,8 @@
 import { readLandingAssignment, trackLanding } from './landingExperiment'
+import { captureTrafficAttribution, channelLabel, readTrafficAttribution } from './trafficAttribution'
 import './Welcome.css'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { buildOccasionSuggestions, homeOccasionLinks } from './occasions'
 import {
@@ -791,12 +792,33 @@ const referencePhotoMinEdge = 240
 const referencePhotoJpegQuality = 0.8
 const maxReferencePhotoDataUrlLength = 480000
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+// Local .env leaves this blank so dev uses the Express server. A production build must still call the Worker.
+const apiBaseUrl = (
+  import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://api.card-genie.com' : '')
+).replace(/\/$/, '')
 const loaderWishImageUrl = `${import.meta.env.BASE_URL}loader-wish.png`
 if (typeof window !== 'undefined') {
   new Image().src = loaderWishImageUrl
 }
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`
+
+const galleryImageStyleLabel = (value?: string) =>
+  String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' ')
+
+const galleryLengthLabel = (value?: string) => {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (/long/.test(raw)) return 'long'
+  if (/short/.test(raw)) return 'short'
+  if (/medium/.test(raw)) return 'medium'
+  return ''
+}
 
 const stopGenieSpeech = () => {
   if (typeof window === 'undefined') {
@@ -1227,6 +1249,7 @@ const rememberCardEditKey = (cardId: string, editKey: string) => {
 const preferredNamePromptStorageKey = (phoneE164: string) =>
   `cardGeniePreferredNamePrompt:${String(phoneE164 || '').trim()}`
 const feedbackDismissStorageKey = 'cardGenieFeedbackDismissed'
+const feedbackCommentMinLength = 40
 const feedbackCommentMaxLength = 280
 const thankYouPresets = [
   { id: 'thank_you', label: 'Thank you for the beautiful card!' },
@@ -1695,7 +1718,12 @@ const readStoredGenerationJob = () => {
       window.localStorage.getItem(generationJobStorageKey) ||
       window.sessionStorage.getItem(generationJobStorageKey)
     const parsed = raw
-      ? (JSON.parse(raw) as { jobId?: string; startedAt?: number; details?: CardDetails })
+      ? (JSON.parse(raw) as {
+          jobId?: string
+          startedAt?: number
+          details?: CardDetails
+          photoCount?: number
+        })
       : null
 
     if (parsed?.jobId) {
@@ -1703,6 +1731,7 @@ const readStoredGenerationJob = () => {
         jobId: parsed.jobId,
         startedAt: parsed.startedAt || Date.now(),
         details: parsed.details,
+        photoCount: Math.max(0, Number(parsed.photoCount) || 0),
       }
     }
   } catch {
@@ -1712,11 +1741,12 @@ const readStoredGenerationJob = () => {
   return null
 }
 
-const writeStoredGenerationJob = (jobId: string, cardDetails?: CardDetails) => {
+const writeStoredGenerationJob = (jobId: string, cardDetails?: CardDetails, photoCount = 0) => {
   const payload = JSON.stringify({
     jobId,
     startedAt: Date.now(),
     details: cardDetails || null,
+    photoCount: Math.max(0, Number(photoCount) || 0),
   })
 
   try {
@@ -1960,6 +1990,20 @@ const normalizeCardCopy = (message: string, closing: string | undefined, senderN
     closing: (closing || '').trim() || parts.closing,
   }
 }
+
+// The card saved on the server stays on the first suggestion until the card is sent.
+// A revised inside lives in this browser's draft, so a reload has to keep that wording.
+const cardCopyFromLocalOrServer = (
+  serverMessage: string,
+  serverClosing: string | undefined,
+  localCard: { message?: string; closing?: string } | null | undefined,
+  senderName: string,
+) =>
+  normalizeCardCopy(
+    localCard?.message?.trim() ? localCard.message : serverMessage,
+    localCard?.closing?.trim() ? localCard.closing : serverClosing,
+    senderName,
+  )
 
 const sanitizeFilePart = (value: string) =>
   value
@@ -3185,6 +3229,14 @@ function RecipientDateInput({ label, value, onChange }: { label: string; value: 
   )
 }
 
+function CoverBrandMark() {
+  return (
+    <span className="cover-brand-mark" aria-hidden="true">
+      card-genie.com
+    </span>
+  )
+}
+
 function App() {
   const sharedCardId = useMemo(() => getSharedCardId(), [])
   const isRecipientView = Boolean(sharedCardId)
@@ -3234,7 +3286,9 @@ function App() {
   const [showCreditMenu, setShowCreditMenu] = useState(false)
   const [showCreditDetails, setShowCreditDetails] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
-  const [adminView, setAdminView] = useState<'analytics' | 'reviews' | 'history' | 'shoppers' | 'artists' | null>(null)
+  const [adminView, setAdminView] = useState<
+    'analytics' | 'reviews' | 'history' | 'gallery' | 'shoppers' | 'artists' | null
+  >(null)
   const [artistPayouts, setArtistPayouts] = useState<ArtistPayoutReport | null>(null)
   const [artistPayoutQuarter, setArtistPayoutQuarter] = useState('')
   const [isLoadingArtistPayouts, setIsLoadingArtistPayouts] = useState(false)
@@ -3623,6 +3677,61 @@ function App() {
   const [cardHistoryNotice, setCardHistoryNotice] = useState('')
   const [expandedCardHistoryId, setExpandedCardHistoryId] = useState('')
   const [cardHistoryImageUrls, setCardHistoryImageUrls] = useState<Record<string, string>>({})
+  const [cardGalleryEntries, setCardGalleryEntries] = useState<
+    Array<{
+      id: string
+      createdAt: string
+      status: string
+      recipientName: string
+      occasion: string
+      senderName: string
+      coverThumbUrl?: string
+    }>
+  >([])
+  const [cardGalleryTotal, setCardGalleryTotal] = useState(0)
+  const [isLoadingCardGallery, setIsLoadingCardGallery] = useState(false)
+  const [cardGalleryNotice, setCardGalleryNotice] = useState('')
+  const [selectedGalleryCardId, setSelectedGalleryCardId] = useState('')
+  const [galleryDetail, setGalleryDetail] = useState<{
+    id: string
+    createdAt: string
+    status: string
+    recipientName: string
+    occasion: string
+    senderName: string
+    sent?: boolean
+    sentVia?: Array<'text' | 'email' | string>
+    photoUsed?: boolean | null
+    photoCount?: number
+    tone?: string
+    length?: string
+    imageStyle?: string
+    keyDetails?: string
+    trafficChannel?: string
+    trafficSource?: string
+    trafficMedium?: string
+    trafficCampaign?: string
+    trafficTerm?: string
+    trafficContent?: string
+    referrerHost?: string
+    landingPath?: string
+    hadGclid?: boolean
+    creditsUsed?: number
+    creditsPurchased?: number
+    coverThumbUrl?: string
+    coverUrl?: string
+    hasFullCover?: boolean
+    recordAvailable?: boolean
+    greeting?: string
+    message?: string
+    closing?: string
+    signature?: string
+    eventDetails?: string
+  } | null>(null)
+  const [isLoadingGalleryDetail, setIsLoadingGalleryDetail] = useState(false)
+  const [galleryCoverFailed, setGalleryCoverFailed] = useState(false)
+  const gallerySwipeStartRef = useRef<{ x: number; y: number } | null>(null)
+  const lastGeneratePhotoCountRef = useRef(0)
   const [adminGrantPhone, setAdminGrantPhone] = useState('')
   const [adminGrantCredits, setAdminGrantCredits] = useState('20')
   const [adminGrantNotice, setAdminGrantNotice] = useState('')
@@ -3951,6 +4060,10 @@ function App() {
   }
 
   useEffect(() => {
+    captureTrafficAttribution()
+  }, [])
+
+  useEffect(() => {
     if (!contactOpen) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeContact()
@@ -4194,9 +4307,12 @@ function App() {
           headers: { Authorization: `Bearer ${parsed.token}` },
         })
         if (!response.ok) {
-          if (isLocalApiDev) {
-            window.localStorage.removeItem(accountSessionStorageKey)
-            setAccountSession(null)
+          // Server session expired/missing — don't keep a fake "Signed in" state.
+          window.localStorage.removeItem(accountSessionStorageKey)
+          setAccountSession(null)
+          setAccountHistory(null)
+          if (parsed.phoneE164) {
+            setAccountPhone(formatPhoneNumberDisplay(parsed.phoneE164))
           }
           return
         }
@@ -4518,9 +4634,10 @@ function App() {
             restoredShared = isLocalApiDev
               ? { ...shared, shareUrl: localShareUrl(shared.id) }
               : shared
-            const copy = normalizeCardCopy(
+            const copy = cardCopyFromLocalOrServer(
               shared.card.message,
               shared.card.closing,
+              draft?.card,
               shared.details.senderName || draft?.details.senderName || 'Your Name',
             )
             restoredCard = {
@@ -4694,9 +4811,10 @@ function App() {
             restoredShared = isLocalApiDev
               ? { ...shared, shareUrl: localShareUrl(shared.id) }
               : shared
-            const copy = normalizeCardCopy(
+            const copy = cardCopyFromLocalOrServer(
               shared.card.message,
               shared.card.closing,
+              resume.card,
               shared.details.senderName || resume.details.senderName || 'Your Name',
             )
             restoredCard = {
@@ -5095,6 +5213,9 @@ function App() {
         ...current,
         ...stored.details,
       }))
+    }
+    if (stored.photoCount > 0) {
+      lastGeneratePhotoCountRef.current = Math.max(lastGeneratePhotoCountRef.current, stored.photoCount)
     }
 
     const signatureName = stored.details?.senderName?.trim() || 'Your Name'
@@ -7600,6 +7721,30 @@ function App() {
   const shopperCardActivityItems = useMemo(() => buildCardActivityItems(shopperHistory), [shopperHistory])
   const shopperPrintOrderItems = useMemo(() => buildPrintOrderItems(shopperHistory), [shopperHistory])
 
+  const clearStaleAccountSession = (phoneE164 = '') => {
+    const phone =
+      phoneE164 ||
+      accountSession?.phoneE164 ||
+      accountPhone ||
+      ''
+    window.localStorage.removeItem(accountSessionStorageKey)
+    setAccountSession(null)
+    setAccountHistory(null)
+    if (phone) {
+      setAccountPhone(formatPhoneNumberDisplay(phone))
+    }
+    setAccountCode('')
+    setAccountCodeSentTo('')
+  }
+
+  const beginAccountReconfirm = (phoneE164 = '') => {
+    clearStaleAccountSession(phoneE164)
+    setShowAccountPage(true)
+    setAdminView(null)
+    setAccountHistoryError('Confirm your mobile number to see your account.')
+    focusFieldAfterRender('.account-gate input[type="tel"]')
+  }
+
   const loadAccountHistory = async (token: string) => {
     setIsLoadingAccountHistory(true)
     setAccountHistoryError('')
@@ -7609,6 +7754,13 @@ function App() {
       })
       const data = await getApiJson(response, 'Unable to load your account.')
       if (!response.ok) {
+        if (response.status === 401) {
+          const phone = accountSession?.phoneE164 || accountPhone
+          clearStaleAccountSession(phone)
+          setAccountHistoryError('Confirm your mobile number to see your account.')
+          focusFieldAfterRender('.account-gate input[type="tel"]')
+          return
+        }
         throw new Error(data.error || 'Unable to load your account.')
       }
       setAccountHistory(data)
@@ -8138,6 +8290,164 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
     await loadCardHistory(accountSession.token)
   }
+
+  const loadCardGallery = async (token: string) => {
+    setIsLoadingCardGallery(true)
+    setCardGalleryNotice('')
+    try {
+      const response = await fetch(apiUrl('/api/admin/card-gallery?limit=300'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load card gallery.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load card gallery.')
+      }
+      setCardGalleryEntries(Array.isArray(data.cards) ? data.cards : [])
+      setCardGalleryTotal(Number(data.total) || 0)
+    } catch (caughtError) {
+      setCardGalleryEntries([])
+      setCardGalleryTotal(0)
+      setCardGalleryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load card gallery.')
+    } finally {
+      setIsLoadingCardGallery(false)
+    }
+  }
+
+  const openAdminCardGallery = async () => {
+    if (!accountSession?.token || !isAdmin) {
+      return
+    }
+    setShowAccountPage(false)
+    setAdminView('gallery')
+    setShowCreditMenu(false)
+    setSelectedGalleryCardId('')
+    setGalleryDetail(null)
+    setGalleryCoverFailed(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    await loadCardGallery(accountSession.token)
+  }
+
+  const loadGalleryDetail = async (cardId: string, token: string) => {
+    setIsLoadingGalleryDetail(true)
+    setGalleryCoverFailed(false)
+    setGalleryDetail(null)
+    try {
+      const response = await fetch(apiUrl(`/api/admin/card-gallery?id=${encodeURIComponent(cardId)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await getApiJson(response, 'Unable to load this card.')
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load this card.')
+      }
+      setGalleryDetail(data.card || null)
+    } catch (caughtError) {
+      setGalleryDetail(null)
+      setCardGalleryNotice(caughtError instanceof Error ? caughtError.message : 'Unable to load this card.')
+    } finally {
+      setIsLoadingGalleryDetail(false)
+    }
+  }
+
+  const openGalleryCard = (cardId: string) => {
+    if (!accountSession?.token || !cardId) {
+      return
+    }
+    setSelectedGalleryCardId(cardId)
+    void loadGalleryDetail(cardId, accountSession.token)
+  }
+
+  const closeGalleryCard = () => {
+    setSelectedGalleryCardId('')
+    setGalleryDetail(null)
+    setGalleryCoverFailed(false)
+    setIsLoadingGalleryDetail(false)
+  }
+
+  const shiftGalleryCard = (delta: number) => {
+    if (!selectedGalleryCardId || cardGalleryEntries.length === 0) {
+      return
+    }
+    const index = cardGalleryEntries.findIndex((entry) => entry.id === selectedGalleryCardId)
+    if (index < 0) {
+      return
+    }
+    const next = cardGalleryEntries[index + delta]
+    if (next) {
+      openGalleryCard(next.id)
+    }
+  }
+
+  const galleryLightboxIndex = selectedGalleryCardId
+    ? cardGalleryEntries.findIndex((entry) => entry.id === selectedGalleryCardId)
+    : -1
+
+  const renderGalleryLightboxToolbar = () => (
+    <div className="admin-gallery-lightbox-toolbar">
+      <button
+        className="text-action-link"
+        type="button"
+        disabled={galleryLightboxIndex <= 0}
+        onClick={() => shiftGalleryCard(-1)}
+      >
+        Newer
+      </button>
+      <button
+        className="text-action-link"
+        type="button"
+        disabled={galleryLightboxIndex < 0 || galleryLightboxIndex >= cardGalleryEntries.length - 1}
+        onClick={() => shiftGalleryCard(1)}
+      >
+        Older
+      </button>
+      <button className="secondary-button" type="button" onClick={closeGalleryCard}>
+        Close
+      </button>
+    </div>
+  )
+
+  const onGalleryLightboxTouchStart = (event: ReactTouchEvent) => {
+    const touch = event.changedTouches[0] || event.touches[0]
+    if (!touch) {
+      return
+    }
+    gallerySwipeStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  const onGalleryLightboxTouchEnd = (event: ReactTouchEvent) => {
+    const start = gallerySwipeStartRef.current
+    gallerySwipeStartRef.current = null
+    if (!start) {
+      return
+    }
+    const touch = event.changedTouches[0]
+    if (!touch) {
+      return
+    }
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.15) {
+      return
+    }
+    // Swipe left → older; swipe right → newer
+    shiftGalleryCard(dx < 0 ? 1 : -1)
+  }
+
+  useEffect(() => {
+    if (adminView !== 'gallery' || !selectedGalleryCardId) {
+      return
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeGalleryCard()
+      } else if (event.key === 'ArrowLeft') {
+        shiftGalleryCard(-1)
+      } else if (event.key === 'ArrowRight') {
+        shiftGalleryCard(1)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const selectCardHistoryKind = async (kind: typeof cardHistoryKind) => {
     setCardHistoryKind(kind)
@@ -8689,6 +8999,7 @@ function App() {
       })
 
     let startedBackgroundJob = false
+    lastGeneratePhotoCountRef.current = referencePhotos.length
 
     try {
       const response = await fetch(apiUrl('/api/generate-card'), {
@@ -8700,6 +9011,11 @@ function App() {
         body: JSON.stringify({
           ...details,
           referenceImages: referenceImagePayload,
+          analytics: {
+            attribution: readTrafficAttribution(),
+            photoCount: referencePhotos.length,
+            photoUsed: referencePhotos.length > 0,
+          },
         }),
       })
 
@@ -8711,7 +9027,7 @@ function App() {
 
       if (data.jobId) {
         startedBackgroundJob = true
-        writeStoredGenerationJob(data.jobId, details)
+        writeStoredGenerationJob(data.jobId, details, referencePhotos.length)
         await followGenerationJob(data.jobId, senderLabel)
         return
       }
@@ -9099,6 +9415,22 @@ function App() {
     } finally {
       setIsPreparingAdminPrintFiles(false)
     }
+  }
+
+  const saveCurrentPrintInside = async () => {
+    const insideUrl = await buildPrintInsideImageUrl({
+      greeting: insideGreeting,
+      paragraphs: messageParagraphs,
+      closing: cardClosing,
+      signature: cardSignatureLabel,
+      density: messageDensity,
+    })
+    if (!insideUrl) {
+      setAdminPrintNotice('Unable to prepare the print inside file.')
+      return
+    }
+    setAdminPrintFiles((current) => (current ? { ...current, insideUrl } : current))
+    await saveImageToDevice(insideUrl, printInsideDownloadName, 'Print inside')
   }
 
   const updatePrintAddressField = (
@@ -9851,8 +10183,8 @@ function App() {
       setFeedbackNotice('Please choose a star rating.')
       return
     }
-    if (!comment) {
-      setFeedbackNotice('Write a short review before sending.')
+    if (comment.length < feedbackCommentMinLength) {
+      setFeedbackNotice(`Write at least ${feedbackCommentMinLength} characters.`)
       return
     }
     if (comment.length > feedbackCommentMaxLength) {
@@ -9991,10 +10323,12 @@ function App() {
             onChange={(event) => setFeedbackComment(event.target.value.slice(0, feedbackCommentMaxLength))}
             placeholder="What worked well? What could be better?"
             rows={3}
+            minLength={feedbackCommentMinLength}
             maxLength={feedbackCommentMaxLength}
           />
           <small>
             {feedbackComment.length}/{feedbackCommentMaxLength}
+            <span className="feedback-length-note">At least {feedbackCommentMinLength} characters.</span>
           </small>
         </label>
         {feedbackNotice && <div className="field-notice">{feedbackNotice}</div>}
@@ -10325,6 +10659,11 @@ function App() {
         ...(replacesCardId ? { replacesCardId } : {}),
         ...(coverThumb ? { coverThumb } : {}),
         ...(isCoverStillAnimated ? { keepCoverVideo: true } : {}),
+        analytics: {
+          attribution: readTrafficAttribution(),
+          photoCount: Math.max(referencePhotos.length, lastGeneratePhotoCountRef.current),
+          photoUsed: Math.max(referencePhotos.length, lastGeneratePhotoCountRef.current) > 0,
+        },
       }),
     })
     const data = await getApiJson(response, 'Unable to save the card for delivery.')
@@ -11255,7 +11594,7 @@ function App() {
       )}
       <section className="hero-section">
         {isRecipientView ? (
-          <a className="brand brand-split" href="/" aria-label="Card Genie home">
+          <a className="brand brand-split" href="/?create=1" aria-label="Card Genie home">
             <img
               className="brand-mark"
               src={`${import.meta.env.BASE_URL}logo-mark.png`}
@@ -11284,7 +11623,7 @@ function App() {
               />
             </button>
             <h1 className="brand-heading">
-              <a className="brand-wordmark-link" href="/" aria-label="Card Genie home">
+              <a className="brand-wordmark-link" href="/?create=1" aria-label="Card Genie home">
                 <span className="brand-wordmark">Card Genie</span>
               </a>
               <span className="field-label-hidden"> – personalized digital greeting cards with custom artwork</span>
@@ -11580,7 +11919,22 @@ function App() {
                       placeholder="(925) 555-1234"
                     />
                   </label>
-                  {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+                  {accountHistoryError && (
+                    <div className="field-notice">
+                      {/confirm your mobile number/i.test(accountHistoryError) ? (
+                        <button
+                          className="text-action-link field-notice-action"
+                          type="button"
+                          disabled={isSendingAccountCode || !accountPhone.trim()}
+                          onClick={() => void requestAccountCode()}
+                        >
+                          {accountHistoryError}
+                        </button>
+                      ) : (
+                        accountHistoryError
+                      )}
+                    </div>
+                  )}
                   <button
                     className="primary-button"
                     type="submit"
@@ -11597,7 +11951,21 @@ function App() {
             </form>
           )}
           {isLoadingAccountHistory && <p>Loading your account...</p>}
-          {accountSession && accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
+          {accountSession && accountHistoryError && (
+            <div className="field-notice">
+              {/confirm your mobile number/i.test(accountHistoryError) ? (
+                <button
+                  className="text-action-link field-notice-action"
+                  type="button"
+                  onClick={() => beginAccountReconfirm(accountSession.phoneE164)}
+                >
+                  {accountHistoryError}
+                </button>
+              ) : (
+                accountHistoryError
+              )}
+            </div>
+          )}
           {accountSession && accountHistory && (
             <>
               {isAdmin && (
@@ -11612,6 +11980,9 @@ function App() {
                     </button>
                     <button className="text-action-link" type="button" onClick={() => void openAdminCardHistory()}>
                       Card history
+                    </button>
+                    <button className="text-action-link" type="button" onClick={() => void openAdminCardGallery()}>
+                      Cover gallery
                     </button>
                     <button className="text-action-link" type="button" onClick={() => void openAdminShoppers()}>
                       Shopper Orders
@@ -12314,6 +12685,7 @@ function App() {
                           )}
                           {item.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">
+                              <span className="cover-mark-frame">
                               <img
                                 src={item.coverThumbUrl}
                                 alt=""
@@ -12325,6 +12697,8 @@ function App() {
                                   setActiveCoverThumbId((current) => (current === item.id ? null : current))
                                 }}
                               />
+                              <CoverBrandMark />
+                              </span>
                             </span>
                           ) : null}
                         </div>
@@ -12449,6 +12823,7 @@ function App() {
                           </span>
                           {order.coverThumbUrl ? (
                             <span className="account-row-thumb" aria-hidden="true">
+                              <span className="cover-mark-frame">
                               <img
                                 src={order.coverThumbUrl}
                                 alt=""
@@ -12460,6 +12835,8 @@ function App() {
                                   setActiveCoverThumbId((current) => (current === order.id ? null : current))
                                 }}
                               />
+                              <CoverBrandMark />
+                              </span>
                             </span>
                           ) : null}
                         </div>
@@ -13219,6 +13596,255 @@ function App() {
         </section>
       )}
 
+      {adminView === 'gallery' && isAdmin && !isRecipientView && (
+        <section className="account-page admin-page" aria-label="Cover gallery">
+          <div className="panel-heading">
+            <div>
+              <h2>Cover gallery</h2>
+              <p>
+                All {cardGalleryTotal || cardGalleryEntries.length} cards created so far, newest first. Tap a cover for
+                the large view and inside text.
+              </p>
+            </div>
+            <div className="admin-page-actions">
+              <button
+                className="text-action-link"
+                type="button"
+                disabled={isLoadingCardGallery || !accountSession?.token}
+                aria-busy={isLoadingCardGallery}
+                onClick={() => accountSession?.token && void loadCardGallery(accountSession.token)}
+              >
+                {isLoadingCardGallery ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button className="secondary-button account-back" type="button" onClick={closeAdminView}>
+                Back to account
+              </button>
+            </div>
+          </div>
+          <div className="account-block">
+            {cardGalleryNotice && <div className="field-notice">{cardGalleryNotice}</div>}
+            {isLoadingCardGallery && cardGalleryEntries.length === 0 ? (
+              <p>Loading covers...</p>
+            ) : cardGalleryEntries.length === 0 ? (
+              <p>No cards found yet.</p>
+            ) : (
+              <div className="admin-gallery-grid">
+                {cardGalleryEntries.map((entry) => {
+                  const label = [entry.recipientName, entry.occasion].filter(Boolean).join(' · ') || 'Card cover'
+                  return (
+                    <button
+                      key={entry.id}
+                      className="admin-gallery-tile"
+                      type="button"
+                      onClick={() => openGalleryCard(entry.id)}
+                      aria-label={`Open ${label}`}
+                    >
+                      {entry.coverThumbUrl ? (
+                        <span className="cover-mark-frame">
+                          <img src={entry.coverThumbUrl} alt="" loading="lazy" />
+                          <CoverBrandMark />
+                        </span>
+                      ) : (
+                        <span className="admin-gallery-missing">No cover</span>
+                      )}
+                      <span className="admin-gallery-caption">
+                        <strong>{entry.recipientName || 'Unknown'}</strong>
+                        <span>{formatAccountDate(entry.createdAt)}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          {selectedGalleryCardId && (
+            <div
+              className="admin-gallery-lightbox-backdrop"
+              role="presentation"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeGalleryCard()
+                }
+              }}
+            >
+              <div
+                className="admin-gallery-lightbox"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Card cover and inside text"
+                onTouchStart={onGalleryLightboxTouchStart}
+                onTouchEnd={onGalleryLightboxTouchEnd}
+                onTouchCancel={() => {
+                  gallerySwipeStartRef.current = null
+                }}
+              >
+                {renderGalleryLightboxToolbar()}
+                {isLoadingGalleryDetail ? (
+                  <p className="admin-gallery-lightbox-loading">
+                    <span className="admin-gallery-spinner" aria-hidden="true" />
+                    Loading card…
+                  </p>
+                ) : galleryDetail ? (
+                  <div className="admin-gallery-lightbox-body">
+                    <div className="admin-gallery-lightbox-cover">
+                      {galleryDetail.coverUrl || galleryDetail.coverThumbUrl ? (
+                        <span className="cover-mark-frame">
+                          <img
+                            src={
+                              galleryCoverFailed || !galleryDetail.coverUrl
+                                ? galleryDetail.coverThumbUrl || galleryDetail.coverUrl
+                                : galleryDetail.coverUrl
+                            }
+                            alt=""
+                            onError={() => {
+                              if (!galleryCoverFailed && galleryDetail.coverUrl && galleryDetail.coverThumbUrl) {
+                                setGalleryCoverFailed(true)
+                              }
+                            }}
+                          />
+                          <CoverBrandMark />
+                        </span>
+                      ) : (
+                        <p>No cover image available.</p>
+                      )}
+                      {(!galleryDetail.hasFullCover || galleryCoverFailed) && galleryDetail.coverThumbUrl ? (
+                        <p className="admin-gallery-lightbox-note">Showing saved thumbnail — full cover has expired.</p>
+                      ) : null}
+                    </div>
+                    <div className="admin-gallery-lightbox-copy">
+                      <h3>
+                        {galleryDetail.recipientName || 'Unknown recipient'}
+                        {galleryDetail.occasion ? ` · ${galleryDetail.occasion}` : ''}
+                      </h3>
+                      <p className="admin-gallery-lightbox-meta">
+                        {galleryDetail.senderName ? `From ${galleryDetail.senderName} · ` : ''}
+                        {formatAccountDate(galleryDetail.createdAt)}
+                      </p>
+                      <dl className="admin-gallery-facts">
+                        <div>
+                          <dt>Card sent</dt>
+                          <dd>{galleryDetail.sent ? 'Yes' : 'No'}</dd>
+                        </div>
+                        <div>
+                          <dt>Sent via</dt>
+                          <dd>
+                            {galleryDetail.sent
+                              ? (galleryDetail.sentVia || [])
+                                  .map((method) => (method === 'text' ? 'Text' : method === 'email' ? 'Email' : method))
+                                  .join(' · ') || 'Unknown'
+                              : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Photo used</dt>
+                          <dd>
+                            {galleryDetail.photoUsed === true
+                              ? galleryDetail.photoCount && galleryDetail.photoCount > 1
+                                ? `Yes (${galleryDetail.photoCount})`
+                                : 'Yes'
+                              : galleryDetail.photoUsed === false
+                                ? 'No'
+                                : 'Unknown'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Came from</dt>
+                          <dd>{channelLabel(galleryDetail.trafficChannel) || 'Unknown'}</dd>
+                        </div>
+                        {(galleryDetail.trafficSource ||
+                          galleryDetail.trafficMedium ||
+                          galleryDetail.trafficCampaign ||
+                          galleryDetail.trafficTerm ||
+                          galleryDetail.referrerHost) && (
+                          <div>
+                            <dt>Campaign</dt>
+                            <dd>
+                              {[
+                                galleryDetail.trafficSource,
+                                galleryDetail.trafficMedium,
+                                galleryDetail.trafficCampaign,
+                                galleryDetail.trafficTerm ? `term: ${galleryDetail.trafficTerm}` : '',
+                                galleryDetail.referrerHost ? `ref: ${galleryDetail.referrerHost}` : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </dd>
+                          </div>
+                        )}
+                        {galleryDetail.tone ? (
+                          <div>
+                            <dt>Tone</dt>
+                            <dd>{galleryDetail.tone}</dd>
+                          </div>
+                        ) : null}
+                        {galleryImageStyleLabel(galleryDetail.imageStyle) ? (
+                          <div>
+                            <dt>Image style</dt>
+                            <dd>{galleryImageStyleLabel(galleryDetail.imageStyle)}</dd>
+                          </div>
+                        ) : null}
+                        {galleryLengthLabel(galleryDetail.length) ? (
+                          <div>
+                            <dt>Length</dt>
+                            <dd>{galleryLengthLabel(galleryDetail.length)}</dd>
+                          </div>
+                        ) : null}
+                        <div className="admin-gallery-facts-wide">
+                          <dt>Shopper Notes</dt>
+                          <dd>{galleryDetail.keyDetails?.trim() || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt>Credits used</dt>
+                          <dd>{Number.isFinite(galleryDetail.creditsUsed) ? galleryDetail.creditsUsed : '—'}</dd>
+                        </div>
+                        <div>
+                          <dt>Credits purchased</dt>
+                          <dd>
+                            {Number.isFinite(galleryDetail.creditsPurchased) ? galleryDetail.creditsPurchased : '—'}
+                          </dd>
+                        </div>
+                      </dl>
+                      {galleryDetail.recordAvailable ? (
+                        <div className="admin-gallery-inside">
+                          {galleryDetail.greeting ? <p className="admin-gallery-greeting">{galleryDetail.greeting}</p> : null}
+                          {galleryDetail.message
+                            ? galleryDetail.message.split(/\n+/).map((paragraph, index) => (
+                                <p key={`${galleryDetail.id}-p-${index}`}>{paragraph}</p>
+                              ))
+                            : (
+                              <p className="admin-gallery-lightbox-note">No inside message stored on this card.</p>
+                            )}
+                          {galleryDetail.eventDetails ? (
+                            <pre className="admin-gallery-event-details">{galleryDetail.eventDetails}</pre>
+                          ) : null}
+                          {galleryDetail.closing || galleryDetail.signature ? (
+                            <p className="admin-gallery-signoff">
+                              {galleryDetail.closing ? (
+                                <>
+                                  {galleryDetail.closing}
+                                  <br />
+                                </>
+                              ) : null}
+                              {galleryDetail.signature || null}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="admin-gallery-lightbox-note">
+                          Inside text is only available while the live card record is still stored (about 30 days).
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p>Unable to load this card.</p>
+                )}
+                {renderGalleryLightboxToolbar()}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
       {adminView === 'history' && isAdmin && !isRecipientView && (
         <section className="account-page admin-page" aria-label="Card history">
           <div className="panel-heading">
@@ -13316,9 +13942,9 @@ function App() {
                     ['From', entry.details.senderName],
                     ['Occasion', entry.details.occasion],
                     ['Tone', entry.details.tone],
-                    ['Length', entry.details.length],
-                    ['Image style', entry.details.imageStyle || 'AI chooses'],
-                    ['Personal details', entry.details.keyDetails],
+                    ['Length', galleryLengthLabel(entry.details.length) || entry.details.length],
+                    ['Image style', galleryImageStyleLabel(entry.details.imageStyle) || 'AI chooses'],
+                    ['What should the card say or show', entry.details.keyDetails],
                     ['Change requested', entry.refinement],
                     ['Photos uploaded', entry.photoCount ? String(entry.photoCount) : 'None'],
                     ['Phone', entry.phone],
@@ -13749,7 +14375,10 @@ function App() {
                           ) : null}
                           {order.coverThumbUrl && activeCoverThumbId === order.id ? (
                             <span className="admin-print-thumb">
-                              <img src={order.coverThumbUrl} alt={`Order ${order.orderCode} cover`} loading="lazy" />
+                              <span className="cover-mark-frame">
+                                <img src={order.coverThumbUrl} alt={`Order ${order.orderCode} cover`} loading="lazy" />
+                                <CoverBrandMark />
+                              </span>
                             </span>
                           ) : null}
                         </div>
@@ -14668,6 +15297,7 @@ function App() {
                         <div className="card-sleeve">
                           <div className={coverPreviewClass('sleeve-card')}>
                             <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
+                            <CoverBrandMark />
                           </div>
                         </div>
                         <div className="envelope-pocket" />
@@ -14730,6 +15360,7 @@ function App() {
                     ) : (
                       <img src={card.imageUrl} alt={`Front of card for ${recipientLabel}`} />
                     )}
+                    <CoverBrandMark />
                   </div>
                 </button>
               )}
@@ -14749,6 +15380,7 @@ function App() {
                     </div>
                     <div className={coverPreviewClass('card-opening-cover')}>
                       <img src={card.imageUrl} alt={`Opening card cover for ${recipientLabel}`} />
+                      <CoverBrandMark />
                     </div>
                   </div>
                 </div>
@@ -15656,13 +16288,7 @@ function App() {
                         <button
                           className="text-action-link"
                           type="button"
-                          onClick={() =>
-                            void saveImageToDevice(
-                              adminPrintFiles.insideUrl,
-                              printInsideDownloadName,
-                              'Print inside',
-                            )
-                          }
+                          onClick={() => void saveCurrentPrintInside()}
                         >
                           {printInsideSaveLabel}
                         </button>
@@ -15961,6 +16587,7 @@ function App() {
                     >
                       <span className={coverPreviewClass('editor-cover-thumb')}>
                         <img src={card.imageUrl} alt="" />
+                        <CoverBrandMark />
                       </span>
                       <span>Cover</span>
                     </button>
@@ -15981,9 +16608,11 @@ function App() {
                           <div className="image-zoom">
                             <div className={coverPreviewClass('card-cover-frame editor-cover-frame')}>
                               <img src={card.imageUrl} alt={`Cover preview for ${recipientLabel}`} />
+                              <CoverBrandMark />
                             </div>
                             <div className={coverPreviewClass('image-zoom-popover')} aria-hidden="true">
                               <img src={card.imageUrl} alt="" />
+                              <CoverBrandMark />
                             </div>
                           </div>
                           {showCoverWatermark ? (

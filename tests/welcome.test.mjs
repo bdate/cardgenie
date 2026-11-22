@@ -31,11 +31,17 @@ test('welcome protects recipient links, checkout returns, account links, saved d
   assert.equal(client.shouldShowWelcome(), true)
   locationAt('/?gad_source=1&gad_campaignid=24392343745&gclid=ad&card=private')
   assert.equal(client.shouldShowWelcome(), false)
-  for (const key of ['cardGenieAccountSession', 'cardGenieFormDraft', 'cardGenieInterviewSession',
+  for (const key of ['cardGenieAccountSession', 'cardGenieInterviewSession',
     'cardgenie.generationJob', 'cardGenieCheckoutResume', 'cardGenieWelcomeStarted']) {
     localStorage.setItem(key, '{}'); assert.equal(client.shouldShowWelcome(), false, key); localStorage.clear()
     sessionStorage.setItem(key, '{}'); assert.equal(client.shouldShowWelcome(), false, key); sessionStorage.clear()
   }
+  locationAt('/')
+  localStorage.setItem('cardGenieFormDraft', JSON.stringify({ details: { tone: 'Heartfelt', keyDetails: '' } }))
+  assert.equal(client.shouldShowWelcome(), true)
+  localStorage.setItem('cardGenieFormDraft', JSON.stringify({ details: { recipientName: 'Jamie' } }))
+  assert.equal(client.shouldShowWelcome(), false)
+  localStorage.clear()
 })
 
 test('assignment persists, separates paid traffic, rejects expired or malformed identities', () => {
