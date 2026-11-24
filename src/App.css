@@ -3899,6 +3899,7 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.delivery-panel .account-gate .primary-button,
 .account-gate .primary-button {
   width: 100%;
 }
@@ -3910,6 +3911,18 @@ textarea:focus {
   gap: 8px;
   margin: 0;
   color: var(--muted, #6b7d7a);
+}
+
+@media (max-width: 430px) {
+  .account-gate-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .account-gate-links > span {
+    display: none;
+  }
 }
 
 .account-gate-back {

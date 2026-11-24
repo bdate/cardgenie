@@ -4226,6 +4226,22 @@ function App() {
   const compactFirstSend = firstSendLayout && !showMoreSendOptions
   const afterSendChoice =
     Boolean(card) && hasSentCurrentCard && !showAnotherSend && printOrderStep === 'closed' && !isRecipientView
+  const sendDestinationEntries = (compactFirstSend ? deliveryDestinations.slice(0, 1) : deliveryDestinations)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  const sendDestinationsReady =
+    sendDestinationEntries.length > 0 &&
+    sendDestinationEntries.every((entry) =>
+      deliveryMethod === 'email' ? validateEmailAddress(entry).ok : validatePhoneNumber(entry).ok,
+    )
+  const sendCopyReady =
+    !showSenderCopyField || !senderCopyEmail.trim() || validateEmailAddress(senderCopyEmail).ok
+  const sendScheduleReady =
+    sendTiming !== 'later' || !scheduleTimeProblem(parseLocalSchedule(scheduleDate, scheduleTime))
+  const sendTextReady = deliveryMethod !== 'text' || (Boolean(textSenderName.trim()) && smsConsentConfirmed)
+  const sendReady = sendDestinationsReady && sendCopyReady && sendScheduleReady && sendTextReady
+  const accountPhoneReady = validatePhoneNumber(accountPhone).ok
+  const accountCodeReady = /^\d{6}$/.test(accountCode.trim())
   // Counts the send form as seen only once it's actually scrolled into view.
   useEffect(() => {
     if (!sendFormVisible || typeof IntersectionObserver === 'undefined') return
@@ -11123,11 +11139,12 @@ function App() {
       setAccountCodeSentTo(sentTo)
       trackLanding('code_requested')
       focusFieldAfterRender('.account-gate input[autocomplete="one-time-code"]')
-      const notice = data.message || 'We texted you a 6-digit code.'
       if (showAccountPage) {
         setAccountHistoryError(resent ? 'We texted you a new code.' : '')
+      } else if (resent) {
+        setDeliveryNotice('We texted you a new code.')
       } else {
-        setDeliveryNotice(notice)
+        setDeliveryNotice('')
       }
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Unable to send a sign-in code.'
@@ -11484,16 +11501,12 @@ function App() {
     if (!accountTokenRef.current) {
       pendingSendAfterAuthRef.current = true
       setSendAuthOpen(true)
-      if (accountCodeSentTo && /^\d{6}$/.test(accountCode.trim())) {
-        void verifyAccountCode()
-        return
-      }
-      if (accountPhone.trim()) {
-        void requestAccountCode()
-        return
-      }
-      setDeliveryNotice('Enter your mobile number. We’ll text you a code, then send the card.')
-      focusFieldAfterRender('.account-gate input[type="tel"]')
+      setDeliveryNotice('')
+      focusFieldAfterRender(
+        accountCodeSentTo
+          ? '.account-gate input[autocomplete="one-time-code"]'
+          : '.account-gate input[type="tel"]',
+      )
       return
     }
 
@@ -11969,14 +11982,16 @@ function App() {
                     />
                   </label>
                   {accountHistoryError && <div className="field-notice">{accountHistoryError}</div>}
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={isVerifyingAccountCode || accountCode.trim().length !== 6}
-                    aria-busy={isVerifyingAccountCode}
-                  >
-                    {isVerifyingAccountCode ? 'Checking…' : 'Sign in'}
-                  </button>
+                  {(isVerifyingAccountCode || accountCode.trim().length === 6) && (
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={isVerifyingAccountCode}
+                      aria-busy={isVerifyingAccountCode}
+                    >
+                      {isVerifyingAccountCode ? 'Checking…' : 'Sign in'}
+                    </button>
+                  )}
                   <p className="account-gate-links">
                     <button
                       className="text-action-link"
@@ -12035,14 +12050,16 @@ function App() {
                       )}
                     </div>
                   )}
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={isSendingAccountCode || !accountPhone.trim()}
-                    aria-busy={isSendingAccountCode}
-                  >
-                    {isSendingAccountCode ? 'Sending code…' : 'Text me a code'}
-                  </button>
+                  {(isSendingAccountCode || validatePhoneNumber(accountPhone).ok) && (
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={isSendingAccountCode}
+                      aria-busy={isSendingAccountCode}
+                    >
+                      {isSendingAccountCode ? 'Sending code…' : 'Text me a code'}
+                    </button>
+                  )}
                 </>
               )}
               <button className="text-action-link account-gate-back" type="button" onClick={() => setShowAccountPage(false)}>
@@ -16219,7 +16236,7 @@ function App() {
                 )}
                 </>
                 )}
-                {deliveryMethod === 'text' && (
+                {deliveryMethod === 'text' && sendDestinationsReady && (
                   <>
                     <label className="sms-sender-name">
                       Your name
@@ -16235,34 +16252,38 @@ function App() {
                       />
                       <span className="field-help">Shown in the text and signed on the card.</span>
                     </label>
-                    <div className="sms-preview">
-                      <span className="field-title">Text preview</span>
-                      <p className="sms-preview-bubble">{smsPreviewText}</p>
-                      <p className="field-help">
-                        A first text from Card Genie starts with “Welcome to Card Genie card texts!”
-                      </p>
-                    </div>
-                    <label className="sms-consent">
-                      <input
-                        type="checkbox"
-                        checked={smsConsentConfirmed}
-                        onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
-                      />
-                      <span>
-                        I authorize Card Genie to deliver this one-time card notification on my behalf to the{' '}
-                        {plannedRecipientCount > 1 ? 'numbers' : 'number'} provided. Message frequency: 1 msg/card. Msg
-                        & data rates may apply. Reply STOP to cancel, HELP for help.
-                        <span className="sms-consent-links">
-                          <a href="/privacy/index.html" target="_blank" rel="noreferrer">
-                            Privacy Policy
-                          </a>
-                          {' · '}
-                          <a href="/terms/index.html" target="_blank" rel="noreferrer">
-                            Terms of Service
-                          </a>
-                        </span>
-                      </span>
-                    </label>
+                    {textSenderName.trim() && (
+                      <>
+                        <div className="sms-preview">
+                          <span className="field-title">Text preview</span>
+                          <p className="sms-preview-bubble">{smsPreviewText}</p>
+                          <p className="field-help">
+                            A first text from Card Genie starts with “Welcome to Card Genie card texts!”
+                          </p>
+                        </div>
+                        <label className="sms-consent">
+                          <input
+                            type="checkbox"
+                            checked={smsConsentConfirmed}
+                            onChange={(event) => setSmsConsentConfirmed(event.target.checked)}
+                          />
+                          <span>
+                            I authorize Card Genie to deliver this one-time card notification on my behalf to the{' '}
+                            {plannedRecipientCount > 1 ? 'numbers' : 'number'} provided. Message frequency: 1 msg/card. Msg
+                            & data rates may apply. Reply STOP to cancel, HELP for help.
+                            <span className="sms-consent-links">
+                              <a href="/privacy/index.html" target="_blank" rel="noreferrer">
+                                Privacy Policy
+                              </a>
+                              {' · '}
+                              <a href="/terms/index.html" target="_blank" rel="noreferrer">
+                                Terms of Service
+                              </a>
+                            </span>
+                          </span>
+                        </label>
+                      </>
+                    )}
                   </>
                 )}
                 {!compactFirstSend && (
@@ -16350,54 +16371,90 @@ function App() {
                 {!accountSession && sendAuthOpen && (
                   <div className="account-gate">
                     <span className="field-title">Confirm your number to send</span>
-                    <p className="field-help">We’ll text a code to this number, then send the card.</p>
-                    <label>
-                      Mobile number
-                      <input
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        value={accountPhone}
-                        onChange={(event) => {
-                          setAccountPhone(event.target.value)
-                          if (event.target.value.trim()) trackLanding('confirm_opened')
-                        }}
-                        placeholder="(925) 555-1234"
-                      />
-                    </label>
-                    <div className="account-code-row">
-                      <label>
-                        Text code
-                        <input
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          value={accountCode}
-                          onChange={(event) => setAccountCode(event.target.value)}
-                          placeholder="6-digit code"
-                        />
-                      </label>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={isSendingAccountCode}
-                        aria-busy={isSendingAccountCode}
-                        onClick={() => void requestAccountCode()}
-                      >
-                        {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
-                      </button>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={isVerifyingAccountCode || !accountCode.trim()}
-                        aria-busy={isVerifyingAccountCode}
-                        onClick={() => void verifyAccountCode()}
-                      >
-                        {isVerifyingAccountCode ? 'Checking...' : 'Confirm and send'}
-                      </button>
-                    </div>
+                    {accountCodeSentTo ? (
+                      <>
+                        <p className="field-help">
+                          We texted a code to <strong>{accountCodeSentTo}</strong>.
+                        </p>
+                        <label>
+                          Text code
+                          <input
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            value={accountCode}
+                            onChange={(event) => setAccountCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="6-digit code"
+                          />
+                        </label>
+                        {(isVerifyingAccountCode || accountCodeReady) && (
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={isVerifyingAccountCode}
+                            aria-busy={isVerifyingAccountCode}
+                            onClick={() => void verifyAccountCode()}
+                          >
+                            {isVerifyingAccountCode ? 'Checking...' : 'Confirm and send'}
+                          </button>
+                        )}
+                        <p className="account-gate-links">
+                          <button
+                            className="text-action-link"
+                            type="button"
+                            disabled={isSendingAccountCode}
+                            aria-busy={isSendingAccountCode}
+                            onClick={() => void requestAccountCode()}
+                          >
+                            {isSendingAccountCode ? 'Sending...' : 'Resend code'}
+                          </button>
+                          <span aria-hidden="true">·</span>
+                          <button
+                            className="text-action-link"
+                            type="button"
+                            onClick={() => {
+                              setAccountCodeSentTo('')
+                              setAccountCode('')
+                              setDeliveryNotice('')
+                              focusFieldAfterRender('.account-gate input[type="tel"]')
+                            }}
+                          >
+                            Use a different number
+                          </button>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <label>
+                          Mobile number
+                          <input
+                            type="tel"
+                            inputMode="tel"
+                            autoComplete="tel"
+                            value={accountPhone}
+                            onChange={(event) => {
+                              setAccountPhone(event.target.value)
+                              if (event.target.value.trim()) trackLanding('confirm_opened')
+                            }}
+                            placeholder="(925) 555-1234"
+                          />
+                        </label>
+                        {(isSendingAccountCode || accountPhoneReady) && (
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={isSendingAccountCode}
+                            aria-busy={isSendingAccountCode}
+                            onClick={() => void requestAccountCode()}
+                          >
+                            {isSendingAccountCode ? 'Sending code...' : 'Text me a code'}
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
-                {!sendAuthOpen && (
+                {!sendAuthOpen && (sendReady || isDelivering) && (
                 <div className="credit-action-block">
                   {hasSentCurrentCard && lastSentNotice && sentButtonLabel?.key !== 'deliver' && !isDelivering && (
                     <p className="last-sent-hint" role="status">
@@ -16417,7 +16474,7 @@ function App() {
                     aria-busy={isDelivering}
                   >
                     {!accountSession && !hasSentCurrentCard
-                      ? 'Send this card free'
+                      ? 'Send this card for free!'
                       : sentButtonLabel?.key === 'deliver'
                       ? sentButtonLabel.label
                       : isDelivering
