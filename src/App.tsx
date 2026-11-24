@@ -458,7 +458,6 @@ const styleSampleFiles: Record<string, string> = {
   'Vintage greeting card illustration': 'style-vintage.webp',
 }
 const initialCreditBalance = 2
-const phoneVerifyBonusCredits = 2
 const creditStorageKey = 'cardGenieCredits'
 const formDraftStorageKey = 'cardGenieFormDraft'
 const welcomeHandoffStorageKey = 'cardGenieWelcomeHandoff'
@@ -3591,6 +3590,13 @@ function App() {
   )
   const [senderCopyEmail, setSenderCopyEmail] = useState(() => initialFormDraft?.senderCopyEmail || '')
   const [sendTiming, setSendTiming] = useState<'now' | 'later'>('now')
+  const [sendAuthOpen, setSendAuthOpen] = useState(false)
+  const [showMoreSendOptions, setShowMoreSendOptions] = useState(false)
+  const [showAnotherSend, setShowAnotherSend] = useState(false)
+  const pendingSendAfterAuthRef = useRef(false)
+  const accountTokenRef = useRef('')
+  const creditsRef = useRef(0)
+  const deliveryFormRef = useRef<HTMLFormElement>(null)
   const [scheduleDate, setScheduleDate] = useState(() => toDateInputValue(defaultScheduleDate()))
   const [scheduleTime, setScheduleTime] = useState(() => toTimeInputValue(defaultScheduleDate()))
   const [smsConsentConfirmed, setSmsConsentConfirmed] = useState(
@@ -4214,6 +4220,12 @@ function App() {
               : 'get-ready'
   const showSendActions = step === 'front' || step === 'inside'
   const sendFormVisible = showSendActions && Boolean(card) && !isRecipientView
+  accountTokenRef.current = accountSession?.token || ''
+  creditsRef.current = credits
+  const firstSendLayout = Boolean(card) && !hasSentCurrentCard && !isRecipientView
+  const compactFirstSend = firstSendLayout && !showMoreSendOptions
+  const afterSendChoice =
+    Boolean(card) && hasSentCurrentCard && !showAnotherSend && printOrderStep === 'closed' && !isRecipientView
   // Counts the send form as seen only once it's actually scrolled into view.
   useEffect(() => {
     if (!sendFormVisible || typeof IntersectionObserver === 'undefined') return
@@ -6524,6 +6536,10 @@ function App() {
     setDeliveryLogs([])
     setHasSentCurrentCard(false)
     setHasPrintedCurrentCard(false)
+    setSendAuthOpen(false)
+    setShowMoreSendOptions(false)
+    setShowAnotherSend(false)
+    pendingSendAfterAuthRef.current = false
     setDeliveryMethod('email')
     setDeliveryDestinations([''])
     setShowSenderCopyField(false)
@@ -7436,6 +7452,7 @@ function App() {
 
   const rememberCredits = (nextCredits: number) => {
     const balance = Math.max(0, nextCredits)
+    creditsRef.current = balance
     setCredits(balance)
     window.localStorage.setItem(creditStorageKey, String(balance))
     return balance
@@ -9518,10 +9535,29 @@ function App() {
     }
     setPrintOrderStep('ship-to')
     setPrintOrderNotice('')
+    setShowAnotherSend(false)
     focusFieldAfterRender(firstEmptyField('.print-order-panel'))
     window.setTimeout(() => {
       document.querySelector('.print-order-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
+  }
+
+  const offerAnotherSend = () => {
+    if (creditsRef.current >= sendCreditCostSingle) {
+      setShowAnotherSend(true)
+      setDeliveryNotice('')
+      focusFieldAfterRender('.delivery-recipient-field input')
+      return
+    }
+    void buyCreditPack(creditPacks[0])
+  }
+
+  const offerPrintedCard = () => {
+    if (creditsRef.current >= printCardCreditCost) {
+      openPrintOrder()
+      return
+    }
+    void buyCreditPack(creditPacks[0])
   }
 
   useEffect(() => {
@@ -10865,6 +10901,7 @@ function App() {
     preferredName?: string
     mailingAddress?: MailingAddress | null
   }) => {
+    accountTokenRef.current = session.token
     setAccountSession(session)
     window.localStorage.setItem(
       accountSessionStorageKey,
@@ -11163,11 +11200,22 @@ function App() {
         trackFunnelConversion('account_created')
       }
       const bonusCredits = Number(data.phoneVerifyBonusCredits) || 0
+      const continueSend = pendingSendAfterAuthRef.current
+      if (continueSend) {
+        pendingSendAfterAuthRef.current = false
+        setSendAuthOpen(false)
+      }
       const registrationMessage =
         data.isNew && bonusCredits > 0
           ? `Your number is confirmed. We added ${bonusCredits} credits for registering.`
           : data.message || 'Your number is confirmed. You can send the card.'
-      if (signingInFromAccount) {
+      if (continueSend && !signingInFromAccount) {
+        setDeliveryNotice('')
+        if (data.isNew && bonusCredits > 0) {
+          setCreditNotice(`+${bonusCredits} credits for confirming your mobile number.`)
+        }
+        window.setTimeout(() => deliveryFormRef.current?.requestSubmit(), 0)
+      } else if (signingInFromAccount) {
         setAccountHistoryError('')
         setCreditNotice(registrationMessage)
         await loadAccountHistory(token)
@@ -11310,6 +11358,9 @@ function App() {
       setDeliveryNotice(notice)
       setLastSentNotice(`Scheduled for ${when}.`)
       setHasSentCurrentCard(true)
+      setSendAuthOpen(false)
+      setShowAnotherSend(false)
+      pendingSendAfterAuthRef.current = false
       resetDeliveryDestinations()
       setSendTiming('now')
       flashSentButton('deliver', `✓ Scheduled for ${when}`)
@@ -11346,7 +11397,9 @@ function App() {
       return
     }
 
-    const rawEntries = deliveryDestinations.map((entry) => entry.trim()).filter(Boolean)
+    const rawEntries = (compactFirstSend ? deliveryDestinations.slice(0, 1) : deliveryDestinations)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
 
     if (!rawEntries.length) {
       setDeliveryNotice(
@@ -11428,14 +11481,25 @@ function App() {
       setSenderCopyEmail(validatedSenderCopy.value)
     }
 
-    if (!accountSession?.token) {
-      setDeliveryNotice('Confirm your mobile number before sending. We’ll text you a one-time code.')
+    if (!accountTokenRef.current) {
+      pendingSendAfterAuthRef.current = true
+      setSendAuthOpen(true)
+      if (accountCodeSentTo && /^\d{6}$/.test(accountCode.trim())) {
+        void verifyAccountCode()
+        return
+      }
+      if (accountPhone.trim()) {
+        void requestAccountCode()
+        return
+      }
+      setDeliveryNotice('Enter your mobile number. We’ll text you a code, then send the card.')
+      focusFieldAfterRender('.account-gate input[type="tel"]')
       return
     }
 
     const sendCost = getSendCreditCost(validatedDestinations.length)
 
-    if (credits < sendCost) {
+    if (creditsRef.current < sendCost) {
       promptNeedCredits(
         `You need ${sendCost} credits to send to ${validatedDestinations.length} recipient${
           validatedDestinations.length === 1 ? '' : 's'
@@ -11451,7 +11515,7 @@ function App() {
         destinations: validatedDestinations.map((entry) => entry.value),
         senderCopyValue,
         sendCost,
-        token: accountSession.token,
+        token: accountTokenRef.current,
       })
       return
     }
@@ -11468,7 +11532,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accountSession.token}`,
+          Authorization: `Bearer ${accountTokenRef.current}`,
         },
         body: JSON.stringify({
           cardId: shared.id,
@@ -11578,6 +11642,9 @@ function App() {
       }
       resetDeliveryDestinations()
       setHasSentCurrentCard(true)
+      setSendAuthOpen(false)
+      setShowAnotherSend(false)
+      pendingSendAfterAuthRef.current = false
       if (deliveredCount > 0) {
         void loadSavedRecipients()
         flashSentButton(
@@ -15841,7 +15908,7 @@ function App() {
                       Revise card again
                     </button>
                   ) : (
-                    <button className="primary-button" type="button" onClick={openEditor}>
+                    <button className="text-action-link" type="button" onClick={openEditor}>
                       Revise card
                     </button>
                   )}
@@ -15850,9 +15917,34 @@ function App() {
                   </button>
                 </div>
               )}
-              {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form className="delivery-panel" onSubmit={deliverCard}>
+              {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form
+                ref={deliveryFormRef}
+                className={`delivery-panel${compactFirstSend ? ' is-first-send' : ''}${afterSendChoice ? ' is-after-send' : ''}`}
+                onSubmit={deliverCard}
+              >
+                {afterSendChoice ? (
+                  <div className="after-send-offers">
+                    <span className="delivery-kicker">Card sent</span>
+                    <p>{lastSentNotice || 'Your card is on its way.'}</p>
+                    <div className="after-send-actions">
+                      <button className="primary-button" type="button" onClick={offerAnotherSend}>
+                        {credits >= sendCreditCostSingle ? 'Send it to someone else' : 'Send it to someone else · $5'}
+                      </button>
+                      <button className="secondary-button" type="button" onClick={offerPrintedCard}>
+                        Mail a printed card · ${printCardPriceUsd}
+                      </button>
+                    </div>
+                    {credits < printCardCreditCost && (
+                      <p className="field-help">
+                        $5 adds 10 credits.
+                        <span className="after-send-pack">Another send uses 3. A printed card uses 10.</span>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                <>
                 <div>
-                  <span className="delivery-kicker">Ready to send this card</span>
+                  <span className="delivery-kicker">{compactFirstSend ? 'Send this card' : 'Ready to send this card'}</span>
                 </div>
                 <div className="mode-toggle delivery-methods choice-radios" role="radiogroup" aria-label="Delivery method">
                   <button
@@ -15890,8 +15982,20 @@ function App() {
                     Text
                   </button>
                 </div>
+                {compactFirstSend && (
+                  <button
+                    className="text-action-link delivery-more-options"
+                    type="button"
+                    onClick={() => setShowMoreSendOptions(true)}
+                  >
+                    More ways to send
+                  </button>
+                )}
                 <div className="delivery-recipients">
                   {deliveryDestinations.map((destination, index) => {
+                    if (compactFirstSend && index > 0) {
+                      return null
+                    }
                     const destinationSuggestions =
                       destinationSuggestField === index ? getDestinationSuggestions(index) : []
                     const destinationListOpen = destinationSuggestions.length > 0
@@ -16045,7 +16149,7 @@ function App() {
                     </label>
                     )
                   })}
-                  {deliveryDestinations.length < maxDeliveryRecipients && (
+                  {!compactFirstSend && deliveryDestinations.length < maxDeliveryRecipients && (
                     <button
                       className="text-action-link delivery-add-recipient"
                       type="button"
@@ -16060,6 +16164,8 @@ function App() {
                     </button>
                   )}
                 </div>
+                {!compactFirstSend && (
+                <>
                 <label className="sender-copy">
                   <input
                     type="checkbox"
@@ -16110,6 +16216,8 @@ function App() {
                     />
                   </label>
                 )}
+                </>
+                )}
                 {deliveryMethod === 'text' && (
                   <>
                     <label className="sms-sender-name">
@@ -16156,6 +16264,7 @@ function App() {
                     </label>
                   </>
                 )}
+                {!compactFirstSend && (
                 <div className="send-timing">
                   <div className="mode-toggle choice-radios send-timing-toggle" role="radiogroup" aria-label="When to send">
                     <button
@@ -16231,17 +16340,16 @@ function App() {
                     </div>
                   )}
                 </div>
-                {accountSession ? (
+                )}
+                {accountSession && !compactFirstSend ? (
                   <p className="account-confirmed">
                     ✓ Phone confirmed: {formatPhoneNumberDisplay(accountSession.phoneE164).replace(/^\+1 /, '')}
                   </p>
-                ) : (
+                ) : null}
+                {!accountSession && sendAuthOpen && (
                   <div className="account-gate">
                     <span className="field-title">Confirm your number to send</span>
-                    <p className="field-help">
-                      Your first send is free. We’ll text you a one-time code, and new accounts get{' '}
-                      {phoneVerifyBonusCredits} extra credits when you confirm.
-                    </p>
+                    <p className="field-help">We’ll text a code to this number, then send the card.</p>
                     <label>
                       Mobile number
                       <input
@@ -16283,11 +16391,12 @@ function App() {
                         aria-busy={isVerifyingAccountCode}
                         onClick={() => void verifyAccountCode()}
                       >
-                        {isVerifyingAccountCode ? 'Checking...' : 'Confirm number'}
+                        {isVerifyingAccountCode ? 'Checking...' : 'Confirm and send'}
                       </button>
                     </div>
                   </div>
                 )}
+                {!sendAuthOpen && (
                 <div className="credit-action-block">
                   {hasSentCurrentCard && lastSentNotice && sentButtonLabel?.key !== 'deliver' && !isDelivering && (
                     <p className="last-sent-hint" role="status">
@@ -16302,12 +16411,13 @@ function App() {
                     disabled={
                       isDelivering ||
                       sentButtonLabel?.key === 'deliver' ||
-                      !accountSession ||
                       (deliveryMethod === 'text' && !smsConsentConfirmed)
                     }
                     aria-busy={isDelivering}
                   >
-                    {sentButtonLabel?.key === 'deliver'
+                    {!accountSession && !hasSentCurrentCard
+                      ? 'Send this card free'
+                      : sentButtonLabel?.key === 'deliver'
                       ? sentButtonLabel.label
                       : isDelivering
                       ? sendTiming === 'later'
@@ -16338,8 +16448,11 @@ function App() {
                           ? `Send to ${plannedRecipientCount} · ${currentSendCreditCost} credits`
                           : `Send by ${deliveryMethod === 'email' ? 'email' : 'text'} · ${currentSendCreditCost} credits`}
                   </button>
-                  {renderCreditsLeft()}
+                  {!compactFirstSend && renderCreditsLeft()}
                 </div>
+                )}
+                </>
+                )}
                 {sharedCard && isAdmin && (
                   <a className="share-link" href={sharedCard.shareUrl} target="_blank" rel="noreferrer">
                     Open shareable card link
@@ -16440,7 +16553,7 @@ function App() {
                   </div>
                 )}
               </form>}
-              {showSendActions && !isRecipientView && !showEditor && (
+              {showSendActions && !isRecipientView && !showEditor && !afterSendChoice && (!firstSendLayout || showMoreSendOptions) && (
                 <section className="print-order-panel" aria-label="Mail a printed card">
                   {printOrderStep === 'closed' ? (
                     <div className="print-order-intro">

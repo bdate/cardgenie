@@ -3305,6 +3305,52 @@ textarea:focus {
   font-size: 0.92rem;
 }
 
+.preview-panel:has(.delivery-panel.is-first-send),
+.preview-panel:has(.delivery-panel.is-after-send) {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-panel:has(.delivery-panel.is-first-send) > .delivery-panel,
+.preview-panel:has(.delivery-panel.is-after-send) > .delivery-panel {
+  order: 1;
+}
+
+.preview-panel:has(.delivery-panel.is-first-send) > .revise-actions,
+.preview-panel:has(.delivery-panel.is-after-send) > .revise-actions {
+  order: 2;
+}
+
+.preview-panel:has(.delivery-panel.is-first-send) > .print-order-panel,
+.preview-panel:has(.delivery-panel.is-after-send) > .print-order-panel {
+  order: 3;
+}
+
+.after-send-offers {
+  display: grid;
+  gap: 12px;
+}
+
+.after-send-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.after-send-actions .primary-button,
+.after-send-actions .secondary-button {
+  width: auto;
+}
+
+.after-send-pack {
+  display: block;
+  margin-top: 4px;
+}
+
+.delivery-more-options {
+  justify-self: start;
+}
+
 .delivery-panel {
   display: grid;
   gap: 14px;
