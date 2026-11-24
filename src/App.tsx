@@ -15937,7 +15937,8 @@ function App() {
                     {credits < printCardCreditCost && (
                       <p className="field-help">
                         $5 adds 10 credits.
-                        <span className="after-send-pack">Another send uses 3. A printed card uses 10.</span>
+                        <span className="after-send-pack">Another send uses 3.</span>
+                        <span className="after-send-pack">A printed card uses 10.</span>
                       </p>
                     )}
                   </div>
