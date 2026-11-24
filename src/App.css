@@ -3342,6 +3342,32 @@ textarea:focus {
   width: auto;
 }
 
+.after-send-actions.is-toggle .primary-button,
+.after-send-actions.is-toggle .secondary-button,
+.delivery-panel .after-send-actions.is-toggle .primary-button,
+.print-order-panel .after-send-actions.is-toggle .primary-button {
+  flex: 1 1 220px;
+  width: auto;
+}
+
+.after-send-actions.is-toggle .secondary-button {
+  border: 1px solid rgba(63, 155, 145, 0.45);
+}
+
+@media (max-width: 560px) {
+  .after-send-actions.is-toggle {
+    flex-direction: column;
+  }
+
+  .after-send-actions.is-toggle .primary-button,
+  .after-send-actions.is-toggle .secondary-button,
+  .delivery-panel .after-send-actions.is-toggle .primary-button,
+  .print-order-panel .after-send-actions.is-toggle .primary-button {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
 .after-send-pack {
   display: block;
   margin-top: 4px;

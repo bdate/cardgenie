@@ -4226,6 +4226,8 @@ function App() {
   const compactFirstSend = firstSendLayout && !showMoreSendOptions
   const afterSendChoice =
     Boolean(card) && hasSentCurrentCard && !showAnotherSend && printOrderStep === 'closed' && !isRecipientView
+  const postSendPrintOpen =
+    Boolean(card) && hasSentCurrentCard && !isRecipientView && printOrderStep !== 'closed'
   const sendDestinationEntries = (compactFirstSend ? deliveryDestinations.slice(0, 1) : deliveryDestinations)
     .map((entry) => entry.trim())
     .filter(Boolean)
@@ -9559,21 +9561,55 @@ function App() {
   }
 
   const offerAnotherSend = () => {
+    if (showAnotherSend && printOrderStep === 'closed') {
+      return
+    }
+    setPrintOrderStep('closed')
+    setPrintOrderNotice('')
     if (creditsRef.current >= sendCreditCostSingle) {
       setShowAnotherSend(true)
       setDeliveryNotice('')
       focusFieldAfterRender('.delivery-recipient-field input')
       return
     }
+    setShowAnotherSend(false)
     void buyCreditPack(creditPacks[0])
   }
 
   const offerPrintedCard = () => {
+    if (printOrderStep !== 'closed') {
+      return
+    }
     if (creditsRef.current >= printCardCreditCost) {
       openPrintOrder()
       return
     }
     void buyCreditPack(creditPacks[0])
+  }
+
+  const renderAfterSendToggle = () => {
+    const sendSelected = showAnotherSend && printOrderStep === 'closed'
+    const printSelected = printOrderStep !== 'closed'
+    return (
+      <div className="after-send-actions is-toggle" role="group" aria-label="After sending">
+        <button
+          className={sendSelected ? 'primary-button' : 'secondary-button'}
+          type="button"
+          aria-pressed={sendSelected}
+          onClick={offerAnotherSend}
+        >
+          {credits >= sendCreditCostSingle ? 'Send it to someone else' : 'Send it to someone else · $5'}
+        </button>
+        <button
+          className={printSelected ? 'primary-button' : 'secondary-button'}
+          type="button"
+          aria-pressed={printSelected}
+          onClick={offerPrintedCard}
+        >
+          Mail a printed card · ${printCardPriceUsd}
+        </button>
+      </div>
+    )
   }
 
   useEffect(() => {
@@ -15934,7 +15970,7 @@ function App() {
                   </button>
                 </div>
               )}
-              {showSendActions && !isRecipientView && !(printOnlyFromLink && printOrderStep !== 'closed') && <form
+              {showSendActions && !isRecipientView && !postSendPrintOpen && !(printOnlyFromLink && printOrderStep !== 'closed') && <form
                 ref={deliveryFormRef}
                 className={`delivery-panel${compactFirstSend ? ' is-first-send' : ''}${afterSendChoice ? ' is-after-send' : ''}`}
                 onSubmit={deliverCard}
@@ -15961,6 +15997,7 @@ function App() {
                   </div>
                 ) : (
                 <>
+                {showAnotherSend && renderAfterSendToggle()}
                 <div>
                   <span className="delivery-kicker">{compactFirstSend ? 'Send this card' : 'Ready to send this card'}</span>
                 </div>
@@ -16611,8 +16648,9 @@ function App() {
                   </div>
                 )}
               </form>}
-              {showSendActions && !isRecipientView && !showEditor && !afterSendChoice && (!firstSendLayout || showMoreSendOptions) && (
+              {showSendActions && !isRecipientView && !showEditor && !afterSendChoice && (!firstSendLayout || showMoreSendOptions) && !(showAnotherSend && printOrderStep === 'closed') && (
                 <section className="print-order-panel" aria-label="Mail a printed card">
+                  {hasSentCurrentCard && printOrderStep !== 'closed' && renderAfterSendToggle()}
                   {printOrderStep === 'closed' ? (
                     <div className="print-order-intro">
                       <div className="credit-action-block">
