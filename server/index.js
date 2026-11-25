@@ -8,6 +8,7 @@ import {
   getCoverRevisionBytes,
   listCoverRevisions,
 } from '../worker/cover-revisions.js'
+import { buildCoverContextBlock } from '../worker/cover-lettering.js'
 
 const COVER_IMAGE_SIZE = '1056x1472'
 const COVER_IMAGE_WIDTH = 1056
@@ -1111,6 +1112,12 @@ const describeCoverDetailChanges = (previous, next) => {
     let before = String(previous[field] || '').trim()
     let after = String(next?.[field] || '').trim()
     if (before === after) continue
+    if (field === 'keyDetails') {
+      lines.push(
+        '- Personal details: changed. Follow the scene direction in this prompt. Do not letter the old or new notes onto the cover.',
+      )
+      continue
+    }
     if (field === 'recipientName') {
       before = coverRecipientFirstNames(before)
       after = coverRecipientFirstNames(after)
@@ -1156,7 +1163,7 @@ Recipient: ${details.recipientName || details.recipientType}
 Relationship: ${details.recipientType}
 Tone: ${details.tone}
 Visual style: ${details.imageStyle || aiChoosesStyleLabel}
-Important personal context: ${details.keyDetails}
+${buildCoverContextBlock(details, refinement)}
 
 Physical appearance from personal details:
 - When the sender describes how someone looks (height, eye color, hair, glasses, build, age cues, clothing colors, etc.), use those details to depict people accurately on the cover.
@@ -1182,16 +1189,14 @@ Composition requirements:
 - It should feel like premium editorial or storybook artwork made for a finished greeting-card cover.
 
 Cover text direction:
-- Use judgment based on the occasion, tone, recipient, and personal context.
+- Follow the cover lettering rules above. One short greeting, not a paragraph, and no sentence copied from the scene direction.
 ${buildAiChoosesStyleGuidance(details.imageStyle, hasReferenceImages)}
 - For photorealistic styles, make it look like a natural, real photographed greeting-card cover scene with believable lighting, skin texture, fabric, and imperfections.
 - For "Comic book art", the entire cover must read as printed comic-book illustration: inked linework, color holds, screentone or halftone, and comic anatomy. If people are described from reference photos, they must appear as comic characters with a recognizable stylized likeness, never as photographed people.
 - For other illustrated styles such as vector, storybook, watercolor, paper-cut, poster, collage, or 3D, make the medium unmistakable and consistent across the whole image.
-- Include a small amount of tasteful cover text only if it improves the greeting card.
-- If cover text is used, keep it short, legible, correctly spelled, and emotionally appropriate.
 - Choose font style based on the card: elegant serif or script for heartfelt/elegant cards, playful lettering for funny/playful cards, clean modern type for simple or contemporary cards.
 - Text should be large enough to read but never oversized, never crowded, and never inside the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
-- Prefer one concise phrase such as "Happy Birthday", "Thinking of You", "Thank You", or a short occasion-specific line. Avoid long sentences.
+- The main line is one concise occasion phrase such as "Happy Birthday", "Thinking of You", or "Thank You".
 ${
   details.recipientName?.trim()
     ? `- Personalize that phrase with the recipient's name, "${details.recipientName.trim()}", whenever cover text is used and it suits the occasion, for example "Happy Birthday, Joe" or "Thank You, Nellie". Use the name exactly as written here — first names only, never add a last name. Leave the name off only for somber occasions such as sympathy, or if it is too long to stay legible inside the safe area.\n`
@@ -1207,6 +1212,8 @@ Copyright and identity:
 
 Negative requirements:
 - No text, letters, numbers, captions, signs, banners, labels, posters, plaques, handwriting, or decorative typography within the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
+- No caption, subtitle, footnote, or handwritten note made from the sender's personal details.
+- No hobby, favorite, pet, vehicle, or food list written out as words.
 - No faces, heads, main subjects, key props, or other essential details within that same outer ${COVER_SAFE_MARGIN_PERCENT}% band.
 - No white border, margin, frame, matting, drop shadow, mockup, envelope, folded card, or UI.
 - No cropped-off subject, no text near margins, no layout elements near edges.
@@ -1225,7 +1232,8 @@ Card context:
 - Relationship: ${details.recipientType}
 - Tone: ${details.tone}
 - Visual style: ${details.imageStyle || 'AI chooses the best style for this card'}
-- Personal context: ${details.keyDetails}
+${buildCoverContextBlock(details, refinement)}
+Do not add new lettering from the scene direction. Change cover text only when the edit request asks for different words.
 
 Keep the output as portrait artwork composed for a 5x7 greeting-card cover at full ${COVER_IMAGE_WIDTH}x${COVER_IMAGE_HEIGHT} size. Do not shrink the artwork or add empty letterboxing. Do not add borders, paper edges, frames, mockups, envelopes, or UI. Keep essential content (text, faces, heads, main subject, key props) fully inside the central safe area — at least ${COVER_SAFE_MARGIN_PERCENT}% away from every edge for print trimming; background may still extend to the edges. Do not place new text in the outer ${COVER_SAFE_MARGIN_PERCENT}% safe margin.
 `
